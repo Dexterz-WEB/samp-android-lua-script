@@ -1,0 +1,19 @@
+# Lua
+*.ini
+
+# MoonLoader config files
+CustomHUD.ini
+RadialMenuConfig.ini
+
+# System files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
+*~
