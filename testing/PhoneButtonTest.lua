@@ -86,38 +86,39 @@ function drawPhoneButton()
         3.0
     )
     
-    -- Phone icon (custom draw instead of emoji)
-    -- Draw a simple phone shape
+    -- Hamburger menu icon (3 horizontal lines)
     local centerX = px + ps/2
     local centerY = py + ps/2
     local iconSize = ps * 0.4
     local iconAlpha = math.floor(pa * 255)
     local iconColor = iconAlpha * 0x01000000 + 0x00FFFFFF  -- White
     
-    -- Phone body (rounded rectangle)
+    local lineWidth = iconSize * 0.8
+    local lineHeight = iconSize * 0.12
+    local lineSpacing = iconSize * 0.25
+    
+    -- Top line
     draw:AddRectFilled(
-        imgui.ImVec2(centerX - iconSize/4, centerY - iconSize/2),
-        imgui.ImVec2(centerX + iconSize/4, centerY + iconSize/2),
+        imgui.ImVec2(centerX - lineWidth/2, centerY - lineSpacing - lineHeight/2),
+        imgui.ImVec2(centerX + lineWidth/2, centerY - lineSpacing + lineHeight/2),
         iconColor,
-        iconSize/8
+        lineHeight/2
     )
     
-    -- Phone screen (smaller rectangle)
-    local screenAlpha = math.floor(pa * 150)
-    local screenColor = screenAlpha * 0x01000000 + 0x0044AAFF  -- Blue screen
+    -- Middle line
     draw:AddRectFilled(
-        imgui.ImVec2(centerX - iconSize/5, centerY - iconSize/3),
-        imgui.ImVec2(centerX + iconSize/5, centerY + iconSize/4),
-        screenColor,
-        2
+        imgui.ImVec2(centerX - lineWidth/2, centerY - lineHeight/2),
+        imgui.ImVec2(centerX + lineWidth/2, centerY + lineHeight/2),
+        iconColor,
+        lineHeight/2
     )
     
-    -- Home button (small circle)
-    draw:AddCircleFilled(
-        imgui.ImVec2(centerX, centerY + iconSize/2.5),
-        iconSize/12,
-        screenColor,
-        16
+    -- Bottom line
+    draw:AddRectFilled(
+        imgui.ImVec2(centerX - lineWidth/2, centerY + lineSpacing - lineHeight/2),
+        imgui.ImVec2(centerX + lineWidth/2, centerY + lineSpacing + lineHeight/2),
+        iconColor,
+        lineHeight/2
     )
     
     -- Label below button
