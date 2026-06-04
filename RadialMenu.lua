@@ -7,7 +7,7 @@ local inicfg = require 'inicfg'
 local iniFileName = "RadialMenuConfig.ini"
 
 -- ============================================================================
--- DEFAULT STRUCTURE: KOSONG — isi lewat /rcmdf, /rcmdanim, /rcmdveh
+-- DEFAULT STRUCTURE: Configure via /rcmdf (single command with tabs)
 -- ============================================================================
 local defaultStructure = {
     ButtonSettings = { posX = 1100.0, posY = 140.0 },
@@ -39,12 +39,13 @@ end
 -- ============================================================================
 local showRadialMenu   = imgui.new.bool(false)
 local showConfigWindow = imgui.new.bool(false)
-local showAnimEditor   = imgui.new.bool(false)
-local showVehEditor    = imgui.new.bool(false)
 local showCatRadial    = imgui.new.bool(false)
 local showAnimRadial   = imgui.new.bool(false)
 local showVehCatRadial = imgui.new.bool(false)
 local showVehRadial    = imgui.new.bool(false)
+
+-- Config Window Tab State (1=Main, 2=Anim, 3=Vehicle)
+local configTab = 1
 
 local currentCategory    = ""
 local animRadialPage     = 1
@@ -204,7 +205,11 @@ function closeAllRadial()
 end
 
 function executeCommand(cmd)
-    if cmd and cmd ~= "" then sampProcessChatInput(cmd) end
+    if cmd and cmd ~= "" and type(cmd) == "string" then 
+        sampProcessChatInput(cmd)
+        return true
+    end
+    return false
 end
 
 -- ============================================================================
@@ -213,27 +218,63 @@ end
 function saveAllConfig()
     iniData.ButtonSettings.posX = btnSliderX[0]
     iniData.ButtonSettings.posY = btnSliderY[0]
+    
+    -- Save sectors & categories
     for i = 1, 4 do
-        iniData["Sector"..i].name       = readCharBuffer(editName[i],      32)
-        iniData["Sector"..i].cmd        = readCharBuffer(editCmd[i],        64)
-        iniData["CatSector"..i].name    = readCharBuffer(editCatName[i],    32)
+        iniData["Sector"..i].name       = readCharBuffer(editName[i], 32)
+        iniData["Sector"..i].cmd        = readCharBuffer(editCmd[i], 64)
+        iniData["CatSector"..i].name    = readCharBuffer(editCatName[i], 32)
         iniData["VehCatSector"..i].name = readCharBuffer(editVehCatName[i], 32)
     end
+    
+    -- Save animations (only rebuild if changed)
+    local animChanged = false
     for i = 1, MAX_ANIM_SLOTS do
         if not iniData["Anim"..i] then iniData["Anim"..i] = {} end
-        iniData["Anim"..i].label    = readCharBuffer(animEditLabel[i],    64)
-        iniData["Anim"..i].cmd      = readCharBuffer(animEditCmd[i],     128)
-        iniData["Anim"..i].category = readCharBuffer(animEditCategory[i],  32)
+        local newLabel = readCharBuffer(animEditLabel[i], 64)
+        local newCmd = readCharBuffer(animEditCmd[i], 128)
+        local newCat = readCharBuffer(animEditCategory[i], 32)
+        
+        if iniData["Anim"..i].label ~= newLabel or 
+           iniData["Anim"..i].cmd ~= newCmd or 
+           iniData["Anim"..i].category ~= newCat then
+            animChanged = true
+        end
+        
+        iniData["Anim"..i].label = newLabel
+        iniData["Anim"..i].cmd = newCmd
+        iniData["Anim"..i].category = newCat
     end
+    
+    -- Save vehicles (only rebuild if changed)
+    local vehChanged = false
     for i = 1, MAX_VEH_SLOTS do
         if not iniData["Veh"..i] then iniData["Veh"..i] = {} end
-        iniData["Veh"..i].label    = readCharBuffer(vehEditLabel[i],    64)
-        iniData["Veh"..i].cmd      = readCharBuffer(vehEditCmd[i],     128)
-        iniData["Veh"..i].category = readCharBuffer(vehEditCategory[i],  32)
+        local newLabel = readCharBuffer(vehEditLabel[i], 64)
+        local newCmd = readCharBuffer(vehEditCmd[i], 128)
+        local newCat = readCharBuffer(vehEditCategory[i], 32)
+        
+        if iniData["Veh"..i].label ~= newLabel or 
+           iniData["Veh"..i].cmd ~= newCmd or 
+           iniData["Veh"..i].category ~= newCat then
+            vehChanged = true
+        end
+        
+        iniData["Veh"..i].label = newLabel
+        iniData["Veh"..i].cmd = newCmd
+        iniData["Veh"..i].category = newCat
     end
-    inicfg.save(iniData, iniFileName)
-    rebuildAnimList()
-    rebuildVehList()
+    
+    -- Save to file
+    if inicfg.save(iniData, iniFileName) then
+        if animChanged then rebuildAnimList() end
+        if vehChanged then rebuildVehList() end
+        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Configuration saved!", -1)
+        return true
+    else
+        sampAddChatMessage("{FF0000}[Radial Menu] {FFFFFF}Failed to save config!", -1)
+        return false
+    end
 end
 
 -- ============================================================================
@@ -306,11 +347,20 @@ function main()
     while not isSampAvailable() do wait(100) end
 
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Script loaded successfully!", -1)
+    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Use {FFFF00}/rcmdf{FFFFFF} to configure", -1)
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Created by: {FFFF00}OnlyDexterZ", -1)
 
-    sampRegisterChatCommand("rcmdf",    function() showConfigWindow[0] = not showConfigWindow[0] end)
-    sampRegisterChatCommand("rcmdanim", function() showAnimEditor[0]   = not showAnimEditor[0]   end)
-    sampRegisterChatCommand("rcmdveh",  function() showVehEditor[0]    = not showVehEditor[0]    end)
+    -- Single command with optional tab parameter
+    sampRegisterChatCommand("rcmdf", function(param)
+        showConfigWindow[0] = not showConfigWindow[0]
+        if param == "anim" or param == "2" then
+            configTab = 2
+        elseif param == "veh" or param == "vehicle" or param == "3" then
+            configTab = 3
+        else
+            configTab = 1
+        end
+    end)
 
     imgui.OnFrame(function() return true end, function()
         local sw, sh    = getScreenResolution()
@@ -319,89 +369,181 @@ function main()
         local cx        = sw / 2
         local cy        = sh / 2
 
-        -- CONFIG PANEL
+        -- CONFIG PANEL - MODERN TAB SYSTEM
         if showConfigWindow[0] then
-            imgui.SetNextWindowPos(imgui.ImVec2(50, sh/4), imgui.Cond.FirstUseEver)
-            imgui.SetNextWindowSize(imgui.ImVec2(460, 580))
-            imgui.Begin("Radial Menu Setup Panel", showConfigWindow)
-                imgui.TextColored(imgui.ImVec4(0,1,0,1), "--- POSISI TOMBOL [MENU] ---")
-                if imgui.SliderFloat("Tombol X", btnSliderX, 0, sw-120, "%.0f")
-                or imgui.SliderFloat("Tombol Y", btnSliderY, 0, sh-50,  "%.0f") then saveAllConfig() end
-
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0,1,1,1), "--- SEKTOR RADIAL UTAMA ---")
-                for i = 1, 4 do
-                    imgui.Text("Sektor "..i..":"); imgui.SameLine()
-                    imgui.SetNextItemWidth(120); imgui.InputText("Nama##n"..i, editName[i], 32); imgui.SameLine()
-                    if i == 1 then imgui.TextDisabled("(buka vehicle menu)")
-                    else imgui.SetNextItemWidth(180); imgui.InputText("Cmd##c"..i, editCmd[i], 64) end
-                end
-
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(1,0.5,0,1), "--- CATEGORY ANIM ---")
-                for i = 1, 4 do
-                    imgui.Text("Cat "..i..":"); imgui.SameLine()
-                    imgui.SetNextItemWidth(200); imgui.InputText("##ca"..i, editCatName[i], 32)
-                end
-
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "--- CATEGORY VEHICLE ---")
-                for i = 1, 4 do
-                    imgui.Text("Cat "..i..":"); imgui.SameLine()
-                    imgui.SetNextItemWidth(200); imgui.InputText("##cv"..i, editVehCatName[i], 32)
-                end
-
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                if imgui.Button("SIMPAN SEMUA", imgui.ImVec2(-1, 35)) then
-                    saveAllConfig()
-                    sampAddChatMessage("{00FF00}[Radial] {FFFFFF}Config disimpan!", -1)
-                end
+            imgui.SetNextWindowPos(imgui.ImVec2(sw/2 - 400, sh/2 - 350), imgui.Cond.FirstUseEver)
+            imgui.SetNextWindowSize(imgui.ImVec2(800, 700))
+            imgui.Begin("Radial Menu Configuration", showConfigWindow, imgui.WindowFlags.NoResize)
+            
+            -- Header
+            imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0, 1, 1, 1))
+            imgui.Text("RADIAL MENU SETUP")
+            imgui.PopStyleColor()
+            imgui.SameLine(imgui.GetWindowWidth() - 180)
+            imgui.TextColored(imgui.ImVec4(1, 1, 0, 1), "by OnlyDexterZ")
+            imgui.Separator()
+            imgui.Spacing()
+            
+            -- Tab Buttons
+            imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.5, 0.8, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.6, 0.9, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.1, 0.4, 0.7, 1.0))
+            
+            if configTab == 1 then
+                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.7, 0.3, 1.0))
+            end
+            if imgui.Button("1. MAIN CONFIG", imgui.ImVec2(250, 40)) then configTab = 1 end
+            if configTab == 1 then imgui.PopStyleColor() end
+            
+            imgui.SameLine()
+            if configTab == 2 then
+                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.7, 0.3, 1.0))
+            end
+            if imgui.Button("2. ANIMATIONS", imgui.ImVec2(250, 40)) then configTab = 2 end
+            if configTab == 2 then imgui.PopStyleColor() end
+            
+            imgui.SameLine()
+            if configTab == 3 then
+                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.7, 0.3, 1.0))
+            end
+            if imgui.Button("3. VEHICLES", imgui.ImVec2(250, 40)) then configTab = 3 end
+            if configTab == 3 then imgui.PopStyleColor() end
+            
+            imgui.PopStyleColor(3)
+            
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+            
+            -- TAB CONTENT
+            imgui.BeginChild("##tabcontent", imgui.ImVec2(-1, -60), true)
+            
+            -- TAB 1: MAIN CONFIG
+            if configTab == 1 then
+                imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), "BUTTON POSITION")
                 imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(1,1,0,1), "/rcmdanim = edit anim  |  /rcmdveh = edit vehicle")
-            imgui.End()
-        end
-
-        -- ANIM EDITOR
-        if showAnimEditor[0] then
-            imgui.SetNextWindowPos(imgui.ImVec2(sw/2-320, 60), imgui.Cond.FirstUseEver)
-            imgui.SetNextWindowSize(imgui.ImVec2(640, 520))
-            imgui.Begin("Editor Animasi", showAnimEditor)
-                imgui.TextColored(imgui.ImVec4(1,1,0,1), "Edit anim — disimpan ke RadialMenuConfig.ini")
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.BeginChild("##animscroll", imgui.ImVec2(-1,-50), true)
-                    for i = 1, MAX_ANIM_SLOTS do
-                        imgui.Text(string.format("Slot%2d|", i)); imgui.SameLine()
-                        imgui.SetNextItemWidth(110); imgui.InputText("Lbl##al"..i, animEditLabel[i],    64); imgui.SameLine()
-                        imgui.SetNextItemWidth(240); imgui.InputText("Cmd##ac"..i, animEditCmd[i],     128); imgui.SameLine()
-                        imgui.SetNextItemWidth(100); imgui.InputText("Cat##ak"..i, animEditCategory[i],  32)
-                    end
-                imgui.EndChild()
-                if imgui.Button("SIMPAN", imgui.ImVec2(-1, 32)) then
+                if imgui.SliderFloat("Position X", btnSliderX, 0, sw-120, "%.0f") then
                     saveAllConfig()
-                    sampAddChatMessage("{00FF00}[Radial] {FFFFFF}Anim disimpan!", -1)
                 end
-            imgui.End()
-        end
-
-        -- VEHICLE EDITOR
-        if showVehEditor[0] then
-            imgui.SetNextWindowPos(imgui.ImVec2(sw/2-320, 60), imgui.Cond.FirstUseEver)
-            imgui.SetNextWindowSize(imgui.ImVec2(640, 520))
-            imgui.Begin("Editor Kendaraan", showVehEditor)
-                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "Edit kendaraan — disimpan ke RadialMenuConfig.ini")
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.BeginChild("##vehscroll", imgui.ImVec2(-1,-50), true)
-                    for i = 1, MAX_VEH_SLOTS do
-                        imgui.Text(string.format("Slot%2d|", i)); imgui.SameLine()
-                        imgui.SetNextItemWidth(110); imgui.InputText("Lbl##vl"..i, vehEditLabel[i],    64); imgui.SameLine()
-                        imgui.SetNextItemWidth(240); imgui.InputText("Cmd##vc"..i, vehEditCmd[i],     128); imgui.SameLine()
-                        imgui.SetNextItemWidth(100); imgui.InputText("Cat##vk"..i, vehEditCategory[i],  32)
-                    end
-                imgui.EndChild()
-                if imgui.Button("SIMPAN", imgui.ImVec2(-1, 32)) then
+                if imgui.SliderFloat("Position Y", btnSliderY, 0, sh-50, "%.0f") then
                     saveAllConfig()
-                    sampAddChatMessage("{00FF00}[Radial] {FFFFFF}Config disimpan!", -1)
                 end
+                
+                imgui.Spacing()
+                imgui.Separator()
+                imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0, 1, 1, 1), "MAIN RADIAL SECTORS")
+                imgui.Spacing()
+                
+                for i = 1, 4 do
+                    imgui.PushID(i)
+                    imgui.Text(string.format("Sector %d:", i))
+                    imgui.SetNextItemWidth(200)
+                    imgui.InputText("##name", editName[i], 32)
+                    
+                    if i ~= 1 and i ~= 3 then
+                        imgui.SameLine()
+                        imgui.SetNextItemWidth(300)
+                        imgui.InputText("##cmd", editCmd[i], 64)
+                    else
+                        imgui.SameLine()
+                        imgui.TextDisabled(i == 1 and "(Opens Vehicle Menu)" or "(Opens Animation Menu)")
+                    end
+                    imgui.PopID()
+                end
+                
+                imgui.Spacing()
+                imgui.Separator()
+                imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(1, 0.5, 0, 1), "ANIMATION CATEGORIES")
+                imgui.Spacing()
+                
+                for i = 1, 4 do
+                    imgui.PushID(10 + i)
+                    imgui.Text(string.format("Category %d:", i))
+                    imgui.SameLine()
+                    imgui.SetNextItemWidth(300)
+                    imgui.InputText("##cat", editCatName[i], 32)
+                    imgui.PopID()
+                end
+                
+                imgui.Spacing()
+                imgui.Separator()
+                imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.3, 0.8, 1, 1), "VEHICLE CATEGORIES")
+                imgui.Spacing()
+                
+                for i = 1, 4 do
+                    imgui.PushID(20 + i)
+                    imgui.Text(string.format("Category %d:", i))
+                    imgui.SameLine()
+                    imgui.SetNextItemWidth(300)
+                    imgui.InputText("##vcat", editVehCatName[i], 32)
+                    imgui.PopID()
+                end
+            
+            -- TAB 2: ANIMATIONS
+            elseif configTab == 2 then
+                imgui.TextColored(imgui.ImVec4(1, 1, 0, 1), "ANIMATION EDITOR")
+                imgui.Spacing()
+                imgui.Text("Configure up to 21 animation slots:")
+                imgui.Separator()
+                imgui.Spacing()
+                
+                for i = 1, MAX_ANIM_SLOTS do
+                    imgui.PushID(100 + i)
+                    imgui.Text(string.format("%02d", i))
+                    imgui.SameLine()
+                    imgui.SetNextItemWidth(120)
+                    imgui.InputText("##label", animEditLabel[i], 64)
+                    imgui.SameLine()
+                    imgui.SetNextItemWidth(280)
+                    imgui.InputText("##cmd", animEditCmd[i], 128)
+                    imgui.SameLine()
+                    imgui.SetNextItemWidth(120)
+                    imgui.InputText("##cat", animEditCategory[i], 32)
+                    imgui.PopID()
+                end
+            
+            -- TAB 3: VEHICLES
+            elseif configTab == 3 then
+                imgui.TextColored(imgui.ImVec4(0.3, 0.8, 1, 1), "VEHICLE EDITOR")
+                imgui.Spacing()
+                imgui.Text("Configure up to 21 vehicle slots:")
+                imgui.Separator()
+                imgui.Spacing()
+                
+                for i = 1, MAX_VEH_SLOTS do
+                    imgui.PushID(200 + i)
+                    imgui.Text(string.format("%02d", i))
+                    imgui.SameLine()
+                    imgui.SetNextItemWidth(120)
+                    imgui.InputText("##label", vehEditLabel[i], 64)
+                    imgui.SameLine()
+                    imgui.SetNextItemWidth(280)
+                    imgui.InputText("##cmd", vehEditCmd[i], 128)
+                    imgui.SameLine()
+                    imgui.SetNextItemWidth(120)
+                    imgui.InputText("##cat", vehEditCategory[i], 32)
+                    imgui.PopID()
+                end
+            end
+            
+            imgui.EndChild()
+            
+            -- Bottom buttons
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+            
+            imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.8, 0.1, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.2, 0.9, 0.2, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.0, 0.7, 0.0, 1.0))
+            if imgui.Button("SAVE ALL CHANGES", imgui.ImVec2(-1, 40)) then
+                saveAllConfig()
+            end
+            imgui.PopStyleColor(3)
+            
             imgui.End()
         end
 
@@ -443,9 +585,13 @@ function main()
                         }
                         local p = drawRadialMenu(draw_list, cx, cy, lbls, "CLOSE", 0xFFFFFF00, "main")
                         if     p == 1 then showRadialMenu[0] = false; showVehCatRadial[0] = true
-                        elseif p == 2 then executeCommand(tostring(iniData.Sector2.cmd)); closeAllRadial()
+                        elseif p == 2 then 
+                            local cmd = tostring(iniData.Sector2.cmd or "")
+                            if executeCommand(cmd) then closeAllRadial() end
                         elseif p == 3 then showRadialMenu[0] = false; showCatRadial[0] = true
-                        elseif p == 4 then executeCommand(tostring(iniData.Sector4.cmd)); closeAllRadial()
+                        elseif p == 4 then 
+                            local cmd = tostring(iniData.Sector4.cmd or "")
+                            if executeCommand(cmd) then closeAllRadial() end
                         elseif p == 5 then showRadialMenu[0] = false end
                     end
                 imgui.End()
@@ -466,13 +612,16 @@ function main()
                         }
                         local p = drawRadialMenu(draw_list, cx, cy, cats, "BACK", 0xFF00FFFF, "cat")
                         if p and p >= 1 and p <= 4 then
-                            loadAnimForCategory(cats[p])
-                            if #animRadialList > 0 then
-                                currentCategory = cats[p]
-                                showCatRadial[0] = false
-                                showAnimRadial[0] = true
-                            else
-                                sampAddChatMessage("{FF8800}[Radial] {FFFFFF}Gunakan /rcmdanim untuk mengatur: "..cats[p], -1)
+                            local sectorName = tostring(lbls[p] or "")
+                            if sectorName ~= "" and sectorName ~= "-" then
+                                loadAnimForCategory(sectorName)
+                                if #animRadialList > 0 then
+                                    currentCategory = sectorName
+                                    showCatRadial[0] = false
+                                    showAnimRadial[0] = true
+                                else
+                                    sampAddChatMessage("{FF8800}[Radial] {FFFFFF}No animations found. Use /rcmdf to configure: "..sectorName, -1)
+                                end
                             end
                         elseif p == 5 then
                             showCatRadial[0] = false
@@ -530,13 +679,16 @@ function main()
                         draw_list:AddText(imgui.ImVec2(cx-40, cy-120), 0xFF88DDFF, "[VEHICLE]")
                         local p = drawRadialMenu(draw_list, cx, cy, vcats, "BACK", 0xFF88DDFF, "vehcat")
                         if p and p >= 1 and p <= 4 then
-                            loadVehForCategory(vcats[p])
-                            if #vehRadialList > 0 then
-                                currentVehCategory = vcats[p]
-                                showVehCatRadial[0] = false
-                                showVehRadial[0] = true
-                            else
-                                sampAddChatMessage("{FF8800}[Radial] {FFFFFF}Gunakan /rcmdveh untuk mengatur: "..vcats[p], -1)
+                            local sectorName = tostring(vcats[p] or "")
+                            if sectorName ~= "" and sectorName ~= "-" then
+                                loadVehForCategory(sectorName)
+                                if #vehRadialList > 0 then
+                                    currentVehCategory = sectorName
+                                    showVehCatRadial[0] = false
+                                    showVehRadial[0] = true
+                                else
+                                    sampAddChatMessage("{FF8800}[Radial] {FFFFFF}No vehicles found. Use /rcmdf to configure: "..sectorName, -1)
+                                end
                             end
                         elseif p == 5 then
                             showVehCatRadial[0] = false
