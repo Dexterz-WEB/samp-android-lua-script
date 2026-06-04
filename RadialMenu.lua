@@ -77,6 +77,15 @@ local availableProfiles = {}
 local currentServerIP = ""
 local currentServerName = ""
 
+-- New Server Detection Dialog
+local showNewServerDialog = imgui.new.bool(false)
+local newServerDetected = {
+    ip = "",
+    name = "",
+    suggestedProfileName = ""
+}
+local newProfileNameInput = imgui.new.char[64]("")
+
 local currentCategory    = ""
 local animRadialPage     = 1
 local animRadialList     = {}
@@ -175,6 +184,43 @@ function getProfileFileName(profileName)
     return "RadialMenu_" .. profileName:gsub("[^%w_-]", "_") .. ".ini"
 end
 
+function sanitizeProfileName(serverName)
+    -- Convert server name to valid profile name
+    local name = serverName
+    -- Remove special characters, keep alphanumeric, space, dash, underscore
+    name = name:gsub("[^%w%s_-]", "")
+    -- Replace spaces with underscore
+    name = name:gsub("%s+", "_")
+    -- Remove leading/trailing underscores
+    name = name:gsub("^_+", ""):gsub("_+$", "")
+    -- Limit length
+    if #name > 32 then name = name:sub(1, 32) end
+    -- If empty, use default
+    if name == "" then name = "server_" .. os.time() end
+    return name
+end
+
+function isServerMapped(serverIP)
+    if not serverIP or serverIP == "" then return false end
+    local mapped = profilesData.ServerMapping[serverIP]
+    return mapped ~= nil and mapped ~= ""
+end
+
+function showNewServerDetectionDialog(serverIP, serverName)
+    newServerDetected.ip = serverIP
+    newServerDetected.name = serverName
+    newServerDetected.suggestedProfileName = sanitizeProfileName(serverName)
+    
+    -- Set input buffer
+    local suggested = newServerDetected.suggestedProfileName
+    for i = 0, 63 do newProfileNameInput[i] = 0 end
+    for i = 1, #suggested do
+        newProfileNameInput[i-1] = string.byte(suggested, i)
+    end
+    
+    showNewServerDialog[0] = true
+end
+
 function loadProfile(profileName)
     if not profileName or profileName == "" then profileName = "default" end
     
@@ -255,6 +301,11 @@ function autoLoadProfileForServer()
     if mappedProfile and mappedProfile ~= "" and mappedProfile ~= currentProfile then
         sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Auto-detected server: {FFFF00}" .. (serverName or serverIP), -1)
         return loadProfile(mappedProfile)
+    elseif not mappedProfile or mappedProfile == "" then
+        -- New server detected, show dialog
+        sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}New server detected!", -1)
+        showNewServerDetectionDialog(serverIP, serverName or serverIP)
+        return true
     end
     
     return false
@@ -616,6 +667,72 @@ function main()
         local menuSize  = 340
         local cx        = sw / 2
         local cy        = sh / 2
+
+        -- NEW SERVER DETECTION DIALOG
+        if showNewServerDialog[0] then
+            imgui.SetNextWindowPos(imgui.ImVec2(sw/2 - 250, sh/2 - 150), imgui.Cond.Always)
+            imgui.SetNextWindowSize(imgui.ImVec2(500, 300))
+            imgui.Begin("New Server Detected", showNewServerDialog, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)
+            
+            imgui.TextColored(imgui.ImVec4(0, 1, 1, 1), "NEW SERVER DETECTED!")
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+            
+            imgui.Text("Server:")
+            imgui.SameLine()
+            imgui.TextColored(imgui.ImVec4(1, 1, 0, 1), newServerDetected.name)
+            
+            imgui.Text("IP:")
+            imgui.SameLine()
+            imgui.TextDisabled(newServerDetected.ip)
+            
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+            
+            imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), "Create profile for this server?")
+            imgui.Spacing()
+            
+            imgui.Text("Profile name:")
+            imgui.SetNextItemWidth(-1)
+            imgui.InputText("##newprofilename", newProfileNameInput, 64)
+            imgui.TextDisabled("(You can edit the name before creating)")
+            
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+            
+            -- Buttons
+            if imgui.Button("CREATE & MAP", imgui.ImVec2(230, 40)) then
+                local profileName = readCharBuffer(newProfileNameInput, 64)
+                if profileName ~= "" then
+                    -- Create and load profile
+                    loadProfile(profileName)
+                    -- Map server to profile
+                    mapServerToProfile(newServerDetected.ip, profileName)
+                    -- Save
+                    saveProfile(profileName)
+                    -- Close dialog
+                    showNewServerDialog[0] = false
+                    sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile created & mapped: {FFFF00}" .. profileName, -1)
+                end
+            end
+            
+            imgui.SameLine()
+            
+            if imgui.Button("USE DEFAULT", imgui.ImVec2(230, 40)) then
+                showNewServerDialog[0] = false
+                sampAddChatMessage("{FFFF00}[Radial Menu] {FFFFFF}Using current profile: {FFFF00}" .. currentProfile, -1)
+            end
+            
+            imgui.Spacing()
+            imgui.TextColored(imgui.ImVec4(1, 0.5, 0, 1), "INFO:")
+            imgui.TextDisabled("Creating a profile will auto-load it next time")
+            imgui.TextDisabled("you connect to this server.")
+            
+            imgui.End()
+        end
 
         -- CONFIG PANEL WITH TABS
         if showConfigWindow[0] then
