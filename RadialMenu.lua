@@ -788,8 +788,8 @@ function main()
             -- TAB 1: MAIN CONFIG
             if configTab == 1 then
                 imgui.TextColored(imgui.ImVec4(0,1,0,1), "--- BUTTON POSITION ---")
-                if imgui.SliderFloat("X", btnSliderX, 0, sw-120, "%.0f")
-                or imgui.SliderFloat("Y", btnSliderY, 0, sh-50,  "%.0f") then saveAllConfig() end
+                imgui.SliderFloat("X", btnSliderX, 0, sw-120, "%.0f")
+                imgui.SliderFloat("Y", btnSliderY, 0, sh-50,  "%.0f")
 
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0,1,1,1), "--- MAIN SECTORS ---")
