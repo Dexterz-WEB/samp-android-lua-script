@@ -428,6 +428,40 @@ end
 
 function totalVehPages() return math.max(1, math.ceil(#vehRadialList / 4)) end
 
+-- Auto-layout: susun item ke posisi sektor berdasarkan jumlahnya
+-- Return: table [1..4] berisi slot atau nil (spacer otomatis)
+function layoutVehPage(page)
+    local s = (page - 1) * 4 + 1
+    local items = {}
+    for i = 0, 3 do
+        local slot = vehRadialList[s + i]
+        if slot and not isDummySlot(slot) then
+            items[#items + 1] = slot
+        end
+    end
+
+    local count  = #items
+    local result = { nil, nil, nil, nil }  -- [1]=atas, [2]=kanan, [3]=bawah, [4]=kiri
+
+    if count == 1 then
+        result[1] = items[1]                        -- atas
+    elseif count == 2 then
+        result[1] = items[1]                        -- atas
+        result[3] = items[2]                        -- bawah
+    elseif count == 3 then
+        result[1] = items[1]                        -- atas
+        result[2] = items[2]                        -- kanan
+        result[3] = items[3]                        -- bawah
+    elseif count == 4 then
+        result[1] = items[1]                        -- atas
+        result[2] = items[2]                        -- kanan
+        result[3] = items[3]                        -- bawah
+        result[4] = items[4]                        -- kiri
+    end
+
+    return result
+end
+
 function closeAllRadial()
     showRadialMenu[0]   = false
     showCatRadial[0]    = false
@@ -1093,7 +1127,7 @@ function main()
                     imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
                     if s > 0.3 then
                 local tp  = totalVehPages()
-                local pgv = getVehPage(vehRadialPage)
+                local pgv = layoutVehPage(vehRadialPage)
                 local cl, cc = "BACK", 0xFF88DDFF
                 if tp > 1 then cl = vehRadialPage < tp and "NEXT" or "PREV"; cc = 0xFF44BBFF end
                 draw_list:AddText(imgui.ImVec2(cx-30, cy+110), 0xAAFFFFFF, string.format("Hal %d/%d", vehRadialPage, tp))
