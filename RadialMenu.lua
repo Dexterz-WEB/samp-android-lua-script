@@ -817,7 +817,7 @@ function main()
                 -- Current Profile Info
                 imgui.TextColored(imgui.ImVec4(0,1,0,1), "Current Profile:")
                 imgui.SameLine()
-                imgui.Text(currentProfile)
+                imgui.TextColored(imgui.ImVec4(1,1,0,1), currentProfile)
                 
                 imgui.Spacing()
                 
@@ -828,7 +828,7 @@ function main()
                     imgui.TextDisabled(currentServerIP)
                     
                     local mappedProfile = profilesData.ServerMapping[currentServerIP] or "none"
-                    imgui.Text("Mapped to profile: " .. mappedProfile)
+                    imgui.Text("Mapped to: " .. mappedProfile)
                 else
                     imgui.TextColored(imgui.ImVec4(1,0.5,0,1), "Not connected to server")
                 end
@@ -840,55 +840,69 @@ function main()
                     autoDetectServer = autoDetectCheckbox[0]
                     profilesData.Settings.autoDetectServer = autoDetectServer
                     inicfg.save(profilesData, profilesFileName)
+                    sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Auto-detect: " .. (autoDetectServer and "ON" or "OFF"), -1)
                 end
                 imgui.TextDisabled("Automatically load profile when connecting to mapped server")
                 
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 
-                -- Profile Management
-                imgui.TextColored(imgui.ImVec4(0,1,1,1), "Create/Load Profile:")
+                -- CREATE NEW PROFILE
+                imgui.TextColored(imgui.ImVec4(0,1,1,1), "CREATE NEW PROFILE:")
                 imgui.SetNextItemWidth(300)
                 imgui.InputText("##profilename", profileNameInput, 32)
                 imgui.SameLine()
-                if imgui.Button("Load", imgui.ImVec2(80, 25)) then
+                if imgui.Button("Create", imgui.ImVec2(80, 25)) then
                     local pName = readCharBuffer(profileNameInput, 32)
                     if pName ~= "" then
                         loadProfile(pName)
-                    end
-                end
-                imgui.SameLine()
-                if imgui.Button("Create New", imgui.ImVec2(100, 25)) then
-                    local pName = readCharBuffer(profileNameInput, 32)
-                    if pName ~= "" then
-                        loadProfile(pName)
-                        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}New profile created: " .. pName, -1)
+                        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile created: " .. pName, -1)
+                    else
+                        sampAddChatMessage("{FF0000}[Radial Menu] {FFFFFF}Please enter profile name!", -1)
                     end
                 end
                 
                 imgui.Spacing()
                 
-                -- Map current server
+                -- MAP CURRENT SERVER
                 if currentServerIP ~= "" then
-                    if imgui.Button("Map Current Server to This Profile", imgui.ImVec2(-1, 30)) then
+                    imgui.TextColored(imgui.ImVec4(1,0.8,0,1), "MAP CURRENT SERVER:")
+                    imgui.Text("Map \"" .. currentServerName .. "\" to:")
+                    
+                    imgui.SetNextItemWidth(300)
+                    imgui.InputText("##mapprofilename", profileNameInput, 32)
+                    imgui.SameLine()
+                    if imgui.Button("Map to Profile", imgui.ImVec2(140, 25)) then
                         local pName = readCharBuffer(profileNameInput, 32)
                         if pName == "" then pName = currentProfile end
                         mapServerToProfile(currentServerIP, pName)
                     end
-                    imgui.TextDisabled("Server will auto-load this profile on connect")
+                    
+                    imgui.SameLine()
+                    if imgui.Button("Map to Current", imgui.ImVec2(140, 25)) then
+                        mapServerToProfile(currentServerIP, currentProfile)
+                    end
+                    
+                    imgui.TextDisabled("Server will auto-load this profile on next connect")
                 end
                 
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 
-                -- Available Profiles List
-                imgui.TextColored(imgui.ImVec4(1,1,0,1), "Available Profiles:")
-                imgui.BeginChild("##profilelist", imgui.ImVec2(-1, 150), true)
+                -- AVAILABLE PROFILES LIST
+                imgui.TextColored(imgui.ImVec4(1,1,0,1), "AVAILABLE PROFILES:")
+                imgui.BeginChild("##profilelist", imgui.ImVec2(-1, 180), true)
                     availableProfiles = listProfiles()
-                    for _, pName in ipairs(availableProfiles) do
+                    for i, pName in ipairs(availableProfiles) do
                         local isCurrent = (pName == currentProfile)
+                        
+                        -- Profile name with active indicator
                         if isCurrent then
                             imgui.TextColored(imgui.ImVec4(0,1,0,1), "[ACTIVE] " .. pName)
                         else
                             imgui.Text(pName)
+                            imgui.SameLine(200)
+                            if imgui.Button("Load##" .. i, imgui.ImVec2(60, 20)) then
+                                loadProfile(pName)
+                            end
                         end
                         
                         -- Show mapped servers for this profile
@@ -899,17 +913,15 @@ function main()
                             end
                         end
                         if #mappedServers > 0 then
-                            imgui.SameLine()
-                            imgui.TextDisabled("(Mapped: " .. table.concat(mappedServers, ", ") .. ")")
+                            imgui.TextDisabled("  └─ Mapped: " .. table.concat(mappedServers, ", "))
                         end
                     end
                 imgui.EndChild()
                 
                 imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(1,0.5,0,1), "Commands:")
-                imgui.TextDisabled("/rprofile list - List all profiles")
-                imgui.TextDisabled("/rprofile load <name> - Load profile")
-                imgui.TextDisabled("/rprofile map <name> - Map server to profile")
+                imgui.TextColored(imgui.ImVec4(0,1,0,1), "TIP:")
+                imgui.TextDisabled("1. Create profile → 2. Configure → 3. Map to server")
+                imgui.TextDisabled("Next time you connect, it auto-loads!")
             end
             
             imgui.Spacing(); imgui.Separator(); imgui.Spacing()
