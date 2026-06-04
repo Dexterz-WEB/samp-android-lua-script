@@ -369,180 +369,84 @@ function main()
         local cx        = sw / 2
         local cy        = sh / 2
 
-        -- CONFIG PANEL - MODERN TAB SYSTEM
+        -- CONFIG PANEL WITH TABS
         if showConfigWindow[0] then
-            imgui.SetNextWindowPos(imgui.ImVec2(sw/2 - 400, sh/2 - 350), imgui.Cond.FirstUseEver)
-            imgui.SetNextWindowSize(imgui.ImVec2(800, 700))
-            imgui.Begin("Radial Menu Configuration", showConfigWindow, imgui.WindowFlags.NoResize)
-            
-            -- Header
-            imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0, 1, 1, 1))
-            imgui.Text("RADIAL MENU SETUP")
-            imgui.PopStyleColor()
-            imgui.SameLine(imgui.GetWindowWidth() - 180)
-            imgui.TextColored(imgui.ImVec4(1, 1, 0, 1), "by OnlyDexterZ")
-            imgui.Separator()
-            imgui.Spacing()
+            imgui.SetNextWindowPos(imgui.ImVec2(50, sh/4), imgui.Cond.FirstUseEver)
+            imgui.SetNextWindowSize(imgui.ImVec2(700, 580))
+            imgui.Begin("Radial Menu Config", showConfigWindow)
             
             -- Tab Buttons
-            imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.5, 0.8, 1.0))
-            imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.6, 0.9, 1.0))
-            imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.1, 0.4, 0.7, 1.0))
-            
-            if configTab == 1 then
-                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.7, 0.3, 1.0))
-            end
-            if imgui.Button("1. MAIN CONFIG", imgui.ImVec2(250, 40)) then configTab = 1 end
-            if configTab == 1 then imgui.PopStyleColor() end
-            
+            if imgui.Button("1. MAIN", imgui.ImVec2(220, 35)) then configTab = 1 end
             imgui.SameLine()
-            if configTab == 2 then
-                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.7, 0.3, 1.0))
-            end
-            if imgui.Button("2. ANIMATIONS", imgui.ImVec2(250, 40)) then configTab = 2 end
-            if configTab == 2 then imgui.PopStyleColor() end
-            
+            if imgui.Button("2. ANIM", imgui.ImVec2(220, 35)) then configTab = 2 end
             imgui.SameLine()
-            if configTab == 3 then
-                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.7, 0.3, 1.0))
-            end
-            if imgui.Button("3. VEHICLES", imgui.ImVec2(250, 40)) then configTab = 3 end
-            if configTab == 3 then imgui.PopStyleColor() end
+            if imgui.Button("3. VEHICLE", imgui.ImVec2(220, 35)) then configTab = 3 end
             
-            imgui.PopStyleColor(3)
-            
-            imgui.Spacing()
-            imgui.Separator()
-            imgui.Spacing()
-            
-            -- TAB CONTENT
-            imgui.BeginChild("##tabcontent", imgui.ImVec2(-1, -60), true)
+            imgui.Spacing(); imgui.Separator(); imgui.Spacing()
             
             -- TAB 1: MAIN CONFIG
             if configTab == 1 then
-                imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), "BUTTON POSITION")
-                imgui.Spacing()
-                if imgui.SliderFloat("Position X", btnSliderX, 0, sw-120, "%.0f") then
-                    saveAllConfig()
-                end
-                if imgui.SliderFloat("Position Y", btnSliderY, 0, sh-50, "%.0f") then
-                    saveAllConfig()
-                end
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0, 1, 1, 1), "MAIN RADIAL SECTORS")
-                imgui.Spacing()
-                
+                imgui.TextColored(imgui.ImVec4(0,1,0,1), "--- BUTTON POSITION ---")
+                if imgui.SliderFloat("X", btnSliderX, 0, sw-120, "%.0f")
+                or imgui.SliderFloat("Y", btnSliderY, 0, sh-50,  "%.0f") then saveAllConfig() end
+
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0,1,1,1), "--- MAIN SECTORS ---")
                 for i = 1, 4 do
-                    imgui.PushID(i)
-                    imgui.Text(string.format("Sector %d:", i))
-                    imgui.SetNextItemWidth(200)
-                    imgui.InputText("##name", editName[i], 32)
-                    
-                    if i ~= 1 and i ~= 3 then
-                        imgui.SameLine()
-                        imgui.SetNextItemWidth(300)
-                        imgui.InputText("##cmd", editCmd[i], 64)
-                    else
-                        imgui.SameLine()
-                        imgui.TextDisabled(i == 1 and "(Opens Vehicle Menu)" or "(Opens Animation Menu)")
+                    imgui.Text("Sector "..i..":"); imgui.SameLine()
+                    imgui.SetNextItemWidth(120); imgui.InputText("Name##n"..i, editName[i], 32); imgui.SameLine()
+                    if i == 1 or i == 3 then 
+                        imgui.TextDisabled(i == 1 and "(vehicle menu)" or "(anim menu)")
+                    else 
+                        imgui.SetNextItemWidth(180); imgui.InputText("Cmd##c"..i, editCmd[i], 64) 
                     end
-                    imgui.PopID()
                 end
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(1, 0.5, 0, 1), "ANIMATION CATEGORIES")
-                imgui.Spacing()
-                
+
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(1,0.5,0,1), "--- ANIM CATEGORIES ---")
                 for i = 1, 4 do
-                    imgui.PushID(10 + i)
-                    imgui.Text(string.format("Category %d:", i))
-                    imgui.SameLine()
-                    imgui.SetNextItemWidth(300)
-                    imgui.InputText("##cat", editCatName[i], 32)
-                    imgui.PopID()
+                    imgui.Text("Cat "..i..":"); imgui.SameLine()
+                    imgui.SetNextItemWidth(200); imgui.InputText("##ca"..i, editCatName[i], 32)
                 end
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0.3, 0.8, 1, 1), "VEHICLE CATEGORIES")
-                imgui.Spacing()
-                
+
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "--- VEHICLE CATEGORIES ---")
                 for i = 1, 4 do
-                    imgui.PushID(20 + i)
-                    imgui.Text(string.format("Category %d:", i))
-                    imgui.SameLine()
-                    imgui.SetNextItemWidth(300)
-                    imgui.InputText("##vcat", editVehCatName[i], 32)
-                    imgui.PopID()
+                    imgui.Text("Cat "..i..":"); imgui.SameLine()
+                    imgui.SetNextItemWidth(200); imgui.InputText("##cv"..i, editVehCatName[i], 32)
                 end
             
             -- TAB 2: ANIMATIONS
             elseif configTab == 2 then
-                imgui.TextColored(imgui.ImVec4(1, 1, 0, 1), "ANIMATION EDITOR")
-                imgui.Spacing()
-                imgui.Text("Configure up to 21 animation slots:")
-                imgui.Separator()
-                imgui.Spacing()
-                
-                for i = 1, MAX_ANIM_SLOTS do
-                    imgui.PushID(100 + i)
-                    imgui.Text(string.format("%02d", i))
-                    imgui.SameLine()
-                    imgui.SetNextItemWidth(120)
-                    imgui.InputText("##label", animEditLabel[i], 64)
-                    imgui.SameLine()
-                    imgui.SetNextItemWidth(280)
-                    imgui.InputText("##cmd", animEditCmd[i], 128)
-                    imgui.SameLine()
-                    imgui.SetNextItemWidth(120)
-                    imgui.InputText("##cat", animEditCategory[i], 32)
-                    imgui.PopID()
-                end
+                imgui.TextColored(imgui.ImVec4(1,1,0,1), "Edit animations")
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.BeginChild("##animscroll", imgui.ImVec2(-1,-50), true)
+                    for i = 1, MAX_ANIM_SLOTS do
+                        imgui.Text(string.format("Slot%2d|", i)); imgui.SameLine()
+                        imgui.SetNextItemWidth(110); imgui.InputText("Lbl##al"..i, animEditLabel[i], 64); imgui.SameLine()
+                        imgui.SetNextItemWidth(240); imgui.InputText("Cmd##ac"..i, animEditCmd[i], 128); imgui.SameLine()
+                        imgui.SetNextItemWidth(100); imgui.InputText("Cat##ak"..i, animEditCategory[i], 32)
+                    end
+                imgui.EndChild()
             
             -- TAB 3: VEHICLES
             elseif configTab == 3 then
-                imgui.TextColored(imgui.ImVec4(0.3, 0.8, 1, 1), "VEHICLE EDITOR")
-                imgui.Spacing()
-                imgui.Text("Configure up to 21 vehicle slots:")
-                imgui.Separator()
-                imgui.Spacing()
-                
-                for i = 1, MAX_VEH_SLOTS do
-                    imgui.PushID(200 + i)
-                    imgui.Text(string.format("%02d", i))
-                    imgui.SameLine()
-                    imgui.SetNextItemWidth(120)
-                    imgui.InputText("##label", vehEditLabel[i], 64)
-                    imgui.SameLine()
-                    imgui.SetNextItemWidth(280)
-                    imgui.InputText("##cmd", vehEditCmd[i], 128)
-                    imgui.SameLine()
-                    imgui.SetNextItemWidth(120)
-                    imgui.InputText("##cat", vehEditCategory[i], 32)
-                    imgui.PopID()
-                end
+                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "Edit vehicles")
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.BeginChild("##vehscroll", imgui.ImVec2(-1,-50), true)
+                    for i = 1, MAX_VEH_SLOTS do
+                        imgui.Text(string.format("Slot%2d|", i)); imgui.SameLine()
+                        imgui.SetNextItemWidth(110); imgui.InputText("Lbl##vl"..i, vehEditLabel[i], 64); imgui.SameLine()
+                        imgui.SetNextItemWidth(240); imgui.InputText("Cmd##vc"..i, vehEditCmd[i], 128); imgui.SameLine()
+                        imgui.SetNextItemWidth(100); imgui.InputText("Cat##vk"..i, vehEditCategory[i], 32)
+                    end
+                imgui.EndChild()
             end
             
-            imgui.EndChild()
-            
-            -- Bottom buttons
-            imgui.Spacing()
-            imgui.Separator()
-            imgui.Spacing()
-            
-            imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.8, 0.1, 1.0))
-            imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.2, 0.9, 0.2, 1.0))
-            imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.0, 0.7, 0.0, 1.0))
-            if imgui.Button("SAVE ALL CHANGES", imgui.ImVec2(-1, 40)) then
+            imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+            if imgui.Button("SAVE ALL", imgui.ImVec2(-1, 35)) then
                 saveAllConfig()
             end
-            imgui.PopStyleColor(3)
             
             imgui.End()
         end
