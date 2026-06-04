@@ -34,6 +34,7 @@ local autoDetectServer = profilesData.Settings.autoDetectServer or true
 -- ============================================================================
 local defaultStructure = {
     ButtonSettings = { posX = 1100.0, posY = 140.0 },
+    HamburgerButton = { enabled = true, posX = 50.0, posY = 300.0, size = 80.0, alpha = 0.8 },
     Sector1 = { name = "VEHICLE", cmd = "" },
     Sector2 = { name = "-",       cmd = "" },
     Sector3 = { name = "ANIM",    cmd = "" },
@@ -122,6 +123,14 @@ end
 
 local btnSliderX = imgui.new.float(iniData.ButtonSettings.posX or 1100.0)
 local btnSliderY = imgui.new.float(iniData.ButtonSettings.posY or 140.0)
+
+-- Hamburger Button Variables
+local hamburgerEnabled = imgui.new.bool(iniData.HamburgerButton and iniData.HamburgerButton.enabled or true)
+local hamburgerX = imgui.new.float(iniData.HamburgerButton and iniData.HamburgerButton.posX or 50.0)
+local hamburgerY = imgui.new.float(iniData.HamburgerButton and iniData.HamburgerButton.posY or 300.0)
+local hamburgerSize = imgui.new.float(iniData.HamburgerButton and iniData.HamburgerButton.size or 80.0)
+local hamburgerAlpha = imgui.new.float(iniData.HamburgerButton and iniData.HamburgerButton.alpha or 0.8)
+local hamburgerPulse = 0  -- Animation variable
 
 local editName = {
     imgui.new.char[32](iniData.Sector1.name or "VEHICLE"),
@@ -327,6 +336,15 @@ function reloadEditBuffers()
     btnSliderX[0] = iniData.ButtonSettings.posX or 1100.0
     btnSliderY[0] = iniData.ButtonSettings.posY or 140.0
     
+    -- Reload hamburger button settings
+    if iniData.HamburgerButton then
+        hamburgerEnabled[0] = iniData.HamburgerButton.enabled or true
+        hamburgerX[0] = iniData.HamburgerButton.posX or 50.0
+        hamburgerY[0] = iniData.HamburgerButton.posY or 300.0
+        hamburgerSize[0] = iniData.HamburgerButton.size or 80.0
+        hamburgerAlpha[0] = iniData.HamburgerButton.alpha or 0.8
+    end
+    
     -- Reload sectors
     for i = 1, 4 do
         local name = iniData["Sector"..i].name or ""
@@ -479,11 +497,115 @@ function executeCommand(cmd)
 end
 
 -- ============================================================================
+-- HAMBURGER BUTTON WIDGET
+-- ============================================================================
+function drawHamburgerButton(draw_list)
+    local px = hamburgerX[0]
+    local py = hamburgerY[0]
+    local ps = hamburgerSize[0]
+    local pa = hamburgerAlpha[0]
+    
+    -- Update pulse animation
+    hamburgerPulse = (hamburgerPulse + 0.05) % (math.pi * 2)
+    local pulse = math.sin(hamburgerPulse) * 0.15 + 1.0
+    
+    -- Outer glow (animated pulse)
+    local radiusOuter = (ps/2) * pulse
+    local glowAlpha = math.floor(pa * 100 * (1.0 - (pulse - 1.0) * 3))
+    local glowColor = glowAlpha * 0x01000000 + 0x0044AAFF  -- Blue glow
+    
+    draw_list:AddCircleFilled(
+        imgui.ImVec2(px + ps/2, py + ps/2),
+        radiusOuter,
+        glowColor,
+        32
+    )
+    
+    -- Inner circle (main button)
+    local bgAlpha = math.floor(pa * 220)
+    local bgColor = bgAlpha * 0x01000000 + 0x00222222  -- Dark background
+    
+    draw_list:AddCircleFilled(
+        imgui.ImVec2(px + ps/2, py + ps/2),
+        ps/2,
+        bgColor,
+        32
+    )
+    
+    -- Border
+    local borderAlpha = math.floor(pa * 255)
+    local borderColor = borderAlpha * 0x01000000 + 0x0088DDFF  -- Light blue border
+    
+    draw_list:AddCircle(
+        imgui.ImVec2(px + ps/2, py + ps/2),
+        ps/2,
+        borderColor,
+        32,
+        3.0
+    )
+    
+    -- Hamburger menu icon (3 horizontal lines - WHITE)
+    local centerX = px + ps/2
+    local centerY = py + ps/2
+    local iconSize = ps * 0.4
+    local iconAlpha = math.floor(pa * 255)
+    local iconColor = iconAlpha * 0x01000000 + 0x00FFFFFF  -- White
+    
+    local lineWidth = iconSize * 0.8
+    local lineHeight = iconSize * 0.12
+    local lineSpacing = iconSize * 0.25
+    
+    -- Top line
+    draw_list:AddRectFilled(
+        imgui.ImVec2(centerX - lineWidth/2, centerY - lineSpacing - lineHeight/2),
+        imgui.ImVec2(centerX + lineWidth/2, centerY - lineSpacing + lineHeight/2),
+        iconColor,
+        lineHeight/2
+    )
+    
+    -- Middle line
+    draw_list:AddRectFilled(
+        imgui.ImVec2(centerX - lineWidth/2, centerY - lineHeight/2),
+        imgui.ImVec2(centerX + lineWidth/2, centerY + lineHeight/2),
+        iconColor,
+        lineHeight/2
+    )
+    
+    -- Bottom line
+    draw_list:AddRectFilled(
+        imgui.ImVec2(centerX - lineWidth/2, centerY + lineSpacing - lineHeight/2),
+        imgui.ImVec2(centerX + lineWidth/2, centerY + lineSpacing + lineHeight/2),
+        iconColor,
+        lineHeight/2
+    )
+    
+    -- Label below button
+    local label = "MENU"
+    local labelSize = imgui.CalcTextSize(label)
+    local labelAlpha = math.floor(pa * 200)
+    local labelColor = labelAlpha * 0x01000000 + 0x00AAAAAA
+    
+    draw_list:AddText(
+        imgui.ImVec2(px + ps/2 - labelSize.x/2, py + ps + 5),
+        labelColor,
+        label
+    )
+end
+
+-- ============================================================================
 -- SAVE
 -- ============================================================================
 function saveAllConfig()
     iniData.ButtonSettings.posX = btnSliderX[0]
     iniData.ButtonSettings.posY = btnSliderY[0]
+    
+    -- Save hamburger button settings
+    if not iniData.HamburgerButton then iniData.HamburgerButton = {} end
+    iniData.HamburgerButton.enabled = hamburgerEnabled[0]
+    iniData.HamburgerButton.posX = hamburgerX[0]
+    iniData.HamburgerButton.posY = hamburgerY[0]
+    iniData.HamburgerButton.size = hamburgerSize[0]
+    iniData.HamburgerButton.alpha = hamburgerAlpha[0]
     
     -- Save sectors & categories
     for i = 1, 4 do
@@ -792,6 +914,17 @@ function main()
                 imgui.SliderFloat("Y", btnSliderY, 0, sh-50,  "%.0f")
 
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(1,0.5,1,1), "--- HAMBURGER MENU BUTTON ---")
+                imgui.Checkbox("Enable Hamburger Button", hamburgerEnabled)
+                if hamburgerEnabled[0] then
+                    imgui.SliderFloat("Hamburger X", hamburgerX, 0, sw-150, "%.0f")
+                    imgui.SliderFloat("Hamburger Y", hamburgerY, 0, sh-150, "%.0f")
+                    imgui.SliderFloat("Hamburger Size", hamburgerSize, 50, 150, "%.0f")
+                    imgui.SliderFloat("Hamburger Opacity", hamburgerAlpha, 0.3, 1.0, "%.2f")
+                    imgui.TextDisabled("Tap the hamburger button to open radial menu")
+                end
+
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0,1,1,1), "--- MAIN SECTORS ---")
                 for i = 1, 4 do
                     imgui.Text("Sector "..i..":"); imgui.SameLine()
@@ -963,6 +1096,30 @@ function main()
                 saveAllConfig()
             end
             
+            imgui.End()
+        end
+
+        -- HAMBURGER MENU BUTTON WIDGET
+        local anyRadialOpen = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0]
+                           or showVehCatRadial[0] or showVehRadial[0]
+        
+        if hamburgerEnabled[0] and not anyRadialOpen and not showConfigWindow[0] then
+            drawHamburgerButton(draw_list)
+            
+            -- Touch handler for hamburger button
+            local hps = hamburgerSize[0]
+            imgui.SetNextWindowPos(imgui.ImVec2(hamburgerX[0], hamburgerY[0]), imgui.Cond.Always)
+            imgui.SetNextWindowSize(imgui.ImVec2(hps, hps))
+            imgui.Begin("##HamburgerTouch", nil,
+                imgui.WindowFlags.NoTitleBar + 
+                imgui.WindowFlags.NoResize + 
+                imgui.WindowFlags.NoBackground +
+                imgui.WindowFlags.NoScrollbar)
+                
+                if imgui.InvisibleButton("##hamburger_tap", imgui.ImVec2(hps - 10, hps - 10)) then
+                    showRadialMenu[0] = true
+                end
+                
             imgui.End()
         end
 
