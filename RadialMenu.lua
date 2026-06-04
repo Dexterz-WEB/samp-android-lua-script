@@ -516,7 +516,7 @@ function main()
                         }
                         local p = drawRadialMenu(draw_list, cx, cy, cats, "BACK", 0xFF00FFFF, "cat")
                         if p and p >= 1 and p <= 4 then
-                            local sectorName = tostring(lbls[p] or "")
+                            local sectorName = tostring(cats[p] or "")
                             if sectorName ~= "" and sectorName ~= "-" then
                                 loadAnimForCategory(sectorName)
                                 if #animRadialList > 0 then
