@@ -5,6 +5,29 @@ local imgui  = require 'mimgui'
 local inicfg = require 'inicfg'
 
 local iniFileName = "RadialMenuConfig.ini"
+local profilesFileName = "RadialMenuProfiles.ini"
+
+-- ============================================================================
+-- PROFILES & SERVER DETECTION
+-- ============================================================================
+local profilesData = inicfg.load({
+    Settings = {
+        currentProfile = "default",
+        autoDetectServer = true,
+    },
+    ServerMapping = {},
+}, profilesFileName)
+
+if not profilesData then
+    inicfg.save({
+        Settings = { currentProfile = "default", autoDetectServer = true },
+        ServerMapping = {},
+    }, profilesFileName)
+    profilesData = { Settings = { currentProfile = "default", autoDetectServer = true }, ServerMapping = {} }
+end
+
+local currentProfile = profilesData.Settings.currentProfile or "default"
+local autoDetectServer = profilesData.Settings.autoDetectServer or true
 
 -- ============================================================================
 -- DEFAULT STRUCTURE: Configure via /rcmdf (single command with tabs)
@@ -44,8 +67,15 @@ local showAnimRadial   = imgui.new.bool(false)
 local showVehCatRadial = imgui.new.bool(false)
 local showVehRadial    = imgui.new.bool(false)
 
--- Config Window Tab State (1=Main, 2=Anim, 3=Vehicle)
+-- Config Window Tab State (1=Main, 2=Anim, 3=Vehicle, 4=Profiles)
 local configTab = 1
+
+-- Profile Management
+local profileNameInput = imgui.new.char[32](currentProfile)
+local autoDetectCheckbox = imgui.new.bool(autoDetectServer)
+local availableProfiles = {}
+local currentServerIP = ""
+local currentServerName = ""
 
 local currentCategory    = ""
 local animRadialPage     = 1
@@ -138,6 +168,157 @@ function readCharBuffer(buf, maxSize)
         r[#r+1] = string.char(c)
     end
     return table.concat(r)
+end
+
+-- Profile Management Functions
+function getProfileFileName(profileName)
+    return "RadialMenu_" .. profileName:gsub("[^%w_-]", "_") .. ".ini"
+end
+
+function loadProfile(profileName)
+    if not profileName or profileName == "" then profileName = "default" end
+    
+    local fileName = getProfileFileName(profileName)
+    local data = inicfg.load(defaultStructure, fileName)
+    
+    if not data then
+        -- Create new profile with default structure
+        inicfg.save(defaultStructure, fileName)
+        data = defaultStructure
+    end
+    
+    -- Ensure all sections exist
+    for k, v in pairs(defaultStructure) do
+        if not data[k] then data[k] = v end
+    end
+    
+    iniData = data
+    currentProfile = profileName
+    
+    -- Update profile settings
+    profilesData.Settings.currentProfile = profileName
+    inicfg.save(profilesData, profilesFileName)
+    
+    -- Reload edit buffers
+    reloadEditBuffers()
+    
+    sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile loaded: {FFFF00}" .. profileName, -1)
+    return true
+end
+
+function saveProfile(profileName)
+    if not profileName or profileName == "" then profileName = currentProfile end
+    
+    local fileName = getProfileFileName(profileName)
+    if inicfg.save(iniData, fileName) then
+        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile saved: {FFFF00}" .. profileName, -1)
+        return true
+    end
+    return false
+end
+
+function listProfiles()
+    -- This would require file system access, so we'll track in profiles data
+    local profiles = {"default"}
+    for k, v in pairs(profilesData.ServerMapping or {}) do
+        if v and v ~= "" and v ~= "default" then
+            local found = false
+            for _, p in ipairs(profiles) do
+                if p == v then found = true; break end
+            end
+            if not found then table.insert(profiles, v) end
+        end
+    end
+    return profiles
+end
+
+function getServerInfo()
+    if not sampIsLocalPlayerSpawned() then return nil, nil end
+    
+    local ip, port = sampGetCurrentServerAddress()
+    if ip and port then
+        local serverIP = ip .. ":" .. port
+        local serverName = sampGetCurrentServerName()
+        return serverIP, serverName
+    end
+    return nil, nil
+end
+
+function autoLoadProfileForServer()
+    if not autoDetectServer then return false end
+    
+    local serverIP, serverName = getServerInfo()
+    if not serverIP then return false end
+    
+    -- Check if we have a profile mapped for this server
+    local mappedProfile = profilesData.ServerMapping[serverIP]
+    if mappedProfile and mappedProfile ~= "" and mappedProfile ~= currentProfile then
+        sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Auto-detected server: {FFFF00}" .. (serverName or serverIP), -1)
+        return loadProfile(mappedProfile)
+    end
+    
+    return false
+end
+
+function mapServerToProfile(serverIP, profileName)
+    if not serverIP or serverIP == "" then return false end
+    if not profileName or profileName == "" then profileName = currentProfile end
+    
+    profilesData.ServerMapping[serverIP] = profileName
+    inicfg.save(profilesData, profilesFileName)
+    
+    sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Server {FFFF00}" .. serverIP .. "{FFFFFF} mapped to profile: {FFFF00}" .. profileName, -1)
+    return true
+end
+
+function reloadEditBuffers()
+    -- Reload button position
+    btnSliderX[0] = iniData.ButtonSettings.posX or 1100.0
+    btnSliderY[0] = iniData.ButtonSettings.posY or 140.0
+    
+    -- Reload sectors
+    for i = 1, 4 do
+        local name = iniData["Sector"..i].name or ""
+        local cmd = iniData["Sector"..i].cmd or ""
+        for j = 0, 31 do editName[i][j] = 0 end
+        for j = 0, 63 do editCmd[i][j] = 0 end
+        for j = 1, #name do editName[i][j-1] = string.byte(name, j) end
+        for j = 1, #cmd do editCmd[i][j-1] = string.byte(cmd, j) end
+    end
+    
+    -- Reload categories
+    for i = 1, 4 do
+        local catName = iniData["CatSector"..i].name or ""
+        local vehCatName = iniData["VehCatSector"..i].name or ""
+        for j = 0, 31 do editCatName[i][j] = 0; editVehCatName[i][j] = 0 end
+        for j = 1, #catName do editCatName[i][j-1] = string.byte(catName, j) end
+        for j = 1, #vehCatName do editVehCatName[i][j-1] = string.byte(vehCatName, j) end
+    end
+    
+    -- Reload anims
+    for i = 1, MAX_ANIM_SLOTS do
+        local s = iniData["Anim"..i] or { label="", cmd="", category="" }
+        for j = 0, 63 do animEditLabel[i][j] = 0 end
+        for j = 0, 127 do animEditCmd[i][j] = 0 end
+        for j = 0, 31 do animEditCategory[i][j] = 0 end
+        for j = 1, #(s.label or "") do animEditLabel[i][j-1] = string.byte(s.label, j) end
+        for j = 1, #(s.cmd or "") do animEditCmd[i][j-1] = string.byte(s.cmd, j) end
+        for j = 1, #(s.category or "") do animEditCategory[i][j-1] = string.byte(s.category, j) end
+    end
+    
+    -- Reload vehicles
+    for i = 1, MAX_VEH_SLOTS do
+        local s = iniData["Veh"..i] or { label="", cmd="", category="" }
+        for j = 0, 63 do vehEditLabel[i][j] = 0 end
+        for j = 0, 127 do vehEditCmd[i][j] = 0 end
+        for j = 0, 31 do vehEditCategory[i][j] = 0 end
+        for j = 1, #(s.label or "") do vehEditLabel[i][j-1] = string.byte(s.label, j) end
+        for j = 1, #(s.cmd or "") do vehEditCmd[i][j-1] = string.byte(s.cmd, j) end
+        for j = 1, #(s.category or "") do vehEditCategory[i][j-1] = string.byte(s.category, j) end
+    end
+    
+    rebuildAnimList()
+    rebuildVehList()
 end
 
 local animList = {}
@@ -348,6 +529,7 @@ function main()
 
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Script loaded successfully!", -1)
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Use {FFFF00}/rcmdf{FFFFFF} to configure", -1)
+    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Current profile: {FFFF00}" .. currentProfile, -1)
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Created by: {FFFF00}OnlyDexterZ", -1)
 
     -- Single command with optional tab parameter
@@ -357,8 +539,74 @@ function main()
             configTab = 2
         elseif param == "veh" or param == "vehicle" or param == "3" then
             configTab = 3
+        elseif param == "profile" or param == "4" then
+            configTab = 4
         else
             configTab = 1
+        end
+    end)
+    
+    -- Profile management commands
+    sampRegisterChatCommand("rprofile", function(param)
+        local args = {}
+        for word in param:gmatch("%S+") do table.insert(args, word) end
+        
+        if #args == 0 or args[1] == "list" then
+            local profiles = listProfiles()
+            sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Available profiles:", -1)
+            for _, p in ipairs(profiles) do
+                local marker = (p == currentProfile) and "{00FF00}[ACTIVE]" or ""
+                sampAddChatMessage("{FFFF00}" .. p .. " {FFFFFF}" .. marker, -1)
+            end
+        elseif args[1] == "load" and args[2] then
+            loadProfile(args[2])
+        elseif args[1] == "save" and args[2] then
+            saveProfile(args[2])
+        elseif args[1] == "create" and args[2] then
+            loadProfile(args[2])
+        elseif args[1] == "map" and args[2] then
+            local serverIP, serverName = getServerInfo()
+            if serverIP then
+                mapServerToProfile(serverIP, args[2])
+            else
+                sampAddChatMessage("{FF0000}[Radial Menu] {FFFFFF}Not connected to server!", -1)
+            end
+        elseif args[1] == "current" then
+            sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Current profile: {FFFF00}" .. currentProfile, -1)
+            local serverIP, serverName = getServerInfo()
+            if serverIP then
+                sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Server: {FFFF00}" .. (serverName or serverIP), -1)
+            end
+        else
+            sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Profile Commands:", -1)
+            sampAddChatMessage("{FFFF00}/rprofile list {FFFFFF}- List all profiles", -1)
+            sampAddChatMessage("{FFFF00}/rprofile load <name> {FFFFFF}- Load profile", -1)
+            sampAddChatMessage("{FFFF00}/rprofile save <name> {FFFFFF}- Save to profile", -1)
+            sampAddChatMessage("{FFFF00}/rprofile create <name> {FFFFFF}- Create new profile", -1)
+            sampAddChatMessage("{FFFF00}/rprofile map <name> {FFFFFF}- Map current server to profile", -1)
+            sampAddChatMessage("{FFFF00}/rprofile current {FFFFFF}- Show current profile", -1)
+        end
+    end)
+    
+    -- Auto-detect server on spawn
+    lua_thread.create(function()
+        local lastCheckedIP = ""
+        while true do
+            wait(1000)
+            
+            if sampIsLocalPlayerSpawned() then
+                local serverIP, serverName = getServerInfo()
+                if serverIP and serverIP ~= lastCheckedIP then
+                    lastCheckedIP = serverIP
+                    currentServerIP = serverIP
+                    currentServerName = serverName or serverIP
+                    
+                    -- Try auto-load profile
+                    if autoDetectServer then
+                        autoLoadProfileForServer()
+                    end
+                end
+            end
         end
     end)
 
@@ -376,11 +624,13 @@ function main()
             imgui.Begin("Radial Menu Config", showConfigWindow)
             
             -- Tab Buttons
-            if imgui.Button("1. MAIN", imgui.ImVec2(220, 35)) then configTab = 1 end
+            if imgui.Button("1. MAIN", imgui.ImVec2(165, 35)) then configTab = 1 end
             imgui.SameLine()
-            if imgui.Button("2. ANIM", imgui.ImVec2(220, 35)) then configTab = 2 end
+            if imgui.Button("2. ANIM", imgui.ImVec2(165, 35)) then configTab = 2 end
             imgui.SameLine()
-            if imgui.Button("3. VEHICLE", imgui.ImVec2(220, 35)) then configTab = 3 end
+            if imgui.Button("3. VEHICLE", imgui.ImVec2(165, 35)) then configTab = 3 end
+            imgui.SameLine()
+            if imgui.Button("4. PROFILES", imgui.ImVec2(165, 35)) then configTab = 4 end
             
             imgui.Spacing(); imgui.Separator(); imgui.Spacing()
             
@@ -441,6 +691,108 @@ function main()
                         imgui.SetNextItemWidth(100); imgui.InputText("Cat##vk"..i, vehEditCategory[i], 32)
                     end
                 imgui.EndChild()
+            
+            -- TAB 4: PROFILES
+            elseif configTab == 4 then
+                imgui.TextColored(imgui.ImVec4(1,0.8,0,1), "Profile Management")
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                
+                -- Current Profile Info
+                imgui.TextColored(imgui.ImVec4(0,1,0,1), "Current Profile:")
+                imgui.SameLine()
+                imgui.Text(currentProfile)
+                
+                imgui.Spacing()
+                
+                -- Server Info
+                if currentServerIP ~= "" then
+                    imgui.TextColored(imgui.ImVec4(0,1,1,1), "Current Server:")
+                    imgui.Text(currentServerName)
+                    imgui.TextDisabled(currentServerIP)
+                    
+                    local mappedProfile = profilesData.ServerMapping[currentServerIP] or "none"
+                    imgui.Text("Mapped to profile: " .. mappedProfile)
+                else
+                    imgui.TextColored(imgui.ImVec4(1,0.5,0,1), "Not connected to server")
+                end
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                
+                -- Auto-detect toggle
+                if imgui.Checkbox("Auto-detect server and load profile", autoDetectCheckbox) then
+                    autoDetectServer = autoDetectCheckbox[0]
+                    profilesData.Settings.autoDetectServer = autoDetectServer
+                    inicfg.save(profilesData, profilesFileName)
+                end
+                imgui.TextDisabled("Automatically load profile when connecting to mapped server")
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                
+                -- Profile Management
+                imgui.TextColored(imgui.ImVec4(0,1,1,1), "Create/Load Profile:")
+                imgui.SetNextItemWidth(300)
+                imgui.InputText("##profilename", profileNameInput, 32)
+                imgui.SameLine()
+                if imgui.Button("Load", imgui.ImVec2(80, 25)) then
+                    local pName = readCharBuffer(profileNameInput, 32)
+                    if pName ~= "" then
+                        loadProfile(pName)
+                    end
+                end
+                imgui.SameLine()
+                if imgui.Button("Create New", imgui.ImVec2(100, 25)) then
+                    local pName = readCharBuffer(profileNameInput, 32)
+                    if pName ~= "" then
+                        loadProfile(pName)
+                        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}New profile created: " .. pName, -1)
+                    end
+                end
+                
+                imgui.Spacing()
+                
+                -- Map current server
+                if currentServerIP ~= "" then
+                    if imgui.Button("Map Current Server to This Profile", imgui.ImVec2(-1, 30)) then
+                        local pName = readCharBuffer(profileNameInput, 32)
+                        if pName == "" then pName = currentProfile end
+                        mapServerToProfile(currentServerIP, pName)
+                    end
+                    imgui.TextDisabled("Server will auto-load this profile on connect")
+                end
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                
+                -- Available Profiles List
+                imgui.TextColored(imgui.ImVec4(1,1,0,1), "Available Profiles:")
+                imgui.BeginChild("##profilelist", imgui.ImVec2(-1, 150), true)
+                    availableProfiles = listProfiles()
+                    for _, pName in ipairs(availableProfiles) do
+                        local isCurrent = (pName == currentProfile)
+                        if isCurrent then
+                            imgui.TextColored(imgui.ImVec4(0,1,0,1), "[ACTIVE] " .. pName)
+                        else
+                            imgui.Text(pName)
+                        end
+                        
+                        -- Show mapped servers for this profile
+                        local mappedServers = {}
+                        for ip, profile in pairs(profilesData.ServerMapping or {}) do
+                            if profile == pName then
+                                table.insert(mappedServers, ip)
+                            end
+                        end
+                        if #mappedServers > 0 then
+                            imgui.SameLine()
+                            imgui.TextDisabled("(Mapped: " .. table.concat(mappedServers, ", ") .. ")")
+                        end
+                    end
+                imgui.EndChild()
+                
+                imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(1,0.5,0,1), "Commands:")
+                imgui.TextDisabled("/rprofile list - List all profiles")
+                imgui.TextDisabled("/rprofile load <name> - Load profile")
+                imgui.TextDisabled("/rprofile map <name> - Map server to profile")
             end
             
             imgui.Spacing(); imgui.Separator(); imgui.Spacing()
