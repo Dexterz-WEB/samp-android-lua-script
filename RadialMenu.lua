@@ -909,20 +909,12 @@ function main()
             
             -- TAB 1: MAIN CONFIG
             if configTab == 1 then
-                imgui.TextColored(imgui.ImVec4(0,1,0,1), "--- BUTTON POSITION ---")
+                imgui.TextColored(imgui.ImVec4(0,1,0,1), "--- HAMBURGER MENU POSITION ---")
                 imgui.SliderFloat("X", btnSliderX, 0, sw-120, "%.0f")
                 imgui.SliderFloat("Y", btnSliderY, 0, sh-50,  "%.0f")
-
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(1,0.5,1,1), "--- HAMBURGER MENU BUTTON ---")
-                imgui.Checkbox("Enable Hamburger Button", hamburgerEnabled)
-                if hamburgerEnabled[0] then
-                    imgui.SliderFloat("Hamburger X", hamburgerX, 0, sw-150, "%.0f")
-                    imgui.SliderFloat("Hamburger Y", hamburgerY, 0, sh-150, "%.0f")
-                    imgui.SliderFloat("Hamburger Size", hamburgerSize, 50, 150, "%.0f")
-                    imgui.SliderFloat("Hamburger Opacity", hamburgerAlpha, 0.3, 1.0, "%.2f")
-                    imgui.TextDisabled("Tap the hamburger button to open radial menu")
-                end
+                imgui.SliderFloat("Size", hamburgerSize, 50, 150, "%.0f")
+                imgui.SliderFloat("Opacity", hamburgerAlpha, 0.3, 1.0, "%.2f")
+                imgui.TextDisabled("Tap hamburger button to open/close radial menu")
 
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0,1,1,1), "--- MAIN SECTORS ---")
@@ -1099,39 +1091,55 @@ function main()
             imgui.End()
         end
 
-        -- HAMBURGER MENU BUTTON WIDGET
-        local anyRadialOpen = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0]
-                           or showVehCatRadial[0] or showVehRadial[0]
+        -- TOMBOL MENU (Hamburger Button)
+        local hbx = btnSliderX[0]
+        local hby = btnSliderY[0]
+        local hbs = hamburgerSize[0]
+        local hba = hamburgerAlpha[0]
         
-        if hamburgerEnabled[0] and not anyRadialOpen and not showConfigWindow[0] then
-            drawHamburgerButton(draw_list)
-            
-            -- Touch handler for hamburger button
-            local hps = hamburgerSize[0]
-            imgui.SetNextWindowPos(imgui.ImVec2(hamburgerX[0], hamburgerY[0]), imgui.Cond.Always)
-            imgui.SetNextWindowSize(imgui.ImVec2(hps, hps))
-            imgui.Begin("##HamburgerTouch", nil,
-                imgui.WindowFlags.NoTitleBar + 
-                imgui.WindowFlags.NoResize + 
-                imgui.WindowFlags.NoBackground +
-                imgui.WindowFlags.NoScrollbar)
-                
-                if imgui.InvisibleButton("##hamburger_tap", imgui.ImVec2(hps - 10, hps - 10)) then
-                    showRadialMenu[0] = true
-                end
-                
-            imgui.End()
-        end
-
-        -- TOMBOL MENU
-        imgui.SetNextWindowPos(imgui.ImVec2(btnSliderX[0], btnSliderY[0]), imgui.Cond.Always)
-        imgui.SetNextWindowSize(imgui.ImVec2(120, 60))
+        local anyRadialOpen2 = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0]
+                            or showVehCatRadial[0] or showVehRadial[0]
+        
+        -- Draw hamburger icon using background draw list
+        local hCenterX = hbx + hbs/2
+        local hCenterY = hby + hbs/2
+        
+        -- Pulse animation
+        hamburgerPulse = (hamburgerPulse + 0.05) % (math.pi * 2)
+        local hPulse = math.sin(hamburgerPulse) * 0.15 + 1.0
+        
+        -- Outer glow
+        local hGlowAlpha = math.floor(hba * 100 * (1.0 - (hPulse - 1.0) * 3))
+        local hGlowColor = hGlowAlpha * 0x01000000 + 0x0044AAFF
+        draw_list:AddCircleFilled(imgui.ImVec2(hCenterX, hCenterY), (hbs/2) * hPulse, hGlowColor, 32)
+        
+        -- Inner circle
+        local hBgAlpha = math.floor(hba * 220)
+        draw_list:AddCircleFilled(imgui.ImVec2(hCenterX, hCenterY), hbs/2, hBgAlpha * 0x01000000 + 0x00222222, 32)
+        
+        -- Border
+        local hBorderAlpha = math.floor(hba * 255)
+        draw_list:AddCircle(imgui.ImVec2(hCenterX, hCenterY), hbs/2, hBorderAlpha * 0x01000000 + 0x0088DDFF, 32, 3.0)
+        
+        -- Hamburger icon (3 white lines)
+        local hIconSize = hbs * 0.4
+        local hIconAlpha = math.floor(hba * 255)
+        local hIconColor = hIconAlpha * 0x01000000 + 0x00FFFFFF
+        local hLineW = hIconSize * 0.8
+        local hLineH = hIconSize * 0.12
+        local hLineS = hIconSize * 0.25
+        
+        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineW/2, hCenterY - hLineS - hLineH/2), imgui.ImVec2(hCenterX + hLineW/2, hCenterY - hLineS + hLineH/2), hIconColor, hLineH/2)
+        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineW/2, hCenterY - hLineH/2), imgui.ImVec2(hCenterX + hLineW/2, hCenterY + hLineH/2), hIconColor, hLineH/2)
+        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineW/2, hCenterY + hLineS - hLineH/2), imgui.ImVec2(hCenterX + hLineW/2, hCenterY + hLineS + hLineH/2), hIconColor, hLineH/2)
+        
+        -- Touch handler
+        imgui.SetNextWindowPos(imgui.ImVec2(hbx, hby), imgui.Cond.Always)
+        imgui.SetNextWindowSize(imgui.ImVec2(hbs, hbs))
         imgui.Begin("RadialBtn", nil,
-            imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-            if imgui.Button("MENU", imgui.ImVec2(100, 40)) then
-                local anyOpen = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0]
-                              or showVehCatRadial[0] or showVehRadial[0]
-                if anyOpen then
+            imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground + imgui.WindowFlags.NoScrollbar)
+            if imgui.InvisibleButton("##hamburger_main", imgui.ImVec2(hbs - 10, hbs - 10)) then
+                if anyRadialOpen2 then
                     closeAllRadial()
                 else
                     showRadialMenu[0] = true
