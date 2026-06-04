@@ -86,16 +86,38 @@ function drawPhoneButton()
         3.0
     )
     
-    -- Phone icon
-    local icon = "📱"
-    local iconSize = imgui.CalcTextSize(icon)
+    -- Phone icon (custom draw instead of emoji)
+    -- Draw a simple phone shape
+    local centerX = px + ps/2
+    local centerY = py + ps/2
+    local iconSize = ps * 0.4
     local iconAlpha = math.floor(pa * 255)
     local iconColor = iconAlpha * 0x01000000 + 0x00FFFFFF  -- White
     
-    draw:AddText(
-        imgui.ImVec2(px + ps/2 - iconSize.x/2, py + ps/2 - iconSize.y/2),
+    -- Phone body (rounded rectangle)
+    draw:AddRectFilled(
+        imgui.ImVec2(centerX - iconSize/4, centerY - iconSize/2),
+        imgui.ImVec2(centerX + iconSize/4, centerY + iconSize/2),
         iconColor,
-        icon
+        iconSize/8
+    )
+    
+    -- Phone screen (smaller rectangle)
+    local screenAlpha = math.floor(pa * 150)
+    local screenColor = screenAlpha * 0x01000000 + 0x0044AAFF  -- Blue screen
+    draw:AddRectFilled(
+        imgui.ImVec2(centerX - iconSize/5, centerY - iconSize/3),
+        imgui.ImVec2(centerX + iconSize/5, centerY + iconSize/4),
+        screenColor,
+        2
+    )
+    
+    -- Home button (small circle)
+    draw:AddCircleFilled(
+        imgui.ImVec2(centerX, centerY + iconSize/2.5),
+        iconSize/12,
+        screenColor,
+        16
     )
     
     -- Label below button
@@ -165,7 +187,7 @@ function main()
                 imgui.SetNextWindowPos(imgui.ImVec2(sw/2 - 200, sh/2 - 200), imgui.Cond.FirstUseEver)
                 imgui.SetNextWindowSize(imgui.ImVec2(400, 400), imgui.Cond.FirstUseEver)
                 
-                imgui.Begin(u8"📱 Phone Menu Test", showTestWindow)
+                imgui.Begin(u8"Phone Menu Test", showTestWindow)
                 
                 imgui.TextColored(imgui.ImVec4(0, 1, 1, 1), u8"Phone Widget Triggered Successfully!")
                 imgui.Spacing()
