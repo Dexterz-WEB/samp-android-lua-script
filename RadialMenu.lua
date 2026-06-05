@@ -108,7 +108,7 @@ local IN_VEHICLE_COMMANDS = {
     { name = "ENGINE", cmd = "/engine" },
     { name = "LIGHTS", cmd = "/lights" },
     { name = "LOCK", cmd = "/lock" },
-    { name = "MISC", cmd = "" },
+    { name = "-", cmd = "" },
 }
 
 -- toggle state: key=category (lower), true=ON/OPEN aktif, false/nil=OFF/CLOSE
