@@ -94,6 +94,23 @@ local currentVehCategory = ""
 local vehRadialPage      = 1
 local vehRadialList      = {}
 
+-- Context-aware vehicle radial
+local showContextVehRadial = imgui.new.bool(false)
+local contextVehCommands = {}
+
+local ON_FOOT_VEH_COMMANDS = {
+    { name = "LOCK", cmd = "/lock" },
+    { name = "UNLOCK", cmd = "/unlock" },
+    { name = "TRUNK", cmd = "/trunk" },
+    { name = "HOOD", cmd = "/hood" },
+}
+local IN_VEHICLE_COMMANDS = {
+    { name = "ENGINE", cmd = "/engine" },
+    { name = "LIGHTS", cmd = "/lights" },
+    { name = "LOCK", cmd = "/lock" },
+    { name = "MISC", cmd = "" },
+}
+
 -- toggle state: key=category (lower), true=ON/OPEN aktif, false/nil=OFF/CLOSE
 local toggleState = {}
 
@@ -202,6 +219,15 @@ function sanitizeProfileName(serverName)
     name = name:gsub("%s+", "_")
     -- Remove leading/trailing underscores
     name = name:gsub("^_+", ""):gsub("_+$", "")
+    -- Take only first 2 words
+    local words = {}
+    for word in name:gmatch("[^_%s]+") do
+        table.insert(words, word)
+        if #words >= 2 then break end
+    end
+    if #words > 0 then
+        name = table.concat(words, "_")
+    end
     -- Limit length
     if #name > 32 then name = name:sub(1, 32) end
     -- If empty, use default
@@ -486,6 +512,7 @@ function closeAllRadial()
     showAnimRadial[0]   = false
     showVehCatRadial[0] = false
     showVehRadial[0]    = false
+    showContextVehRadial[0] = false
 end
 
 function executeCommand(cmd)
@@ -847,6 +874,15 @@ function main()
         local cx        = sw / 2
         local cy        = sh / 2
 
+        -- Auto-close radial when dialog active
+        local dialogActive = false
+        pcall(function() dialogActive = sampIsDialogActive() end)
+        if dialogActive then
+            if showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0] or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] then
+                closeAllRadial()
+            end
+        end
+
         -- NEW SERVER DETECTION DIALOG
         if showNewServerDialog[0] then
             imgui.SetNextWindowPos(imgui.ImVec2(sw/2 - 250, sh/2 - 150), imgui.Cond.Always)
@@ -1080,8 +1116,12 @@ function main()
                         if isCurrent then
                             imgui.TextColored(imgui.ImVec4(0,1,0,1), "[ACTIVE] " .. pName)
                         else
-                            imgui.Text(pName)
-                            imgui.SameLine(200)
+                            local displayName = pName
+                            if #displayName > 18 then
+                                displayName = string.sub(displayName, 1, 18) .. "..."
+                            end
+                            imgui.Text(displayName)
+                            imgui.SameLine(280)
                             if imgui.Button("Load##" .. i, imgui.ImVec2(60, 20)) then
                                 loadProfile(pName)
                             end
@@ -1095,7 +1135,11 @@ function main()
                             end
                         end
                         if #mappedServers > 0 then
-                            imgui.TextDisabled("  └─ Mapped: " .. table.concat(mappedServers, ", "))
+                            local mappedStr = table.concat(mappedServers, ", ")
+                            if #mappedStr > 30 then
+                                mappedStr = string.sub(mappedStr, 1, 30) .. "..."
+                            end
+                            imgui.TextDisabled("  Mapped: " .. mappedStr)
                         end
                     end
                 imgui.EndChild()
@@ -1123,7 +1167,7 @@ function main()
         local hbsHalf = hbs / 2  -- Cache commonly used value
         
         local anyRadialOpen2 = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0]
-                            or showVehCatRadial[0] or showVehRadial[0]
+                            or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0]
         
         -- Draw hamburger icon using background draw list
         local hCenterX = hbx + hbsHalf
@@ -1188,12 +1232,36 @@ function main()
                             tostring(iniData.Sector1.name), tostring(iniData.Sector2.name),
                             tostring(iniData.Sector3.name), tostring(iniData.Sector4.name),
                         }
-                        local p = drawRadialMenu(draw_list, cx, cy, lbls, "CLOSE", 0xFFFFFF00, "main")
-                        if     p == 1 then showRadialMenu[0] = false; showVehCatRadial[0] = true
+
+                        -- Check if player is in vehicle
+                        local inVehicle = false
+                        pcall(function() inVehicle = isCharInAnyCar(PLAYER_PED) end)
+
+                        -- Grey out ANIM sector when in vehicle
+                        local mainLabelColors = nil
+                        if inVehicle then
+                            mainLabelColors = { 0xFFFFFFFF, 0xFFFFFFFF, 0x55FFFFFF, 0xFFFFFFFF }
+                        end
+
+                        local p = drawRadialMenu(draw_list, cx, cy, lbls, "CLOSE", 0xFFFFFF00, "main", mainLabelColors)
+                        if     p == 1 then
+                            -- Context-aware vehicle: check if in vehicle
+                            if inVehicle then
+                                contextVehCommands = IN_VEHICLE_COMMANDS
+                                showRadialMenu[0] = false
+                                showContextVehRadial[0] = true
+                            else
+                                contextVehCommands = ON_FOOT_VEH_COMMANDS
+                                showRadialMenu[0] = false
+                                showContextVehRadial[0] = true
+                            end
                         elseif p == 2 then 
                             local cmd = tostring(iniData.Sector2.cmd or "")
                             if executeCommand(cmd) then closeAllRadial() end
-                        elseif p == 3 then showRadialMenu[0] = false; showCatRadial[0] = true
+                        elseif p == 3 then
+                            if not inVehicle then
+                                showRadialMenu[0] = false; showCatRadial[0] = true
+                            end
                         elseif p == 4 then 
                             local cmd = tostring(iniData.Sector4.cmd or "")
                             if executeCommand(cmd) then closeAllRadial() end
@@ -1263,6 +1331,35 @@ function main()
                                 showCatRadial[0] = true
                             elseif animRadialPage < tp then animRadialPage = animRadialPage + 1
                             else animRadialPage = animRadialPage - 1 end
+                        end
+                    end
+                imgui.End()
+            end
+        end
+
+        -- LEVEL 2a-CTX: CONTEXT VEHICLE (auto-detected ON_FOOT / IN_VEHICLE)
+        do
+            local s
+            local ok; ok, s = renderWithScale("ctxveh", showContextVehRadial, cx, cy, menuSize)
+            if ok then
+                imgui.Begin("RadialCtxVeh", nil,
+                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
+                    if s > 0.3 then
+                        local ctxLabels = {}
+                        for i = 1, 4 do
+                            ctxLabels[i] = contextVehCommands[i] and contextVehCommands[i].name or "---"
+                        end
+                        draw_list:AddText(imgui.ImVec2(cx-50, cy-120), 0xFF88DDFF, "[QUICK VEH]")
+                        local p = drawRadialMenu(draw_list, cx, cy, ctxLabels, "BACK", 0xFF88DDFF, "ctxveh")
+                        if p and p >= 1 and p <= 4 then
+                            local slot = contextVehCommands[p]
+                            if slot and slot.cmd and slot.cmd ~= "" then
+                                executeCommand(slot.cmd)
+                                closeAllRadial()
+                            end
+                        elseif p == 5 then
+                            showContextVehRadial[0] = false
+                            showRadialMenu[0] = true
                         end
                     end
                 imgui.End()
