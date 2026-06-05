@@ -213,13 +213,7 @@ local function getWeaponName(id)
     return weaponNames[id] or ("Weapon " .. tostring(id))
 end
 
--- Command handler for /chud
-function cmd_chud()
-    configWindow[0] = not configWindow[0]
-end
-
--- Register command
-sampRegisterChatCommand("chud", cmd_chud)
+-- Command handler for /chud (registered in main())
 
 -- Data update function (called every 100ms in main loop)
 local function updateHudData()
@@ -690,14 +684,15 @@ imgui.OnFrame(
 
 -- Main loop
 function main()
-    -- Wait for SAMP to initialize
-    if not isSampLoaded or not isSampLoaded() then
-        return
-    end
-
+    -- Wait for SAMP
     while not isSampAvailable() do
         wait(100)
     end
+
+    -- Register command
+    sampRegisterChatCommand("chud", function()
+        configWindow[0] = not configWindow[0]
+    end)
 
     sampAddChatMessage("{4CAF50}[CustomHUD]{FFFFFF} GTA V Style HUD loaded! Use /chud to configure.", 0xFFFFFFFF)
 
