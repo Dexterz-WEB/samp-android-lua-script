@@ -189,15 +189,9 @@ imgui.OnFrame(function() return true end, function()
     local scale = cfg.General.globalScale or 1.0
     local opacity = cfg.General.globalOpacity or 0.9
 
-    local function col(color)
-        local a = math.floor(((color / 0x1000000) % 256) * opacity)
-        return a * 0x1000000 + (color % 0x1000000)
-    end
-
-    -- Draw text with shadow
+    -- Draw text (simple, no shadow - same pattern as WeaponDisplayTest)
     local function txt(x, y, color, text)
-        dl:AddText(imgui.ImVec2(x + 1, y + 1), col(0xFF000000), text)
-        dl:AddText(imgui.ImVec2(x, y), col(color), text)
+        dl:AddText(imgui.ImVec2(x, y), color, text)
     end
 
     -- Draw bar
@@ -205,9 +199,9 @@ imgui.OnFrame(function() return true end, function()
         local bw = w * scale
         local bh = h * scale
         local fill = bw * (math.min(value, maxVal) / maxVal)
-        dl:AddRectFilled(imgui.ImVec2(x, y), imgui.ImVec2(x + bw, y + bh), col(bgCol), 4)
+        dl:AddRectFilled(imgui.ImVec2(x, y), imgui.ImVec2(x + bw, y + bh), bgCol, 4)
         if fill > 0 then
-            dl:AddRectFilled(imgui.ImVec2(x, y), imgui.ImVec2(x + fill, y + bh), col(fgCol), 4)
+            dl:AddRectFilled(imgui.ImVec2(x, y), imgui.ImVec2(x + fill, y + bh), fgCol, 4)
         end
     end
 
@@ -215,7 +209,7 @@ imgui.OnFrame(function() return true end, function()
     if cfg.Elements.showFPS then
         local fx = cfg.Positions.fpsX
         local fy = cfg.Positions.fpsY
-        dl:AddRectFilled(imgui.ImVec2(fx - 5, fy - 2), imgui.ImVec2(fx + 70 * scale, fy + 16 * scale), col(0xCC111111), 4)
+        dl:AddRectFilled(imgui.ImVec2(fx - 5, fy - 2), imgui.ImVec2(fx + 70 * scale, fy + 16 * scale), 0xCC111111, 4)
         txt(fx, fy, 0xFFFFFFFF, "FPS: " .. hudData.fps)
     end
 
@@ -223,7 +217,7 @@ imgui.OnFrame(function() return true end, function()
     if cfg.Elements.showTime then
         local tx = cfg.Positions.timeX
         local ty = cfg.Positions.timeY
-        dl:AddRectFilled(imgui.ImVec2(tx - 5, ty - 2), imgui.ImVec2(tx + 60 * scale, ty + 16 * scale), col(0xCC111111), 4)
+        dl:AddRectFilled(imgui.ImVec2(tx - 5, ty - 2), imgui.ImVec2(tx + 60 * scale, ty + 16 * scale), 0xCC111111, 4)
         txt(tx, ty, 0xFFFFFFFF, hudData.serverTime)
     end
 
@@ -231,7 +225,7 @@ imgui.OnFrame(function() return true end, function()
     if cfg.Elements.showHP then
         local hx = cfg.Positions.hpX
         local hy = (cfg.Positions.hpY == 0) and (sh - 120) or cfg.Positions.hpY
-        dl:AddRectFilled(imgui.ImVec2(hx - 5, hy - 3), imgui.ImVec2(hx + 250 * scale, hy + 22 * scale), col(0xCC111111), 4)
+        dl:AddRectFilled(imgui.ImVec2(hx - 5, hy - 3), imgui.ImVec2(hx + 250 * scale, hy + 22 * scale), 0xCC111111, 4)
         bar(hx, hy, 200, 18, hudData.health, 100, 0xFF50AF4C, 0xCC1A3A18)
         txt(hx + 205 * scale, hy + 2, 0xFF50AF4C, tostring(math.floor(hudData.health)))
     end
@@ -240,7 +234,7 @@ imgui.OnFrame(function() return true end, function()
     if cfg.Elements.showArmor and hudData.armor > 0 then
         local ax = cfg.Positions.armorX
         local ay = (cfg.Positions.armorY == 0) and (sh - 90) or cfg.Positions.armorY
-        dl:AddRectFilled(imgui.ImVec2(ax - 5, ay - 3), imgui.ImVec2(ax + 250 * scale, ay + 22 * scale), col(0xCC111111), 4)
+        dl:AddRectFilled(imgui.ImVec2(ax - 5, ay - 3), imgui.ImVec2(ax + 250 * scale, ay + 22 * scale), 0xCC111111, 4)
         bar(ax, ay, 200, 18, hudData.armor, 100, 0xFFF39621, 0xCC0D3A5E)
         txt(ax + 205 * scale, ay + 2, 0xFFF39621, tostring(math.floor(hudData.armor)))
     end
@@ -249,7 +243,7 @@ imgui.OnFrame(function() return true end, function()
     if cfg.Elements.showZone then
         local zx = cfg.Positions.zoneX
         local zy = (cfg.Positions.zoneY == 0) and (sh - 60) or cfg.Positions.zoneY
-        dl:AddRectFilled(imgui.ImVec2(zx - 5, zy - 2), imgui.ImVec2(zx + 180 * scale, zy + 16 * scale), col(0xCC111111), 4)
+        dl:AddRectFilled(imgui.ImVec2(zx - 5, zy - 2), imgui.ImVec2(zx + 180 * scale, zy + 16 * scale), 0xCC111111, 4)
         txt(zx, zy, 0xFFFFFFFF, hudData.zoneName)
     end
 
@@ -258,7 +252,7 @@ imgui.OnFrame(function() return true end, function()
         local mx = (cfg.Positions.moneyX == 0) and (sw - 180) or cfg.Positions.moneyX
         local my = cfg.Positions.moneyY
         local moneyText = formatMoney(hudData.money)
-        dl:AddRectFilled(imgui.ImVec2(mx - 5, my - 2), imgui.ImVec2(mx + 170 * scale, my + 20 * scale), col(0xCC111111), 4)
+        dl:AddRectFilled(imgui.ImVec2(mx - 5, my - 2), imgui.ImVec2(mx + 170 * scale, my + 20 * scale), 0xCC111111, 4)
         txt(mx, my, 0xFF50AF4C, moneyText)
     end
 
@@ -266,7 +260,7 @@ imgui.OnFrame(function() return true end, function()
     if cfg.Elements.showWanted and hudData.wantedLevel > 0 then
         local wx = (cfg.Positions.wantedX == 0) and (sw - 180) or cfg.Positions.wantedX
         local wy = cfg.Positions.wantedY
-        dl:AddRectFilled(imgui.ImVec2(wx - 5, wy - 2), imgui.ImVec2(wx + 120 * scale, wy + 18 * scale), col(0xCC111111), 4)
+        dl:AddRectFilled(imgui.ImVec2(wx - 5, wy - 2), imgui.ImVec2(wx + 120 * scale, wy + 18 * scale), 0xCC111111, 4)
         local stars = ""
         for i = 1, 6 do
             stars = stars .. (i <= hudData.wantedLevel and "*" or ".")
@@ -285,7 +279,7 @@ imgui.OnFrame(function() return true end, function()
         else
             ammoText = wepName .. " | " .. hudData.ammoClip .. "/" .. hudData.ammoTotal
         end
-        dl:AddRectFilled(imgui.ImVec2(wpx - 5, wpy - 2), imgui.ImVec2(wpx + 210 * scale, wpy + 18 * scale), col(0xCC111111), 4)
+        dl:AddRectFilled(imgui.ImVec2(wpx - 5, wpy - 2), imgui.ImVec2(wpx + 210 * scale, wpy + 18 * scale), 0xCC111111, 4)
         txt(wpx, wpy, 0xFFFFFFFF, ammoText)
     end
 
@@ -294,7 +288,7 @@ imgui.OnFrame(function() return true end, function()
         local sx = (cfg.Positions.speedX == 0) and (sw - 220) or cfg.Positions.speedX
         local sy = (cfg.Positions.speedY == 0) and (sh - 60) or cfg.Positions.speedY
         local speedText = tostring(hudData.speed) .. " km/h"
-        dl:AddRectFilled(imgui.ImVec2(sx - 5, sy - 2), imgui.ImVec2(sx + 120 * scale, sy + 18 * scale), col(0xCC111111), 4)
+        dl:AddRectFilled(imgui.ImVec2(sx - 5, sy - 2), imgui.ImVec2(sx + 120 * scale, sy + 18 * scale), 0xCC111111, 4)
         txt(sx, sy, 0xFFFFFFFF, speedText)
     end
 end)
