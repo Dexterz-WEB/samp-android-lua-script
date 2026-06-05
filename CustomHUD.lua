@@ -10,8 +10,8 @@ local inicfg = require 'inicfg'
 local configFile = "CustomHUD.ini"
 local defaultConfig = {
     General = {
-        hideDefaultHud = true,
-        hideDefaultRadar = true,
+        hideDefaultHud = false,
+        hideDefaultRadar = false,
         globalOpacity = 0.9,
         globalScale = 1.0,
     },
