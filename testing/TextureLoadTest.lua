@@ -105,16 +105,17 @@ end
 -- ============================================================================
 -- INITIALIZATION
 -- ============================================================================
+local texturePath = ""
+
 imgui.OnInitialize(function()
-    -- Create a simple test PNG file path
-    local testPath = getWorkingDirectory() .. "/testing/test_icon.png"
+    texturePath = getWorkingDirectory() .. "/testing/test_icon.png"
     
     -- Try all methods
-    texture = tryMethod1(testPath)
+    texture = tryMethod1(texturePath)
     if not texture then
-        texture = tryMethod2(testPath)
+        texture = tryMethod2(texturePath)
     end
-    tryMethod3(testPath)
+    tryMethod3(texturePath)
     
     if texture then
         textureLoaded = true
@@ -166,13 +167,57 @@ imgui.OnFrame(
             imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), "TEXTURE LOADED SUCCESSFULLY!")
             imgui.Spacing()
             
-            -- Try to display texture
+            imgui.Text("Render at different sizes:")
+            imgui.Spacing()
+            
+            -- Render texture at different sizes
             local ok, err = pcall(function()
+                imgui.Text("64x64:")
                 imgui.Image(texture, imgui.ImVec2(64, 64))
+                
+                imgui.SameLine()
+                
+                imgui.Text("32x32:")
+                imgui.Image(texture, imgui.ImVec2(32, 32))
+                
+                imgui.SameLine()
+                
+                imgui.Text("128x128:")
+                imgui.Image(texture, imgui.ImVec2(128, 128))
             end)
             
             if not ok then
                 imgui.TextColored(imgui.ImVec4(1, 0, 0, 1), "Image render error: " .. tostring(err))
+            end
+            
+            imgui.Spacing()
+            
+            -- Test with tint color
+            local ok2, err2 = pcall(function()
+                imgui.Text("With color tint (red, green, blue):")
+                imgui.Image(texture, imgui.ImVec2(48, 48), imgui.ImVec2(0,0), imgui.ImVec2(1,1), imgui.ImVec4(1,0.5,0.5,1))
+                imgui.SameLine()
+                imgui.Image(texture, imgui.ImVec2(48, 48), imgui.ImVec2(0,0), imgui.ImVec2(1,1), imgui.ImVec4(0.5,1,0.5,1))
+                imgui.SameLine()
+                imgui.Image(texture, imgui.ImVec2(48, 48), imgui.ImVec2(0,0), imgui.ImVec2(1,1), imgui.ImVec4(0.5,0.5,1,1))
+            end)
+            
+            if not ok2 then
+                imgui.TextColored(imgui.ImVec4(1, 0.5, 0, 1), "Tint not supported: " .. tostring(err2))
+            end
+            
+            imgui.Spacing()
+            
+            -- Test ImageButton
+            local ok3, err3 = pcall(function()
+                imgui.Text("As button (clickable):")
+                if imgui.ImageButton(texture, imgui.ImVec2(64, 64)) then
+                    sampAddChatMessage("{00FF00}[Texture Test] {FFFFFF}Image button clicked!", -1)
+                end
+            end)
+            
+            if not ok3 then
+                imgui.TextColored(imgui.ImVec4(1, 0.5, 0, 1), "ImageButton not supported: " .. tostring(err3))
             end
         else
             imgui.TextColored(imgui.ImVec4(1, 0.5, 0, 1), "No texture loaded yet")
