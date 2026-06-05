@@ -179,6 +179,11 @@ end
 -- RENDER HUD
 -- ============================================================================
 imgui.OnFrame(function() return true end, function()
+    -- Don't render if player not spawned
+    local spawned = false
+    pcall(function() spawned = sampIsLocalPlayerSpawned() end)
+    if not spawned then return end
+
     -- Hide if chat active
     local chatActive = false
     pcall(function() chatActive = sampIsChatInputActive() end)
@@ -344,23 +349,27 @@ function main()
         showConfig[0] = not showConfig[0]
     end)
 
+    -- Wait extra time after SAMP is available for player to fully load
+    wait(3000)
+
     while true do
         wait(100)
 
-        -- Hide/Show default HUD
-        if cfg.General.hideDefaultHud then
-            pcall(displayHud, false)
-        else
-            pcall(displayHud, true)
-        end
-        if cfg.General.hideDefaultRadar then
-            pcall(displayRadar, false)
-        else
-            pcall(displayRadar, true)
-        end
-
-        -- Update data
+        -- Only do anything after player is fully spawned
         if sampIsLocalPlayerSpawned() then
+            -- Hide/Show default HUD
+            if cfg.General.hideDefaultHud then
+                pcall(displayHud, false)
+            else
+                pcall(displayHud, true)
+            end
+            if cfg.General.hideDefaultRadar then
+                pcall(displayRadar, false)
+            else
+                pcall(displayRadar, true)
+            end
+
+            -- Update data
             updateHudData()
         end
     end
