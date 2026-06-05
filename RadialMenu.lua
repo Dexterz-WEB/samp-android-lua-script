@@ -39,6 +39,10 @@ local defaultStructure = {
     CtxVeh2 = { name = "LOCK", onCmd = "/lock", offCmd = "/unlock" },
     CtxVeh3 = { name = "LIGHT", onCmd = "/lights", offCmd = "/lights" },
     CtxVeh4 = { name = "-", onCmd = "", offCmd = "" },
+    CtxFoot1 = { name = "LOCK", cmd = "/lock" },
+    CtxFoot2 = { name = "UNLOCK", cmd = "/unlock" },
+    CtxFoot3 = { name = "TRUNK", cmd = "/trunk" },
+    CtxFoot4 = { name = "HOOD", cmd = "/hood" },
     Sector1 = { name = "VEHICLE", cmd = "" },
     Sector2 = { name = "-",       cmd = "" },
     Sector3 = { name = "ANIM",    cmd = "" },
@@ -108,6 +112,16 @@ local ON_FOOT_VEH_COMMANDS = {
     { name = "TRUNK", cmd = "/trunk" },
     { name = "HOOD", cmd = "/hood" },
 }
+
+-- Dynamic loader for on-foot context commands from config
+local function getOnFootCommands()
+    local cmds = {}
+    for i = 1, 4 do
+        local s = iniData["CtxFoot"..i] or { name = "-", cmd = "" }
+        cmds[i] = { name = s.name or "-", cmd = s.cmd or "" }
+    end
+    return cmds
+end
 local IN_VEHICLE_COMMANDS = {
     { name = "ENGINE", cmd = "/engine" },
     { name = "LIGHTS", cmd = "/lights" },
@@ -215,6 +229,15 @@ for i = 1, 4 do
     ctxVehName[i] = imgui.new.char[32](s.name or "")
     ctxVehOn[i] = imgui.new.char[64](s.onCmd or "")
     ctxVehOff[i] = imgui.new.char[64](s.offCmd or "")
+end
+
+-- Context Foot Command Buffers
+local ctxFootName = {}
+local ctxFootCmd = {}
+for i = 1, 4 do
+    local s = iniData["CtxFoot"..i] or { name = "", cmd = "" }
+    ctxFootName[i] = imgui.new.char[32](s.name or "")
+    ctxFootCmd[i] = imgui.new.char[64](s.cmd or "")
 end
 
 -- ============================================================================
@@ -445,6 +468,15 @@ function reloadEditBuffers()
         for j = 1, #(s.name or "") do ctxVehName[i][j-1] = string.byte(s.name, j) end
         for j = 1, #(s.onCmd or "") do ctxVehOn[i][j-1] = string.byte(s.onCmd, j) end
         for j = 1, #(s.offCmd or "") do ctxVehOff[i][j-1] = string.byte(s.offCmd, j) end
+    end
+    
+    -- Reload context foot commands
+    for i = 1, 4 do
+        local s = iniData["CtxFoot"..i] or { name = "", cmd = "" }
+        for j = 0, 31 do ctxFootName[i][j] = 0 end
+        for j = 0, 63 do ctxFootCmd[i][j] = 0 end
+        for j = 1, #(s.name or "") do ctxFootName[i][j-1] = string.byte(s.name, j) end
+        for j = 1, #(s.cmd or "") do ctxFootCmd[i][j-1] = string.byte(s.cmd, j) end
     end
     
     rebuildAnimList()
@@ -721,6 +753,13 @@ function saveAllConfig()
         iniData["CtxVeh"..i].name = readCharBuffer(ctxVehName[i], 32)
         iniData["CtxVeh"..i].onCmd = readCharBuffer(ctxVehOn[i], 64)
         iniData["CtxVeh"..i].offCmd = readCharBuffer(ctxVehOff[i], 64)
+    end
+    
+    -- Save context foot commands
+    for i = 1, 4 do
+        if not iniData["CtxFoot"..i] then iniData["CtxFoot"..i] = {} end
+        iniData["CtxFoot"..i].name = readCharBuffer(ctxFootName[i], 32)
+        iniData["CtxFoot"..i].cmd = readCharBuffer(ctxFootCmd[i], 64)
     end
     
     -- Save to file
@@ -1089,18 +1128,19 @@ function main()
                 imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "ON-FOOT VEHICLE COMMANDS")
                 imgui.Spacing()
                 -- Header (LOCKED)
-                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("Command")
+                imgui.Text("Category"); imgui.SameLine(180); imgui.Text("Command")
                 imgui.Separator()
                 imgui.Spacing()
-                -- Keep existing vehicle slot editing for on-foot (the Veh1-Veh21 slots already exist)
-                imgui.BeginChild("##vehscroll", imgui.ImVec2(-1,-50), true)
-                    for i = 1, MAX_VEH_SLOTS do
-                        imgui.Text(string.format("Slot%2d|", i)); imgui.SameLine()
-                        imgui.SetNextItemWidth(110); imgui.InputText("Lbl##vl"..i, vehEditLabel[i], 64); imgui.SameLine()
-                        imgui.SetNextItemWidth(240); imgui.InputText("Cmd##vc"..i, vehEditCmd[i], 128); imgui.SameLine()
-                        imgui.SetNextItemWidth(100); imgui.InputText("Cat##vk"..i, vehEditCategory[i], 32)
-                    end
-                imgui.EndChild()
+                -- Editable rows
+                for i = 1, 4 do
+                    imgui.PushItemWidth(140)
+                    imgui.InputText("##cfn"..i, ctxFootName[i], 32)
+                    imgui.PopItemWidth()
+                    imgui.SameLine(180)
+                    imgui.PushItemWidth(200)
+                    imgui.InputText("##cfc"..i, ctxFootCmd[i], 64)
+                    imgui.PopItemWidth()
+                end
             
             -- TAB 4: PROFILES
             elseif configTab == 4 then
@@ -1326,7 +1366,7 @@ function main()
                                 showRadialMenu[0] = false
                                 showContextVehRadial[0] = true
                             else
-                                contextVehCommands = ON_FOOT_VEH_COMMANDS
+                                contextVehCommands = getOnFootCommands()
                                 showRadialMenu[0] = false
                                 showContextVehRadial[0] = true
                             end
