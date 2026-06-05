@@ -35,6 +35,10 @@ local autoDetectServer = profilesData.Settings.autoDetectServer or true
 local defaultStructure = {
     ButtonSettings = { posX = 1100.0, posY = 140.0 },
     HamburgerButton = { enabled = true, posX = 50.0, posY = 300.0, size = 80.0, alpha = 0.8 },
+    CtxVeh1 = { name = "ENGINE", onCmd = "/engine", offCmd = "/engine" },
+    CtxVeh2 = { name = "LOCK", onCmd = "/lock", offCmd = "/unlock" },
+    CtxVeh3 = { name = "LIGHT", onCmd = "/lights", offCmd = "/lights" },
+    CtxVeh4 = { name = "-", onCmd = "", offCmd = "" },
     Sector1 = { name = "VEHICLE", cmd = "" },
     Sector2 = { name = "-",       cmd = "" },
     Sector3 = { name = "ANIM",    cmd = "" },
@@ -110,6 +114,16 @@ local IN_VEHICLE_COMMANDS = {
     { name = "LOCK", cmd = "/lock" },
     { name = "-", cmd = "" },
 }
+
+-- Dynamic loader for in-vehicle context commands from config
+local function getInVehicleCommands()
+    local cmds = {}
+    for i = 1, 4 do
+        local s = iniData["CtxVeh"..i] or { name = "-", onCmd = "", offCmd = "" }
+        cmds[i] = { name = s.name or "-", onCmd = s.onCmd or "", offCmd = s.offCmd or "" }
+    end
+    return cmds
+end
 
 -- toggle state: key=category (lower), true=ON/OPEN aktif, false/nil=OFF/CLOSE
 local toggleState = {}
@@ -190,6 +204,17 @@ for i = 1, MAX_VEH_SLOTS do
     vehEditLabel[i]    = imgui.new.char[64](s.label    or "")
     vehEditCmd[i]      = imgui.new.char[128](s.cmd     or "")
     vehEditCategory[i] = imgui.new.char[32](s.category or "")
+end
+
+-- Context Vehicle Command Buffers
+local ctxVehName = {}
+local ctxVehOn = {}
+local ctxVehOff = {}
+for i = 1, 4 do
+    local s = iniData["CtxVeh"..i] or { name = "", onCmd = "", offCmd = "" }
+    ctxVehName[i] = imgui.new.char[32](s.name or "")
+    ctxVehOn[i] = imgui.new.char[64](s.onCmd or "")
+    ctxVehOff[i] = imgui.new.char[64](s.offCmd or "")
 end
 
 -- ============================================================================
@@ -410,6 +435,16 @@ function reloadEditBuffers()
         for j = 1, #(s.label or "") do vehEditLabel[i][j-1] = string.byte(s.label, j) end
         for j = 1, #(s.cmd or "") do vehEditCmd[i][j-1] = string.byte(s.cmd, j) end
         for j = 1, #(s.category or "") do vehEditCategory[i][j-1] = string.byte(s.category, j) end
+    end
+    
+    -- Reload context vehicle commands
+    for i = 1, 4 do
+        local s = iniData["CtxVeh"..i] or { name = "", onCmd = "", offCmd = "" }
+        for j = 0, 31 do ctxVehName[i][j] = 0 end
+        for j = 0, 63 do ctxVehOn[i][j] = 0; ctxVehOff[i][j] = 0 end
+        for j = 1, #(s.name or "") do ctxVehName[i][j-1] = string.byte(s.name, j) end
+        for j = 1, #(s.onCmd or "") do ctxVehOn[i][j-1] = string.byte(s.onCmd, j) end
+        for j = 1, #(s.offCmd or "") do ctxVehOff[i][j-1] = string.byte(s.offCmd, j) end
     end
     
     rebuildAnimList()
@@ -678,6 +713,14 @@ function saveAllConfig()
         iniData["Veh"..i].label = newLabel
         iniData["Veh"..i].cmd = newCmd
         iniData["Veh"..i].category = newCat
+    end
+    
+    -- Save context vehicle commands
+    for i = 1, 4 do
+        if not iniData["CtxVeh"..i] then iniData["CtxVeh"..i] = {} end
+        iniData["CtxVeh"..i].name = readCharBuffer(ctxVehName[i], 32)
+        iniData["CtxVeh"..i].onCmd = readCharBuffer(ctxVehOn[i], 64)
+        iniData["CtxVeh"..i].offCmd = readCharBuffer(ctxVehOff[i], 64)
     end
     
     -- Save to file
@@ -1003,21 +1046,53 @@ function main()
             
             -- TAB 2: ANIMATIONS
             elseif configTab == 2 then
-                imgui.TextColored(imgui.ImVec4(1,1,0,1), "Edit animations")
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(1,1,0,1), "ANIMATION COMMANDS")
+                imgui.Spacing()
+                -- Header (LOCKED)
+                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("Command")
+                imgui.Separator()
+                imgui.Spacing()
+                -- Editable rows (existing anim slots)
                 imgui.BeginChild("##animscroll", imgui.ImVec2(-1,-50), true)
                     for i = 1, MAX_ANIM_SLOTS do
                         imgui.Text(string.format("Slot%2d|", i)); imgui.SameLine()
-                        imgui.SetNextItemWidth(110); imgui.InputText("Lbl##al"..i, animEditLabel[i], 64); imgui.SameLine()
-                        imgui.SetNextItemWidth(240); imgui.InputText("Cmd##ac"..i, animEditCmd[i], 128); imgui.SameLine()
-                        imgui.SetNextItemWidth(100); imgui.InputText("Cat##ak"..i, animEditCategory[i], 32)
+                        imgui.SetNextItemWidth(100); imgui.InputText("Cat##ak"..i, animEditCategory[i], 32); imgui.SameLine()
+                        imgui.SetNextItemWidth(280); imgui.InputText("Cmd##ac"..i, animEditCmd[i], 128); imgui.SameLine()
+                        imgui.SetNextItemWidth(100); imgui.InputText("Lbl##al"..i, animEditLabel[i], 64)
                     end
                 imgui.EndChild()
             
             -- TAB 3: VEHICLES
             elseif configTab == 3 then
-                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "Edit vehicles")
+                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "IN-VEHICLE CONTEXT COMMANDS")
+                imgui.Spacing()
+                -- Header (LOCKED)
+                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("ON Cmd"); imgui.SameLine(350); imgui.Text("OFF Cmd")
+                imgui.Separator()
+                imgui.Spacing()
+                -- Editable rows
+                for i = 1, 4 do
+                    imgui.PushItemWidth(120)
+                    imgui.InputText("##cvn"..i, ctxVehName[i], 32)
+                    imgui.PopItemWidth()
+                    imgui.SameLine(150)
+                    imgui.PushItemWidth(170)
+                    imgui.InputText("##cvo"..i, ctxVehOn[i], 64)
+                    imgui.PopItemWidth()
+                    imgui.SameLine(350)
+                    imgui.PushItemWidth(170)
+                    imgui.InputText("##cvf"..i, ctxVehOff[i], 64)
+                    imgui.PopItemWidth()
+                end
+                
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "ON-FOOT VEHICLE COMMANDS")
+                imgui.Spacing()
+                -- Header (LOCKED)
+                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("Command")
+                imgui.Separator()
+                imgui.Spacing()
+                -- Keep existing vehicle slot editing for on-foot (the Veh1-Veh21 slots already exist)
                 imgui.BeginChild("##vehscroll", imgui.ImVec2(-1,-50), true)
                     for i = 1, MAX_VEH_SLOTS do
                         imgui.Text(string.format("Slot%2d|", i)); imgui.SameLine()
@@ -1247,7 +1322,7 @@ function main()
                         if     p == 1 then
                             -- Context-aware vehicle: check if in vehicle
                             if inVehicle then
-                                contextVehCommands = IN_VEHICLE_COMMANDS
+                                contextVehCommands = getInVehicleCommands()
                                 showRadialMenu[0] = false
                                 showContextVehRadial[0] = true
                             else
@@ -1353,8 +1428,24 @@ function main()
                         local p = drawRadialMenu(draw_list, cx, cy, ctxLabels, "BACK", 0xFF88DDFF, "ctxveh")
                         if p and p >= 1 and p <= 4 then
                             local slot = contextVehCommands[p]
-                            if slot and slot.cmd and slot.cmd ~= "" then
-                                executeCommand(slot.cmd)
+                            if slot then
+                                -- Support ON/OFF toggle for CtxVeh commands
+                                if slot.onCmd and slot.offCmd then
+                                    local key = (slot.name or ""):lower()
+                                    if key ~= "" and key ~= "-" then
+                                        if toggleState[key] then
+                                            executeCommand(slot.offCmd)
+                                            toggleState[key] = false
+                                        else
+                                            executeCommand(slot.onCmd)
+                                            toggleState[key] = true
+                                        end
+                                    elseif slot.onCmd ~= "" then
+                                        executeCommand(slot.onCmd)
+                                    end
+                                elseif slot.cmd and slot.cmd ~= "" then
+                                    executeCommand(slot.cmd)
+                                end
                                 closeAllRadial()
                             end
                         elseif p == 5 then
