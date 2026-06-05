@@ -39,10 +39,10 @@ local defaultStructure = {
     CtxVeh2 = { name = "LOCK", onCmd = "/lock", offCmd = "/unlock" },
     CtxVeh3 = { name = "LIGHT", onCmd = "/lights", offCmd = "/lights" },
     CtxVeh4 = { name = "-", onCmd = "", offCmd = "" },
-    CtxFoot1 = { name = "LOCK", cmd = "/lock" },
-    CtxFoot2 = { name = "UNLOCK", cmd = "/unlock" },
-    CtxFoot3 = { name = "TRUNK", cmd = "/trunk" },
-    CtxFoot4 = { name = "HOOD", cmd = "/hood" },
+    CtxFoot1 = { name = "LOCK", onCmd = "/lock", offCmd = "/unlock" },
+    CtxFoot2 = { name = "TRUNK", onCmd = "/trunk", offCmd = "/trunk" },
+    CtxFoot3 = { name = "HOOD", onCmd = "/hood", offCmd = "/hood" },
+    CtxFoot4 = { name = "-", onCmd = "", offCmd = "" },
     Sector1 = { name = "VEHICLE", cmd = "" },
     Sector2 = { name = "-",       cmd = "" },
     Sector3 = { name = "ANIM",    cmd = "" },
@@ -117,8 +117,8 @@ local ON_FOOT_VEH_COMMANDS = {
 local function getOnFootCommands()
     local cmds = {}
     for i = 1, 4 do
-        local s = iniData["CtxFoot"..i] or { name = "-", cmd = "" }
-        cmds[i] = { name = s.name or "-", cmd = s.cmd or "" }
+        local s = iniData["CtxFoot"..i] or { name = "-", onCmd = "", offCmd = "" }
+        cmds[i] = { name = s.name or "-", onCmd = s.onCmd or "", offCmd = s.offCmd or "" }
     end
     return cmds
 end
@@ -233,11 +233,13 @@ end
 
 -- Context Foot Command Buffers
 local ctxFootName = {}
-local ctxFootCmd = {}
+local ctxFootOn = {}
+local ctxFootOff = {}
 for i = 1, 4 do
-    local s = iniData["CtxFoot"..i] or { name = "", cmd = "" }
+    local s = iniData["CtxFoot"..i] or { name = "", onCmd = "", offCmd = "" }
     ctxFootName[i] = imgui.new.char[32](s.name or "")
-    ctxFootCmd[i] = imgui.new.char[64](s.cmd or "")
+    ctxFootOn[i] = imgui.new.char[64](s.onCmd or "")
+    ctxFootOff[i] = imgui.new.char[64](s.offCmd or "")
 end
 
 -- ============================================================================
@@ -472,11 +474,12 @@ function reloadEditBuffers()
     
     -- Reload context foot commands
     for i = 1, 4 do
-        local s = iniData["CtxFoot"..i] or { name = "", cmd = "" }
+        local s = iniData["CtxFoot"..i] or { name = "", onCmd = "", offCmd = "" }
         for j = 0, 31 do ctxFootName[i][j] = 0 end
-        for j = 0, 63 do ctxFootCmd[i][j] = 0 end
+        for j = 0, 63 do ctxFootOn[i][j] = 0; ctxFootOff[i][j] = 0 end
         for j = 1, #(s.name or "") do ctxFootName[i][j-1] = string.byte(s.name, j) end
-        for j = 1, #(s.cmd or "") do ctxFootCmd[i][j-1] = string.byte(s.cmd, j) end
+        for j = 1, #(s.onCmd or "") do ctxFootOn[i][j-1] = string.byte(s.onCmd, j) end
+        for j = 1, #(s.offCmd or "") do ctxFootOff[i][j-1] = string.byte(s.offCmd, j) end
     end
     
     rebuildAnimList()
@@ -759,7 +762,8 @@ function saveAllConfig()
     for i = 1, 4 do
         if not iniData["CtxFoot"..i] then iniData["CtxFoot"..i] = {} end
         iniData["CtxFoot"..i].name = readCharBuffer(ctxFootName[i], 32)
-        iniData["CtxFoot"..i].cmd = readCharBuffer(ctxFootCmd[i], 64)
+        iniData["CtxFoot"..i].onCmd = readCharBuffer(ctxFootOn[i], 64)
+        iniData["CtxFoot"..i].offCmd = readCharBuffer(ctxFootOff[i], 64)
     end
     
     -- Save to file
@@ -1128,17 +1132,21 @@ function main()
                 imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "ON-FOOT VEHICLE COMMANDS")
                 imgui.Spacing()
                 -- Header (LOCKED)
-                imgui.Text("Category"); imgui.SameLine(180); imgui.Text("Command")
+                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("ON Cmd"); imgui.SameLine(350); imgui.Text("OFF Cmd")
                 imgui.Separator()
                 imgui.Spacing()
                 -- Editable rows
                 for i = 1, 4 do
-                    imgui.PushItemWidth(140)
+                    imgui.PushItemWidth(120)
                     imgui.InputText("##cfn"..i, ctxFootName[i], 32)
                     imgui.PopItemWidth()
-                    imgui.SameLine(180)
-                    imgui.PushItemWidth(200)
-                    imgui.InputText("##cfc"..i, ctxFootCmd[i], 64)
+                    imgui.SameLine(150)
+                    imgui.PushItemWidth(170)
+                    imgui.InputText("##cfo"..i, ctxFootOn[i], 64)
+                    imgui.PopItemWidth()
+                    imgui.SameLine(350)
+                    imgui.PushItemWidth(170)
+                    imgui.InputText("##cff"..i, ctxFootOff[i], 64)
                     imgui.PopItemWidth()
                 end
             
