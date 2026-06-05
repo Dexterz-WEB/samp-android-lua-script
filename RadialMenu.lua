@@ -666,6 +666,23 @@ function saveAllConfig()
 end
 
 -- ============================================================================
+-- SCREEN RESOLUTION CACHE
+-- ============================================================================
+local cachedSW, cachedSH = 0, 0
+local screenCacheFrame = 0
+local SCREEN_CACHE_INTERVAL = 60  -- Update every 60 frames
+
+-- ============================================================================
+-- RENDER HELPER (outside OnFrame for performance)
+-- ============================================================================
+local function renderWithScale(key, showFlag, cx, cy, menuSize)
+    if not showFlag or not showFlag[0] then return false end
+    imgui.SetNextWindowPos(imgui.ImVec2(cx - menuSize/2, cy - menuSize/2), imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(menuSize, menuSize))
+    return true, 1
+end
+
+-- ============================================================================
 -- DRAW RADIAL — label auto-center & auto-wrap
 -- ============================================================================
 local SECTOR_CENTERS = {
@@ -818,7 +835,13 @@ function main()
     end)
 
     imgui.OnFrame(function() return true end, function()
-        local sw, sh    = getScreenResolution()
+        -- Cache screen resolution (rarely changes)
+        screenCacheFrame = screenCacheFrame + 1
+        if screenCacheFrame >= SCREEN_CACHE_INTERVAL or cachedSW == 0 then
+            cachedSW, cachedSH = getScreenResolution()
+            screenCacheFrame = 0
+        end
+        local sw, sh    = cachedSW, cachedSH
         local draw_list = imgui.GetBackgroundDrawList()
         local menuSize  = 340
         local cx        = sw / 2
@@ -1091,35 +1114,38 @@ function main()
             imgui.End()
         end
 
-        -- TOMBOL MENU (Hamburger Button)
+        -- TOMBOL MENU (Hamburger Button) - Skip when config window is open
+        if not showConfigWindow[0] then
         local hbx = btnSliderX[0]
         local hby = btnSliderY[0]
         local hbs = hamburgerSize[0]
         local hba = hamburgerAlpha[0]
+        local hbsHalf = hbs / 2  -- Cache commonly used value
         
         local anyRadialOpen2 = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0]
                             or showVehCatRadial[0] or showVehRadial[0]
         
         -- Draw hamburger icon using background draw list
-        local hCenterX = hbx + hbs/2
-        local hCenterY = hby + hbs/2
+        local hCenterX = hbx + hbsHalf
+        local hCenterY = hby + hbsHalf
+        local hCenter = imgui.ImVec2(hCenterX, hCenterY)  -- Cache center point
         
-        -- Pulse animation
+        -- Pulse animation (only calculate when hamburger is drawn)
         hamburgerPulse = (hamburgerPulse + 0.05) % (math.pi * 2)
         local hPulse = math.sin(hamburgerPulse) * 0.15 + 1.0
         
-        -- Outer glow
+        -- Outer glow (16 segments - sufficient for subtle glow)
         local hGlowAlpha = math.floor(hba * 100 * (1.0 - (hPulse - 1.0) * 3))
         local hGlowColor = hGlowAlpha * 0x01000000 + 0x0044AAFF
-        draw_list:AddCircleFilled(imgui.ImVec2(hCenterX, hCenterY), (hbs/2) * hPulse, hGlowColor, 32)
+        draw_list:AddCircleFilled(hCenter, hbsHalf * hPulse, hGlowColor, 16)
         
         -- Inner circle
         local hBgAlpha = math.floor(hba * 220)
-        draw_list:AddCircleFilled(imgui.ImVec2(hCenterX, hCenterY), hbs/2, hBgAlpha * 0x01000000 + 0x00222222, 32)
+        draw_list:AddCircleFilled(hCenter, hbsHalf, hBgAlpha * 0x01000000 + 0x00222222, 32)
         
         -- Border
         local hBorderAlpha = math.floor(hba * 255)
-        draw_list:AddCircle(imgui.ImVec2(hCenterX, hCenterY), hbs/2, hBorderAlpha * 0x01000000 + 0x0088DDFF, 32, 3.0)
+        draw_list:AddCircle(hCenter, hbsHalf, hBorderAlpha * 0x01000000 + 0x0088DDFF, 32, 3.0)
         
         -- Hamburger icon (3 white lines)
         local hIconSize = hbs * 0.4
@@ -1128,10 +1154,12 @@ function main()
         local hLineW = hIconSize * 0.8
         local hLineH = hIconSize * 0.12
         local hLineS = hIconSize * 0.25
+        local hLineWHalf = hLineW / 2  -- Cache commonly used value
+        local hLineHHalf = hLineH / 2  -- Cache commonly used value
         
-        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineW/2, hCenterY - hLineS - hLineH/2), imgui.ImVec2(hCenterX + hLineW/2, hCenterY - hLineS + hLineH/2), hIconColor, hLineH/2)
-        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineW/2, hCenterY - hLineH/2), imgui.ImVec2(hCenterX + hLineW/2, hCenterY + hLineH/2), hIconColor, hLineH/2)
-        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineW/2, hCenterY + hLineS - hLineH/2), imgui.ImVec2(hCenterX + hLineW/2, hCenterY + hLineS + hLineH/2), hIconColor, hLineH/2)
+        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineWHalf, hCenterY - hLineS - hLineHHalf), imgui.ImVec2(hCenterX + hLineWHalf, hCenterY - hLineS + hLineHHalf), hIconColor, hLineHHalf)
+        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineWHalf, hCenterY - hLineHHalf), imgui.ImVec2(hCenterX + hLineWHalf, hCenterY + hLineHHalf), hIconColor, hLineHHalf)
+        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineWHalf, hCenterY + hLineS - hLineHHalf), imgui.ImVec2(hCenterX + hLineWHalf, hCenterY + hLineS + hLineHHalf), hIconColor, hLineHHalf)
         
         -- Touch handler
         imgui.SetNextWindowPos(imgui.ImVec2(hbx, hby), imgui.Cond.Always)
@@ -1146,19 +1174,12 @@ function main()
                 end
             end
         imgui.End()
-
-        -- Helper: render radial tanpa animasi
-        local function renderWithScale(key, showFlag)
-            if not showFlag or not showFlag[0] then return false end
-            imgui.SetNextWindowPos(imgui.ImVec2(cx - menuSize/2, cy - menuSize/2), imgui.Cond.Always)
-            imgui.SetNextWindowSize(imgui.ImVec2(menuSize, menuSize))
-            return true, 1
-        end
+        end  -- if not showConfigWindow[0]
 
         -- LEVEL 1: RADIAL UTAMA
         do
             local s
-            local ok; ok, s = renderWithScale("main", showRadialMenu)
+            local ok; ok, s = renderWithScale("main", showRadialMenu, cx, cy, menuSize)
             if ok then
                 imgui.Begin("RadialMain", nil,
                     imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
@@ -1185,7 +1206,7 @@ function main()
         -- LEVEL 2a: CATEGORY ANIM
         do
             local s
-            local ok; ok, s = renderWithScale("cat", showCatRadial)
+            local ok; ok, s = renderWithScale("cat", showCatRadial, cx, cy, menuSize)
             if ok then
                 imgui.Begin("RadialCat", nil,
                     imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
@@ -1219,7 +1240,7 @@ function main()
         -- LEVEL 3a: ANIM
         do
             local s
-            local ok; ok, s = renderWithScale("anim", showAnimRadial)
+            local ok; ok, s = renderWithScale("anim", showAnimRadial, cx, cy, menuSize)
             if ok then
                 imgui.Begin("RadialAnim", nil,
                     imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
@@ -1251,7 +1272,7 @@ function main()
         -- LEVEL 2b: CATEGORY VEHICLE
         do
             local s
-            local ok; ok, s = renderWithScale("vehcat", showVehCatRadial)
+            local ok; ok, s = renderWithScale("vehcat", showVehCatRadial, cx, cy, menuSize)
             if ok then
                 imgui.Begin("RadialVehCat", nil,
                     imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
@@ -1286,7 +1307,7 @@ function main()
         -- LEVEL 3b: VEHICLE
         do
             local s
-            local ok; ok, s = renderWithScale("veh", showVehRadial)
+            local ok; ok, s = renderWithScale("veh", showVehRadial, cx, cy, menuSize)
             if ok then
                 imgui.Begin("RadialVeh", nil,
                     imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
