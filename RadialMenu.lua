@@ -106,6 +106,10 @@ local vehRadialList      = {}
 local showContextVehRadial = imgui.new.bool(false)
 local contextVehCommands = {}
 
+-- Context sub-radial (ON/OFF selection)
+local showCtxSubRadial = imgui.new.bool(false)
+local ctxSubRadialItem = { name = "", onCmd = "", offCmd = "" }
+
 local ON_FOOT_VEH_COMMANDS = {
     { name = "LOCK", cmd = "/lock" },
     { name = "UNLOCK", cmd = "/unlock" },
@@ -583,6 +587,7 @@ function closeAllRadial()
     showVehCatRadial[0] = false
     showVehRadial[0]    = false
     showContextVehRadial[0] = false
+    showCtxSubRadial[0] = false
 end
 
 function executeCommand(cmd)
@@ -964,7 +969,7 @@ function main()
         local dialogActive = false
         pcall(function() dialogActive = sampIsDialogActive() end)
         if dialogActive then
-            if showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0] or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] then
+            if showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0] or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] or showCtxSubRadial[0] then
                 closeAllRadial()
             end
         end
@@ -1290,7 +1295,7 @@ function main()
         local hbsHalf = hbs / 2  -- Cache commonly used value
         
         local anyRadialOpen2 = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0]
-                            or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0]
+                            or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] or showCtxSubRadial[0]
         
         -- Draw hamburger icon using background draw list
         local hCenterX = hbx + hbsHalf
@@ -1476,29 +1481,83 @@ function main()
                         local p = drawRadialMenu(draw_list, cx, cy, ctxLabels, "BACK", 0xFF88DDFF, "ctxveh")
                         if p and p >= 1 and p <= 4 then
                             local slot = contextVehCommands[p]
-                            if slot then
-                                -- Support ON/OFF toggle for CtxVeh commands
-                                if slot.onCmd and slot.offCmd then
-                                    local key = (slot.name or ""):lower()
-                                    if key ~= "" and key ~= "-" then
-                                        if toggleState[key] then
-                                            executeCommand(slot.offCmd)
-                                            toggleState[key] = false
-                                        else
-                                            executeCommand(slot.onCmd)
-                                            toggleState[key] = true
-                                        end
-                                    elseif slot.onCmd ~= "" then
-                                        executeCommand(slot.onCmd)
-                                    end
-                                elseif slot.cmd and slot.cmd ~= "" then
-                                    executeCommand(slot.cmd)
+                            if slot and slot.name and slot.name ~= "-" and slot.name ~= "" then
+                                if (slot.onCmd and slot.onCmd ~= "") or (slot.offCmd and slot.offCmd ~= "") then
+                                    -- Open sub-radial for ON/OFF selection
+                                    ctxSubRadialItem = { name = slot.name, onCmd = slot.onCmd or "", offCmd = slot.offCmd or "" }
+                                    showContextVehRadial[0] = false
+                                    showCtxSubRadial[0] = true
                                 end
-                                closeAllRadial()
                             end
                         elseif p == 5 then
                             showContextVehRadial[0] = false
                             showRadialMenu[0] = true
+                        end
+                    end
+                imgui.End()
+            end
+        end
+
+        -- CONTEXT SUB-RADIAL (ON/OFF selection)
+        do
+            local s
+            local ok; ok, s = renderWithScale("ctxsub", showCtxSubRadial, cx, cy, menuSize)
+            if ok then
+                imgui.Begin("RadialCtxSub", nil,
+                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
+                    if s > 0.3 then
+                        local item = ctxSubRadialItem
+                        local cat = (item.name or ""):lower()
+                        local isOn = toggleState[cat]
+
+                        -- Customize labels based on category
+                        local onLabel = "ON"
+                        local offLabel = "OFF"
+                        if cat == "lock" then
+                            onLabel = "LOCK"
+                            offLabel = "UNLOCK"
+                        elseif cat == "trunk" or cat == "hood" then
+                            onLabel = "OPEN"
+                            offLabel = "CLOSE"
+                        elseif cat == "engine" then
+                            onLabel = "ON"
+                            offLabel = "OFF"
+                        elseif cat == "light" or cat == "lights" then
+                            onLabel = "ON"
+                            offLabel = "OFF"
+                        end
+
+                        -- Colors: grey out the active state
+                        local onColor = isOn and 0x55FFFFFF or 0xFF44FF44
+                        local offColor = isOn and 0xFFFF4444 or 0x55FFFFFF
+
+                        local labels = { onLabel, "-", offLabel, "-" }
+                        local labelColors = { onColor, 0x55FFFFFF, offColor, 0x55FFFFFF }
+
+                        -- Draw title
+                        draw_list:AddText(imgui.ImVec2(cx - 40, cy - 120), 0xFF00FFFF, "[" .. item.name .. "]")
+
+                        local p = drawRadialMenu(draw_list, cx, cy, labels, "BACK", 0xFF00FFFF, "ctxsub", labelColors)
+
+                        -- Handle press
+                        if p == 1 and not isOn then
+                            -- ON pressed (only if not already ON)
+                            executeCommand(item.onCmd)
+                            toggleState[cat] = true
+                            closeAllRadial()
+                        elseif p == 3 and isOn then
+                            -- OFF pressed (only if not already OFF)
+                            executeCommand(item.offCmd)
+                            toggleState[cat] = false
+                            closeAllRadial()
+                        elseif p == 1 and isOn then
+                            -- Already ON, do nothing (greyed out)
+                        elseif p == 3 and not isOn then
+                            -- Already OFF, do nothing (greyed out)
+                        elseif p == 5 then
+                            -- BACK - go back to context menu
+                            showCtxSubRadial[0] = false
+                            showContextVehRadial[0] = true
                         end
                     end
                 imgui.End()
