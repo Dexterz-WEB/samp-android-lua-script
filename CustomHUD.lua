@@ -10,12 +10,14 @@ local hudData = {
     health = 100, armor = 0, money = 0,
     weaponId = 0, ammoClip = 0, ammoTotal = 0,
     inVehicle = false, speed = 0,
-    fps = 0,
+    fps = 0, zoneName = "Los Santos", serverTime = "00:00",
 }
 
 local fpsCounter = 0
 local fpsLastTime = os.clock()
 local showHud = true
+local hideDefaultHud = false
+local hideDefaultRadar = false
 
 -- ============================================================================
 -- WEAPON NAMES
@@ -36,7 +38,7 @@ local weaponNames = {
 }
 
 -- ============================================================================
--- RENDER (same pattern as WeaponDisplayTest - PROVEN WORK)
+-- RENDER HUD (GTA V Style)
 -- ============================================================================
 imgui.OnFrame(function() return showHud end, function()
     local spawned = false
@@ -46,43 +48,112 @@ imgui.OnFrame(function() return showHud end, function()
     local sw, sh = getScreenResolution()
     local dl = imgui.GetBackgroundDrawList()
 
-    -- HP Bar (bottom-left)
-    local hx, hy = 20, sh - 130
-    local hpWidth = math.max(0, (hudData.health / 100) * 200)
-    dl:AddRectFilled(imgui.ImVec2(hx, hy), imgui.ImVec2(hx + 200, hy + 18), 0xCC1A3A18, 4)
-    dl:AddRectFilled(imgui.ImVec2(hx, hy), imgui.ImVec2(hx + hpWidth, hy + 18), 0xFF50AF4C, 4)
-    dl:AddText(imgui.ImVec2(hx + 205, hy + 2), 0xFF50AF4C, tostring(math.floor(hudData.health)))
+    -- ========================================================================
+    -- BOTTOM-LEFT GROUP (HP, Armor, Zone)
+    -- ========================================================================
 
-    -- Armor Bar (bottom-left, below HP)
+    -- Background panel bottom-left
+    local blX, blY = 15, sh - 155
+    local blW, blH = 260, 140
+    dl:AddRectFilled(imgui.ImVec2(blX, blY), imgui.ImVec2(blX + blW, blY + blH), 0x88000000, 8)
+
+    -- Zone Name (top of bottom-left panel)
+    local zoneTxt = hudData.zoneName or "Unknown"
+    dl:AddText(imgui.ImVec2(blX + 12, blY + 8), 0xFFDDDDDD, zoneTxt)
+
+    -- Thin separator line
+    dl:AddLine(imgui.ImVec2(blX + 10, blY + 28), imgui.ImVec2(blX + blW - 10, blY + 28), 0x44FFFFFF, 1)
+
+    -- HP Bar
+    local hpX, hpY = blX + 12, blY + 38
+    local hpBarW, hpBarH = 210, 16
+    local hpFill = math.max(0, math.min(hudData.health / 100, 1.0)) * hpBarW
+    -- Label
+    dl:AddText(imgui.ImVec2(hpX, hpY - 1), 0xCC50AF4C, "HP")
+    -- Bar background
+    dl:AddRectFilled(imgui.ImVec2(hpX + 25, hpY), imgui.ImVec2(hpX + 25 + hpBarW, hpY + hpBarH), 0xFF1A2E1A, 3)
+    -- Bar fill
+    if hpFill > 0 then
+        dl:AddRectFilled(imgui.ImVec2(hpX + 25, hpY), imgui.ImVec2(hpX + 25 + hpFill, hpY + hpBarH), 0xFF50AF4C, 3)
+    end
+    -- Value
+    dl:AddText(imgui.ImVec2(hpX + 25 + hpBarW + 5, hpY + 1), 0xFF50AF4C, tostring(math.floor(hudData.health)))
+
+    -- Armor Bar (only if armor > 0)
     if hudData.armor > 0 then
-        local ax, ay = 20, sh - 105
-        local armorWidth = math.max(0, (hudData.armor / 100) * 200)
-        dl:AddRectFilled(imgui.ImVec2(ax, ay), imgui.ImVec2(ax + 200, ay + 18), 0xCC0D3A5E, 4)
-        dl:AddRectFilled(imgui.ImVec2(ax, ay), imgui.ImVec2(ax + armorWidth, ay + 18), 0xFFF39621, 4)
-        dl:AddText(imgui.ImVec2(ax + 205, ay + 2), 0xFFF39621, tostring(math.floor(hudData.armor)))
+        local arX, arY = blX + 12, blY + 62
+        local arBarW, arBarH = 210, 16
+        local arFill = math.max(0, math.min(hudData.armor / 100, 1.0)) * arBarW
+        -- Label
+        dl:AddText(imgui.ImVec2(arX, arY - 1), 0xCCF39621, "AR")
+        -- Bar background
+        dl:AddRectFilled(imgui.ImVec2(arX + 25, arY), imgui.ImVec2(arX + 25 + arBarW, arY + arBarH), 0xFF0D2A3E, 3)
+        -- Bar fill
+        if arFill > 0 then
+            dl:AddRectFilled(imgui.ImVec2(arX + 25, arY), imgui.ImVec2(arX + 25 + arFill, arY + arBarH), 0xFFF39621, 3)
+        end
+        -- Value
+        dl:AddText(imgui.ImVec2(arX + 25 + arBarW + 5, arY + 1), 0xFFF39621, tostring(math.floor(hudData.armor)))
     end
 
-    -- Money (top-right)
-    local moneyText = "$" .. tostring(hudData.money)
-    dl:AddText(imgui.ImVec2(sw - 180, 20), 0xFF50AF4C, moneyText)
+    -- Server Time (bottom of panel)
+    dl:AddText(imgui.ImVec2(blX + 12, blY + blH - 25), 0xFFAAAAAA, hudData.serverTime)
 
-    -- Weapon + Ammo (bottom-right)
+    -- ========================================================================
+    -- TOP-RIGHT GROUP (Money, Wanted)
+    -- ========================================================================
+
+    -- Money
+    local moneyText = "$" .. tostring(hudData.money)
+    local moneyX = sw - 180
+    local moneyY = 15
+    -- Background
+    dl:AddRectFilled(imgui.ImVec2(moneyX - 10, moneyY - 5), imgui.ImVec2(sw - 10, moneyY + 22), 0x88000000, 6)
+    dl:AddText(imgui.ImVec2(moneyX, moneyY), 0xFF50AF4C, moneyText)
+
+    -- ========================================================================
+    -- BOTTOM-RIGHT GROUP (Weapon, Speed)
+    -- ========================================================================
+
+    local brX = sw - 240
+    local brY = sh - 110
+    local brW = 225
+    local brH = 95
+
+    -- Background
+    dl:AddRectFilled(imgui.ImVec2(brX, brY), imgui.ImVec2(brX + brW, brY + brH), 0x88000000, 8)
+
+    -- Weapon name + ammo
     local wepName = weaponNames[hudData.weaponId] or "Unknown"
     local ammoText
     if hudData.weaponId == 0 then
         ammoText = wepName
     else
-        ammoText = wepName .. " | " .. hudData.ammoClip .. "/" .. hudData.ammoTotal
+        ammoText = wepName .. "  " .. hudData.ammoClip .. " / " .. hudData.ammoTotal
     end
-    dl:AddText(imgui.ImVec2(sw - 220, sh - 90), 0xFFFFFFFF, ammoText)
+    dl:AddText(imgui.ImVec2(brX + 12, brY + 12), 0xFFFFFFFF, ammoText)
+
+    -- Thin separator
+    dl:AddLine(imgui.ImVec2(brX + 10, brY + 35), imgui.ImVec2(brX + brW - 10, brY + 35), 0x44FFFFFF, 1)
 
     -- Speed (only in vehicle)
     if hudData.inVehicle then
-        dl:AddText(imgui.ImVec2(sw - 220, sh - 60), 0xFFFFFFFF, tostring(hudData.speed) .. " km/h")
+        local speedStr = tostring(hudData.speed)
+        dl:AddText(imgui.ImVec2(brX + 12, brY + 42), 0xFFFFFFFF, speedStr)
+        dl:AddText(imgui.ImVec2(brX + 12 + (#speedStr * 11), brY + 45), 0xFFAAAAAA, " km/h")
+    else
+        dl:AddText(imgui.ImVec2(brX + 12, brY + 42), 0xFF666666, "On Foot")
     end
 
-    -- FPS (top-left)
-    dl:AddText(imgui.ImVec2(20, 20), 0xFFFFFFFF, "FPS: " .. tostring(hudData.fps))
+    -- FPS (bottom of panel)
+    dl:AddText(imgui.ImVec2(brX + 12, brY + brH - 25), 0xFFAAAAAA, "FPS: " .. tostring(hudData.fps))
+
+    -- ========================================================================
+    -- TOP-LEFT: HUD STATUS INDICATOR (small)
+    -- ========================================================================
+    if hideDefaultHud then
+        dl:AddText(imgui.ImVec2(15, 15), 0xFF00FFFF, "[CUSTOM HUD]")
+    end
 end)
 
 -- ============================================================================
@@ -91,18 +162,49 @@ end)
 function main()
     while not isSampAvailable() do wait(100) end
 
-    sampAddChatMessage("{00FFFF}[CustomHUD] {FFFFFF}Loaded! Use /chud to toggle", -1)
+    sampAddChatMessage("{00FFFF}[CustomHUD] {FFFFFF}GTA V Style HUD loaded!", -1)
+    sampAddChatMessage("{00FFFF}[CustomHUD] {FFFFFF}Commands:", -1)
+    sampAddChatMessage("{FFFF00}/chud {FFFFFF}- Toggle custom HUD on/off", -1)
+    sampAddChatMessage("{FFFF00}/chudhide {FFFFFF}- Toggle hide default HUD", -1)
+    sampAddChatMessage("{FFFF00}/chudradar {FFFFFF}- Toggle hide default radar", -1)
 
+    -- Toggle custom HUD
     sampRegisterChatCommand("chud", function()
         showHud = not showHud
-        sampAddChatMessage("{00FFFF}[CustomHUD] {FFFFFF}HUD: " ..
+        sampAddChatMessage("{00FFFF}[CustomHUD] {FFFFFF}Custom HUD: " ..
             (showHud and "{00FF00}ON" or "{FF0000}OFF"), -1)
+    end)
+
+    -- Toggle hide default HUD
+    sampRegisterChatCommand("chudhide", function()
+        hideDefaultHud = not hideDefaultHud
+        sampAddChatMessage("{00FFFF}[CustomHUD] {FFFFFF}Default HUD: " ..
+            (hideDefaultHud and "{FF0000}HIDDEN" or "{00FF00}VISIBLE"), -1)
+    end)
+
+    -- Toggle hide default radar
+    sampRegisterChatCommand("chudradar", function()
+        hideDefaultRadar = not hideDefaultRadar
+        sampAddChatMessage("{00FFFF}[CustomHUD] {FFFFFF}Default Radar: " ..
+            (hideDefaultRadar and "{FF0000}HIDDEN" or "{00FF00}VISIBLE"), -1)
     end)
 
     while true do
         wait(100)
 
         if sampIsLocalPlayerSpawned() then
+            -- Hide/show default HUD (only when toggled by user)
+            if hideDefaultHud then
+                pcall(displayHud, false)
+            else
+                pcall(displayHud, true)
+            end
+            if hideDefaultRadar then
+                pcall(displayRadar, false)
+            else
+                pcall(displayRadar, true)
+            end
+
             -- Health
             pcall(function() hudData.health = getCharHealth(PLAYER_PED) end)
             -- Armor
@@ -127,6 +229,20 @@ function main()
                     if veh then hudData.speed = math.floor(getCarSpeed(veh) * 3.6) end
                 else
                     hudData.speed = 0
+                end
+            end)
+            -- Time
+            pcall(function()
+                if getTimeOfDay then
+                    local h, m = getTimeOfDay()
+                    hudData.serverTime = string.format("%02d:%02d", h, m)
+                end
+            end)
+            -- Zone
+            pcall(function()
+                if getNameOfZone then
+                    local x, y, z = getCharCoordinates(PLAYER_PED)
+                    hudData.zoneName = getNameOfZone(x, y, z) or "Unknown"
                 end
             end)
         end
