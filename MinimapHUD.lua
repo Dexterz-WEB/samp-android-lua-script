@@ -11,239 +11,6 @@ script_author("OnlyDexterZ")
 -- ============================================================================
 local imgui = require 'mimgui'
 local inicfg = require 'inicfg'
-local ffi = require("ffi")
-local memory = require("memory")
-local hook = require("monethook")
-
-local BASE = MONET_GTASA_BASE
-
--- ============================================================================
--- GPS FFI DECLARATIONS
--- ============================================================================
-ffi.cdef[[
-typedef struct { float x, y, z; } CVector;
-typedef struct { float x, y; } CVector2D;
-typedef struct { short areaId; short nodeId; } CNodeAddress;
-
-void* _Z13FindPlayerPedi(int n);
-CVector _Z15FindPlayerCoorsi(int n);
-
-void _ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb(
-    void* thiz, uint8_t graphType,
-    CVector startCoors, CNodeAddress startNode,
-    CVector targetCoors, CNodeAddress* pNodeList,
-    int16_t* pNumNodes, int32_t numReq,
-    float* pDist, float cutoff,
-    CNodeAddress* pGivenTarget, float maxDist,
-    bool noWrongWay, CNodeAddress avoid,
-    bool amphibious, bool boat
-);
-
-void _ZN6CRadar12DrawRadarMapEv(void* thiz);
-float _ZN6CWorld19FindGroundZForCoordEff(float x, float y);
-]]
-
-local gtasa = ffi.load("GTASA")
-
--- GPS Constants
-local GPS_MAX_NODES = 5000
-local GOT_THEPATHS = BASE + 0x677378
-local GOT_GMM = BASE + 0x679CCC
-local GOT_MSRT = BASE + 0x6773CC
-local MM_TBLIP = 0x48
-local RT_SIZE = 0x28
-local RT_POS = 0x08
-local RT_CTR = 0x14
-local RT_DISP = 0x26
-local PF_NODES = 0x804
-local PN_SIZE = 0x1C
-local PN_POS = 0x08
-
--- GPS State
-local gpsNodeCount = 0
-local gpsDistance = 0.0
-local gpsActive = false
-local gpsLastCalcX = 0
-local gpsLastCalcY = 0
-local gpsRecalcDist = 30.0
-
--- GPS Buffers
-local gpsResultNodes = ffi.new("CNodeAddress[?]", GPS_MAX_NODES)
-local gpsOutCount = ffi.new("int16_t[1]")
-local gpsOutDist = ffi.new("float[1]")
-local gpsNullNode = ffi.new("CNodeAddress")
-
--- GPS Cached path world coords (for drawing on our map)
-local gpsCachedPath = {}
-
--- GPS Helper functions
-local function gps_gtp() return memory.getuint32(GOT_THEPATHS) end
-local function gps_gmm() return memory.getuint32(GOT_GMM) end
-local function gps_grt() return memory.getuint32(GOT_MSRT) end
-
-local function gps_ValidBlip(h)
-    if h == 0 then return false end
-    local idx = bit.band(h, 0xFFFF)
-    local ctr = bit.rshift(h, 16)
-    local tr = gps_grt() + idx * RT_SIZE
-    return memory.getuint16(tr + RT_CTR) == ctr
-       and bit.band(memory.getuint8(tr + RT_DISP), 0x3) ~= 0
-end
-
-local function gps_GetNodeCoors(areaId, nodeId)
-    local arr = memory.getuint32(gps_gtp() + PF_NODES + areaId * 4)
-    if arr == 0 then return nil end
-    local np = arr + nodeId * PN_SIZE
-    local p = ffi.cast("int16_t*", np + PN_POS)
-    return p[0] / 8.0, p[1] / 8.0, p[2] / 8.0
-end
-
-local function gps_isInVehicle()
-    local result = false
-    pcall(function() result = isCharInAnyCar(PLAYER_PED) end)
-    return result
-end
-
--- GPS Hook (DrawRadarMap)
-local addrRadar = tonumber(ffi.cast("uintptr_t", ffi.cast("void*",
-    gtasa._ZN6CRadar12DrawRadarMapEv)))
-
-local hkRadar
-hkRadar = hook.new("void(__cdecl*)(void*)", function(thiz)
-    hkRadar(thiz)
-    gpsActive = false
-
-    -- Vehicle only
-    if not gps_isInVehicle() then
-        gpsCachedPath = {}
-        return
-    end
-
-    local playa = gtasa._Z13FindPlayerPedi(0)
-    if playa == nil then return end
-
-    -- Check for waypoint blip
-    local mm = gps_gmm()
-    local tblip = memory.getint32(mm + MM_TBLIP)
-    if not gps_ValidBlip(tblip) then
-        gpsCachedPath = {}
-        return
-    end
-
-    local idx = bit.band(tblip, 0xFFFF)
-    local tr = gps_grt() + idx * RT_SIZE
-    local bx = ffi.cast("float*", tr + RT_POS)[0]
-    local by = ffi.cast("float*", tr + RT_POS)[1]
-    local bz = gtasa._ZN6CWorld19FindGroundZForCoordEff(bx, by)
-
-    local sc = gtasa._Z15FindPlayerCoorsi(0)
-
-    -- Auto clear < 10m
-    local dx, dy = sc.x - bx, sc.y - by
-    if math.sqrt(dx*dx + dy*dy) < 10.0 then
-        gpsCachedPath = {}
-        return
-    end
-
-    -- Recalculate only if moved > 30m
-    local pdx, pdy = sc.x - gpsLastCalcX, sc.y - gpsLastCalcY
-    if math.sqrt(pdx*pdx + pdy*pdy) > gpsRecalcDist or #gpsCachedPath == 0 then
-        -- Chain pathfinding: split long routes into segments
-        local totalDist = math.sqrt((sc.x - bx)^2 + (sc.y - by)^2)
-        local SEGMENT_LENGTH = 1700.0
-        
-        gpsCachedPath = {}
-        gpsDistance = 0
-        gpsNodeCount = 0
-        
-        -- If distance short enough, single call
-        if totalDist <= SEGMENT_LENGTH then
-            local dc = ffi.new("CVector", {x = bx, y = by, z = bz})
-            gpsOutCount[0] = 0
-            gpsOutDist[0] = 0.0
-            gtasa._ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb(
-                ffi.cast("void*", gps_gtp()),
-                0, sc, gpsNullNode, dc,
-                gpsResultNodes, gpsOutCount, GPS_MAX_NODES,
-                gpsOutDist, 999999.0, nil, 999999.0,
-                false, gpsNullNode, false, false
-            )
-            gpsNodeCount = gpsOutCount[0]
-            gpsDistance = gpsOutDist[0]
-            for i = 0, gpsNodeCount - 1 do
-                local nx, ny, nz = gps_GetNodeCoors(gpsResultNodes[i].areaId, gpsResultNodes[i].nodeId)
-                if nx then
-                    gpsCachedPath[#gpsCachedPath + 1] = {x = nx, y = ny}
-                end
-            end
-        else
-            -- Chain: split into segments
-            local numSegments = math.ceil(totalDist / SEGMENT_LENGTH)
-            local dirX = (bx - sc.x) / totalDist
-            local dirY = (by - sc.y) / totalDist
-            
-            local prevEndX, prevEndY, prevEndZ = sc.x, sc.y, sc.z
-            
-            for seg = 1, numSegments do
-                local startVec = ffi.new("CVector", {x = prevEndX, y = prevEndY, z = prevEndZ})
-                
-                local endX, endY, endZ
-                if seg == numSegments then
-                    endX, endY, endZ = bx, by, bz
-                else
-                    local midDist = seg * SEGMENT_LENGTH
-                    endX = sc.x + dirX * midDist
-                    endY = sc.y + dirY * midDist
-                    endZ = gtasa._ZN6CWorld19FindGroundZForCoordEff(endX, endY)
-                end
-                
-                local endVec = ffi.new("CVector", {x = endX, y = endY, z = endZ})
-                gpsOutCount[0] = 0
-                gpsOutDist[0] = 0.0
-                
-                gtasa._ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb(
-                    ffi.cast("void*", gps_gtp()),
-                    0, startVec, gpsNullNode, endVec,
-                    gpsResultNodes, gpsOutCount, GPS_MAX_NODES,
-                    gpsOutDist, 999999.0, nil, 999999.0,
-                    false, gpsNullNode, false, false
-                )
-                
-                gpsDistance = gpsDistance + gpsOutDist[0]
-                
-                local segNodes = gpsOutCount[0]
-                if segNodes > 0 then
-                    for i = 0, segNodes - 1 do
-                        local nx, ny, nz = gps_GetNodeCoors(gpsResultNodes[i].areaId, gpsResultNodes[i].nodeId)
-                        if nx then
-                            gpsCachedPath[#gpsCachedPath + 1] = {x = nx, y = ny}
-                        end
-                    end
-                    -- Next segment starts from last node of this segment
-                    local lastNode = gpsCachedPath[#gpsCachedPath]
-                    if lastNode then
-                        prevEndX = lastNode.x
-                        prevEndY = lastNode.y
-                        prevEndZ = gtasa._ZN6CWorld19FindGroundZForCoordEff(prevEndX, prevEndY)
-                    else
-                        prevEndX, prevEndY, prevEndZ = endX, endY, endZ
-                    end
-                else
-                    -- Segment failed, skip to endpoint
-                    prevEndX, prevEndY, prevEndZ = endX, endY, endZ
-                end
-            end
-            gpsNodeCount = #gpsCachedPath
-        end
-        
-        gpsLastCalcX = sc.x
-        gpsLastCalcY = sc.y
-    end
-
-    if gpsNodeCount > 0 then
-        gpsActive = true
-    end
-end, addrRadar)
 
 -- ============================================================================
 -- CONFIG
@@ -301,16 +68,6 @@ local fullMapDragging = false
 local fullMapLastX = 0
 local fullMapLastY = 0
 local fullMapOpenTime = 0
-
--- Waypoint system
-local waypointActive = false
-local waypointX = 0.0
-local waypointY = 0.0
-local waypointZ = 0.0
-local lastTapTime = 0
-local DOUBLE_TAP_INTERVAL = 0.4  -- 400ms
-local lastTapX = 0
-local lastTapY = 0
 
 -- Pinch zoom state
 local fullMapPinching = false
@@ -383,28 +140,6 @@ local function isPointInCircle(px, py, cx, cy, r)
     return (dx * dx + dy * dy) <= (r * r)
 end
 
-local function uvToWorld(uvx, uvy)
-    local wx = uvx * 6000 - 3000
-    local wy = (1.0 - uvy) * 6000 - 3000
-    return wx, wy
-end
-
-local function getDistanceTo(tx, ty)
-    local dx = cachedPlayerX - tx
-    local dy = cachedPlayerY - ty
-    return math.sqrt(dx*dx + dy*dy)
-end
-
-local function setGTAWaypoint(wx, wy)
-    -- Share waypoint via global variable (GPS script can read this)
-    _G.MINIMAP_WAYPOINT = { x = wx, y = wy, active = true }
-end
-
-local function removeGTAWaypoint()
-    -- Clear shared waypoint
-    _G.MINIMAP_WAYPOINT = { x = 0, y = 0, active = false }
-end
-
 local function saveConfig()
     iniData.Settings.minimapEnabled = cfgEnabled[0]
     iniData.Settings.radarDisabled = cfgRadarOff[0]
@@ -464,76 +199,11 @@ local function drawMinimap(draw_list)
 
     draw_list:AddImageRounded(mapTexture, pMin, pMax, uvMin, uvMax, colorU32, radius, 15)
 
-    -- Draw GPS line on minimap
-    if gpsActive and #gpsCachedPath >= 2 then
-        local lineColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.7, 0.8 * opacity))
-        for i = 1, #gpsCachedPath - 1 do
-            local n0 = gpsCachedPath[i]
-            local n1 = gpsCachedPath[i + 1]
-            local uv0x, uv0y = worldToUV(n0.x, n0.y)
-            local uv1x, uv1y = worldToUV(n1.x, n1.y)
-            
-            -- Check if segment is within visible UV area
-            if (uv0x >= uvMinX and uv0x <= uvMaxX and uv0y >= uvMinY and uv0y <= uvMaxY) or
-               (uv1x >= uvMinX and uv1x <= uvMaxX and uv1y >= uvMinY and uv1y <= uvMaxY) then
-                -- Convert UV to screen position within minimap
-                local sx0 = posX + ((uv0x - uvMinX) / (uvMaxX - uvMinX)) * mapSize
-                local sy0 = posY + ((uv0y - uvMinY) / (uvMaxY - uvMinY)) * mapSize
-                local sx1 = posX + ((uv1x - uvMinX) / (uvMaxX - uvMinX)) * mapSize
-                local sy1 = posY + ((uv1y - uvMinY) / (uvMaxY - uvMinY)) * mapSize
-                
-                -- Simple clip: only draw if points roughly inside minimap circle
-                local d0 = math.sqrt((sx0 - centerX)^2 + (sy0 - centerY)^2)
-                local d1 = math.sqrt((sx1 - centerX)^2 + (sy1 - centerY)^2)
-                if d0 <= radius * 1.1 and d1 <= radius * 1.1 then
-                    draw_list:AddLine(imgui.ImVec2(sx0, sy0), imgui.ImVec2(sx1, sy1), lineColor, 2.0)
-                end
-            end
-        end
-    end
-
     -- Draw player arrow in center (rotated by heading)
     if arrowTexture then
         local headingRad = -math.rad(cachedHeading)
         local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, opacity))
         drawRotatedImage(draw_list, arrowTexture, centerX, centerY, arrowSz, headingRad, arrowColor)
-    end
-
-    -- Draw waypoint on minimap
-    if waypointActive then
-        local wpUVX, wpUVY = worldToUV(waypointX, waypointY)
-        -- Check if waypoint is within visible UV area
-        if wpUVX >= uvMinX and wpUVX <= uvMaxX and wpUVY >= uvMinY and wpUVY <= uvMaxY then
-            local wpLocalX = posX + ((wpUVX - uvMinX) / (uvMaxX - uvMinX)) * mapSize
-            local wpLocalY = posY + ((wpUVY - uvMinY) / (uvMaxY - uvMinY)) * mapSize
-            -- Pin dot
-            draw_list:AddCircleFilled(imgui.ImVec2(wpLocalX, wpLocalY), 6, 
-                imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 0.2, 0.2, opacity)), 12)
-            draw_list:AddCircle(imgui.ImVec2(wpLocalX, wpLocalY), 6, 
-                imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, opacity)), 12, 2)
-        end
-        
-        -- Draw line from center (player) toward waypoint direction
-        local wpUVDirX = wpUVX - uvCenterX
-        local wpUVDirY = wpUVY - uvCenterY
-        local dirLen = math.sqrt(wpUVDirX*wpUVDirX + wpUVDirY*wpUVDirY)
-        if dirLen > 0.001 then
-            local maxLineLen = radius * 0.8
-            local lineEndX = centerX + (wpUVDirX / dirLen) * math.min(dirLen / uvHalf * radius, maxLineLen)
-            local lineEndY = centerY + (wpUVDirY / dirLen) * math.min(dirLen / uvHalf * radius, maxLineLen)
-            draw_list:AddLine(
-                imgui.ImVec2(centerX, centerY),
-                imgui.ImVec2(lineEndX, lineEndY),
-                imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.7, 0.7 * opacity)), 2.0
-            )
-        end
-        
-        -- Auto clear if < 10m
-        local dist = getDistanceTo(waypointX, waypointY)
-        if dist < 10.0 then
-            waypointActive = false
-            removeGTAWaypoint()
-        end
     end
 
     -- Tap detection for opening full map
@@ -599,22 +269,6 @@ local function drawFullMap(draw_list)
     local colorU32 = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 0.95))
     draw_list:AddImage(mapTexture, pMin, pMax, imgui.ImVec2(0, 0), imgui.ImVec2(1, 1), colorU32)
 
-    -- Draw GPS line on full map
-    if gpsActive and #gpsCachedPath >= 2 then
-        local lineColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.7, 0.8))
-        for i = 1, #gpsCachedPath - 1 do
-            local n0 = gpsCachedPath[i]
-            local n1 = gpsCachedPath[i + 1]
-            local uv0x, uv0y = worldToUV(n0.x, n0.y)
-            local uv1x, uv1y = worldToUV(n1.x, n1.y)
-            local sx0 = mapX + uv0x * mapDisplaySize
-            local sy0 = mapY + uv0y * mapDisplaySize
-            local sx1 = mapX + uv1x * mapDisplaySize
-            local sy1 = mapY + uv1y * mapDisplaySize
-            draw_list:AddLine(imgui.ImVec2(sx0, sy0), imgui.ImVec2(sx1, sy1), lineColor, 3.0)
-        end
-    end
-
     -- Draw player arrow on full map
     if arrowTexture then
         local playerMapX = mapX + playerUVX * mapDisplaySize
@@ -623,58 +277,6 @@ local function drawFullMap(draw_list)
         local arrowSz = 28
         local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1))
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
-    end
-
-    -- Draw waypoint pin on full map
-    if waypointActive then
-        local wpUVX, wpUVY = worldToUV(waypointX, waypointY)
-        local wpScreenX = mapX + wpUVX * mapDisplaySize
-        local wpScreenY = mapY + wpUVY * mapDisplaySize
-        
-        -- Pin shape (triangle + circle)
-        local pinColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 0.2, 0.2, 1.0))
-        local pinOutline = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 1.0, 1.0, 1.0))
-        
-        -- Pin circle (top)
-        draw_list:AddCircleFilled(imgui.ImVec2(wpScreenX, wpScreenY - 20), 10, pinColor, 16)
-        draw_list:AddCircle(imgui.ImVec2(wpScreenX, wpScreenY - 20), 10, pinOutline, 16, 2)
-        
-        -- Pin triangle (bottom point)
-        draw_list:AddTriangleFilled(
-            imgui.ImVec2(wpScreenX - 7, wpScreenY - 14),
-            imgui.ImVec2(wpScreenX + 7, wpScreenY - 14),
-            imgui.ImVec2(wpScreenX, wpScreenY),
-            pinColor
-        )
-        
-        -- Inner white dot
-        draw_list:AddCircleFilled(imgui.ImVec2(wpScreenX, wpScreenY - 20), 4, pinOutline, 12)
-        
-        -- Draw GPS line from player to waypoint
-        local playerMapX2 = mapX + playerUVX * mapDisplaySize
-        local playerMapY2 = mapY + playerUVY * mapDisplaySize
-        local lineColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.7, 0.8))
-        draw_list:AddLine(
-            imgui.ImVec2(playerMapX2, playerMapY2),
-            imgui.ImVec2(wpScreenX, wpScreenY),
-            lineColor, 3.0
-        )
-        
-        -- Distance text
-        local dist = getDistanceTo(waypointX, waypointY)
-        local distText = string.format("%.0fm", dist)
-        local distSize = imgui.CalcTextSize(distText)
-        draw_list:AddText(
-            imgui.ImVec2(wpScreenX - distSize.x / 2, wpScreenY + 5),
-            imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)),
-            distText
-        )
-        
-        -- Auto clear if < 10m
-        if dist < 10.0 then
-            waypointActive = false
-            removeGTAWaypoint()
-        end
     end
 
     -- Handle drag (touch hold and move)
@@ -745,35 +347,6 @@ local function drawFullMap(draw_list)
         if mx >= closeBtnPos.x and mx <= closeBtnPos.x + btnSize and my >= closeBtnPos.y and my <= closeBtnPos.y + btnSize then
             fullMapMode = false
             return
-        end
-        
-        -- Double tap detection for waypoint (on map area only)
-        if mx >= mapX and mx <= mapX + mapDisplaySize and my >= mapY and my <= mapY + mapDisplaySize then
-            local now = os.clock()
-            local tapDist = math.sqrt((mx - lastTapX)^2 + (my - lastTapY)^2)
-            if (now - lastTapTime) < DOUBLE_TAP_INTERVAL and tapDist < 50 then
-                -- DOUBLE TAP DETECTED
-                if waypointActive then
-                    -- Remove waypoint
-                    waypointActive = false
-                    removeGTAWaypoint()
-                else
-                    -- Set waypoint: convert screen tap to world coords
-                    local tapUVX = (mx - mapX) / mapDisplaySize
-                    local tapUVY = (my - mapY) / mapDisplaySize
-                    local wx, wy = uvToWorld(tapUVX, tapUVY)
-                    waypointX = wx
-                    waypointY = wy
-                    waypointZ = 0
-                    waypointActive = true
-                    setGTAWaypoint(wx, wy)
-                end
-                lastTapTime = 0  -- Reset to prevent triple tap
-            else
-                lastTapTime = now
-                lastTapX = mx
-                lastTapY = my
-            end
         end
     end
 end
@@ -883,14 +456,6 @@ function main()
     -- Register config command
     sampRegisterChatCommand("mapcfg", function()
         showConfigWindow[0] = not showConfigWindow[0]
-    end)
-
-    -- GPS Debug command (Step 1: confirm pathfinding works)
-    sampRegisterChatCommand("gpsdebug", function()
-        sampAddChatMessage("{00FFFF}=== GPS DEBUG ==={FFFFFF}", -1)
-        sampAddChatMessage(string.format("{FFFF00}Active: %s | Nodes: %d | Distance: %.0fm", tostring(gpsActive), gpsNodeCount, gpsDistance), -1)
-        sampAddChatMessage(string.format("{FFFF00}Cached path points: %d", #gpsCachedPath), -1)
-        sampAddChatMessage(string.format("{FFFF00}In vehicle: %s", tostring(gps_isInVehicle())), -1)
     end)
 
     -- Disable built-in radar if configured
