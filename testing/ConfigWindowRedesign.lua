@@ -58,9 +58,15 @@ imgui.OnFrame(function() return showWindow[0] end, function()
     if currentTab == 3 then winH = 400 end  -- VEHICLE (2 sections)
     if currentTab == 4 then winH = 280 end  -- PROFILE
     
+    -- Clean modern styling (applied once before Begin - safe)
+    imgui.PushStyleVar(imgui.StyleVar.WindowRounding, 12)
+    imgui.PushStyleVar(imgui.StyleVar.WindowPadding, imgui.ImVec2(15, 15))
+    imgui.PushStyleVar(imgui.StyleVar.FrameRounding, 6)
+    imgui.PushStyleVar(imgui.StyleVar.ItemSpacing, imgui.ImVec2(8, 6))
+    
     imgui.SetNextWindowPos(imgui.ImVec2((sw - winW) / 2, (sh - winH) / 2), imgui.Cond.Always)
     imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
-    imgui.Begin("Radial Menu Config v2", showWindow, imgui.WindowFlags.NoResize)
+    imgui.Begin("Radial Menu Config v2", showWindow, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoTitleBar)
 
     -- ========================================================================
     -- TAB BAR (compact buttons)
@@ -175,6 +181,7 @@ imgui.OnFrame(function() return showWindow[0] end, function()
     end
 
     imgui.End()
+    imgui.PopStyleVar(4)  -- Pop all 4 style vars
 end)
 
 -- ============================================================================
