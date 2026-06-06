@@ -197,7 +197,7 @@ local function drawMinimap(draw_list)
 
     -- Draw player arrow in center (rotated by heading)
     if arrowTexture then
-        local headingRad = math.rad(cachedHeading)
+        local headingRad = -math.rad(cachedHeading)
         local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, opacity))
         drawRotatedImage(draw_list, arrowTexture, centerX, centerY, arrowSz, headingRad, arrowColor)
     end
@@ -256,8 +256,8 @@ local function drawFullMap(draw_list)
         local uvx, uvy = worldToUV(cachedPlayerX, cachedPlayerY)
         local playerMapX = mapX + uvx * mapDisplaySize
         local playerMapY = mapY + uvy * mapDisplaySize
-        local headingRad = math.rad(cachedHeading)
-        local arrowSz = 28 * fullMapZoom
+        local headingRad = -math.rad(cachedHeading)
+        local arrowSz = 28
         local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1))
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
     end
