@@ -21,7 +21,7 @@ local BASE = MONET_GTASA_BASE
 -- ============================================================================
 -- GPS CONSTANTS
 -- ============================================================================
-local MAX_NODES = 7000
+local MAX_NODES = 15000
 local GPS_WIDTH = 6.0
 local GPS_COLOR = 0xFF1818B4
 
