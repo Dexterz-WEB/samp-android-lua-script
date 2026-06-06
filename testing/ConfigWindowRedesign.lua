@@ -51,18 +51,22 @@ end
 imgui.OnFrame(function() return showWindow[0] end, function()
     local sw, sh = getScreenResolution()
 
-    -- Compact window (centered, not too big)
-    local winW = 550
-    local winH = 350
-    imgui.SetNextWindowPos(imgui.ImVec2((sw - winW) / 2, (sh - winH) / 2), imgui.Cond.FirstUseEver)
+    -- Adaptive window size per tab
+    local winW = 500
+    local winH = 250  -- default for MAIN tab
+    if currentTab == 2 then winH = 380 end  -- ANIM (more rows)
+    if currentTab == 3 then winH = 400 end  -- VEHICLE (2 sections)
+    if currentTab == 4 then winH = 280 end  -- PROFILE
+    
+    imgui.SetNextWindowPos(imgui.ImVec2((sw - winW) / 2, (sh - winH) / 2), imgui.Cond.Always)
     imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
     imgui.Begin("Radial Menu Config v2", showWindow, imgui.WindowFlags.NoResize)
 
     -- ========================================================================
-    -- TAB BAR (simple buttons - no PushStyleColor to avoid crash)
+    -- TAB BAR (compact buttons)
     -- ========================================================================
-    local tabW = (sw - 100) / 4
-    local tabH = 35
+    local tabW = (winW - 30) / 4
+    local tabH = 30
 
     local tabLabels = {"1.MAIN", "2.ANIM", "3.VEH", "4.PROF"}
     for t = 1, 4 do
