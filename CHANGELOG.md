@@ -13,22 +13,23 @@ All notable changes to this project will be documented in this file.
   - Added 200ms click cooldown (`CLICK_COOLDOWN`) to prevent rapid menu transitions
   - Prevents accidental double-clicks during menu animations
   - Each menu level now checks `(currentTime - lastClickTime) > CLICK_COOLDOWN` before processing clicks
+  - Applied to all 5 menu levels for consistent behavior
   
-- **Fixed Context Sub-Radial flow**
-  - After executing ON/OFF command, menu now returns to Main Radial (not closing completely)
-  - Flow: Main → Context Vehicle → Sub-Radial → Execute → **Back to Main**
-  - User can immediately tap VEHICLE again to access context menu
-  - Matches expected UX: quick access without full menu close/reopen
+#### Improved UX Flow
+- After executing command (ON/OFF), menu **closes completely** instead of returning to main
+- Cleaner experience: Execute → Close → Done
+- Prevents confusion from auto-returning to main radial
+- To access menu again, simply tap hamburger button
 
 #### Technical Details
 - Added `lastClickTime` tracking with `os.clock()`
-- Applied cooldown check to all 5 menu levels:
+- 200ms cooldown between clicks prevents rapid transitions
+- Applied cooldown check to all menu levels:
   - Main Radial (Level 1)
   - Context Vehicle (Level 2)
   - Context Sub-Radial ON/OFF (Level 3)
   - Anim Category (Level 2)
   - Anim Items (Level 3)
-- Cooldown timer resets on successful click to allow next interaction
 
 ---
 

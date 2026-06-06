@@ -1181,19 +1181,11 @@ function main()
                     elseif hoveredSector == 1 and not isOn then
                         executeCommand(item.onCmd)
                         toggleState[cat] = true
-                        -- Close sub-radial and context, back to main
-                        showCtxSubRadial[0] = false
-                        showContextVehRadial[0] = false
-                        showRadialMenu[0] = true
-                        menuOpenTime = os.clock()
+                        closeAllRadial()
                     elseif hoveredSector == 3 and isOn then
                         executeCommand(item.offCmd)
                         toggleState[cat] = false
-                        -- Close sub-radial and context, back to main
-                        showCtxSubRadial[0] = false
-                        showContextVehRadial[0] = false
-                        showRadialMenu[0] = true
-                        menuOpenTime = os.clock()
+                        closeAllRadial()
                     end
                 end
             end
