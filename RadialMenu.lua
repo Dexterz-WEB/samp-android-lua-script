@@ -357,14 +357,23 @@ end
 
 local function updateMenuAnimation(menuKey, isVisible)
     local animDuration = 0.25
-    local elapsed = os.clock() - menuOpenTime[menuKey]
+    
+    -- If opening and scale is 0, reset time
+    if isVisible and menuScale[menuKey] == 0 then
+        menuOpenTime[menuKey] = os.clock()
+    end
+    
+    local elapsed = os.clock() - (menuOpenTime[menuKey] or 0)
     
     if isVisible then
         local t = clamp(elapsed / animDuration, 0, 1.0)
         menuScale[menuKey] = getEase('outCubic', t)
     else
-        local t = clamp(elapsed / animDuration, 0, 1.0)
-        menuScale[menuKey] = 1.0 - getEase('inCubic', t)
+        -- Closing animation
+        if menuScale[menuKey] > 0 then
+            local t = clamp(elapsed / (animDuration * 0.5), 0, 1.0)  -- Faster close
+            menuScale[menuKey] = 1.0 - t
+        end
     end
     
     menuScale[menuKey] = clamp(menuScale[menuKey], 0, 1.0)
@@ -448,7 +457,7 @@ function loadProfile(profileName)
     -- Reload edit buffers
     reloadEditBuffers()
     
-    showNotification("Profile loaded: " .. profileName, notif_loaded and Notifications.TYPE.OK, 2)
+    sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile loaded: {FFFF00}" .. profileName, -1)
     return true
 end
 
@@ -457,7 +466,7 @@ function saveProfile(profileName)
     
     local fileName = getProfileFileName(profileName)
     if inicfg.save(iniData, fileName) then
-        showNotification("Profile saved: " .. profileName, notif_loaded and Notifications.TYPE.OK, 2)
+        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile saved: {FFFF00}" .. profileName, -1)
         return true
     end
     return false
@@ -518,7 +527,7 @@ function mapServerToProfile(serverIP, profileName)
     profilesData.ServerMapping[serverIP] = profileName
     inicfg.save(profilesData, profilesFileName)
     
-    showNotification("Server mapped to profile: " .. profileName, notif_loaded and Notifications.TYPE.OK, 3)
+    sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Server {FFFF00}" .. serverIP .. "{FFFFFF} mapped to profile: {FFFF00}" .. profileName, -1)
     return true
 end
 
@@ -692,16 +701,6 @@ function layoutVehPage(page)
 end
 
 function closeAllRadial()
-    -- Initialize close animation time
-    local currentTime = os.clock()
-    if showRadialMenu[0] then menuOpenTime.main = currentTime end
-    if showCatRadial[0] then menuOpenTime.cat = currentTime end
-    if showAnimRadial[0] then menuOpenTime.anim = currentTime end
-    if showVehCatRadial[0] then menuOpenTime.vehcat = currentTime end
-    if showVehRadial[0] then menuOpenTime.veh = currentTime end
-    if showContextVehRadial[0] then menuOpenTime.ctxveh = currentTime end
-    if showCtxSubRadial[0] then menuOpenTime.ctxsub = currentTime end
-    
     showRadialMenu[0]   = false
     showCatRadial[0]    = false
     showAnimRadial[0]   = false
@@ -714,12 +713,6 @@ end
 function executeCommand(cmd)
     if cmd and cmd ~= "" and type(cmd) == "string" then 
         sampProcessChatInput(cmd)
-        
-        -- Show notification for command execution
-        if notif_loaded and Notifications then
-            Notifications.Show("Executed: " .. cmd, Notifications.TYPE.OK, 2)
-        end
-        
         return true
     end
     return false
@@ -728,19 +721,13 @@ end
 -- Show notification helper (with fallback to chat)
 local function showNotification(message, notifType, duration)
     duration = duration or 3
-    if notif_loaded and Notifications then
-        Notifications.Show(message, notifType or Notifications.TYPE.INFO, duration)
+    if notif_loaded and Notifications and Notifications.Show then
+        pcall(function()
+            Notifications.Show(message, notifType or Notifications.TYPE.INFO, duration)
+        end)
     else
         -- Fallback to chat message
-        local color = 0x00BFFF
-        if notifType == (Notifications and Notifications.TYPE.OK) then
-            color = 0x00FF00
-        elseif notifType == (Notifications and Notifications.TYPE.ERROR) then
-            color = 0xFF0000
-        elseif notifType == (Notifications and Notifications.TYPE.WARNING) then
-            color = 0xFF8800
-        end
-        sampAddChatMessage("{00BFFF}[Radial Menu] {FFFFFF}" .. message, color)
+        sampAddChatMessage("{00BFFF}[Radial Menu] {FFFFFF}" .. message, -1)
     end
 end
 
@@ -921,10 +908,10 @@ function saveAllConfig()
     if inicfg.save(iniData, iniFileName) then
         if animChanged then rebuildAnimList() end
         if vehChanged then rebuildVehList() end
-        showNotification("Configuration saved!", notif_loaded and Notifications.TYPE.OK, 2)
+        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Configuration saved!", -1)
         return true
     else
-        showNotification("Failed to save config!", notif_loaded and Notifications.TYPE.ERROR, 3)
+        sampAddChatMessage("{FF0000}[Radial Menu] {FFFFFF}Failed to save config!", -1)
         return false
     end
 end
@@ -941,6 +928,11 @@ local SCREEN_CACHE_INTERVAL = 60  -- Update every 60 frames
 -- ============================================================================
 local function renderWithScale(key, showFlag, cx, cy, menuSize)
     if not showFlag then return false end
+    
+    -- Initialize animation time if not set
+    if showFlag[0] and menuScale[key] == 0 then
+        menuOpenTime[key] = os.clock()
+    end
     
     -- Update animation for this menu
     updateMenuAnimation(key, showFlag[0])
@@ -1637,7 +1629,6 @@ function main()
                 if anyRadialOpen2 then
                     closeAllRadial()
                 else
-                    menuOpenTime.main = os.clock()
                     showRadialMenu[0] = true
                 end
             end
@@ -1683,14 +1674,10 @@ function main()
                             -- Context-aware vehicle: check if in vehicle
                             if inVehicle then
                                 contextVehCommands = getInVehicleCommands()
-                                menuOpenTime.main = os.clock()
-                                menuOpenTime.ctxveh = os.clock()
                                 showRadialMenu[0] = false
                                 showContextVehRadial[0] = true
                             else
                                 contextVehCommands = getOnFootCommands()
-                                menuOpenTime.main = os.clock()
-                                menuOpenTime.ctxveh = os.clock()
                                 showRadialMenu[0] = false
                                 showContextVehRadial[0] = true
                             end
@@ -1699,15 +1686,12 @@ function main()
                             if executeCommand(cmd) then closeAllRadial() end
                         elseif p == 3 then
                             if not inVehicle then
-                                menuOpenTime.main = os.clock()
-                                menuOpenTime.cat = os.clock()
                                 showRadialMenu[0] = false; showCatRadial[0] = true
                             end
                         elseif p == 4 then 
                             local cmd = tostring(iniData.Sector4.cmd or "")
                             if executeCommand(cmd) then closeAllRadial() end
                         elseif p == 5 then 
-                            menuOpenTime.main = os.clock()
                             showRadialMenu[0] = false
                         end
                     end
@@ -1734,8 +1718,6 @@ function main()
                                 loadAnimForCategory(sectorName)
                                 if #animRadialList > 0 then
                                     currentCategory = sectorName
-                                    menuOpenTime.cat = os.clock()
-                                    menuOpenTime.anim = os.clock()
                                     showCatRadial[0] = false
                                     showAnimRadial[0] = true
                                 else
@@ -1743,8 +1725,6 @@ function main()
                                 end
                             end
                         elseif p == 5 then
-                            menuOpenTime.cat = os.clock()
-                            menuOpenTime.main = os.clock()
                             showCatRadial[0] = false
                             showRadialMenu[0] = true
                         end
@@ -1775,8 +1755,6 @@ function main()
                         end
                         if p == 5 then
                             if tp <= 1 then
-                                menuOpenTime.anim = os.clock()
-                                menuOpenTime.cat = os.clock()
                                 showAnimRadial[0] = false
                                 showCatRadial[0] = true
                             elseif animRadialPage < tp then animRadialPage = animRadialPage + 1
@@ -1809,15 +1787,11 @@ function main()
                                 if (slot.onCmd and slot.onCmd ~= "") or (slot.offCmd and slot.offCmd ~= "") then
                                     -- Open sub-radial for ON/OFF selection
                                     ctxSubRadialItem = { name = slot.name, onCmd = slot.onCmd or "", offCmd = slot.offCmd or "" }
-                                    menuOpenTime.ctxveh = os.clock()
-                                    menuOpenTime.ctxsub = os.clock()
                                     showContextVehRadial[0] = false
                                     showCtxSubRadial[0] = true
                                 end
                             end
                         elseif p == 5 then
-                            menuOpenTime.ctxveh = os.clock()
-                            menuOpenTime.main = os.clock()
                             showContextVehRadial[0] = false
                             showRadialMenu[0] = true
                         end
@@ -1884,8 +1858,6 @@ function main()
                             -- Already OFF, do nothing (greyed out)
                         elseif p == 5 then
                             -- BACK - go back to context menu
-                            menuOpenTime.ctxsub = os.clock()
-                            menuOpenTime.ctxveh = os.clock()
                             showCtxSubRadial[0] = false
                             showContextVehRadial[0] = true
                         end
@@ -1914,8 +1886,6 @@ function main()
                                 loadVehForCategory(sectorName)
                                 if #vehRadialList > 0 then
                                     currentVehCategory = sectorName
-                                    menuOpenTime.vehcat = os.clock()
-                                    menuOpenTime.veh = os.clock()
                                     showVehCatRadial[0] = false
                                     showVehRadial[0] = true
                                 else
@@ -1923,8 +1893,6 @@ function main()
                                 end
                             end
                         elseif p == 5 then
-                            menuOpenTime.vehcat = os.clock()
-                            menuOpenTime.main = os.clock()
                             showVehCatRadial[0] = false
                             showRadialMenu[0] = true
                         end
@@ -2054,8 +2022,6 @@ function main()
                 end
                 if pressed == 5 then
                     if tp <= 1 then
-                        menuOpenTime.veh = os.clock()
-                        menuOpenTime.vehcat = os.clock()
                         showVehRadial[0] = false
                         showVehCatRadial[0] = true
                     elseif vehRadialPage < tp then vehRadialPage = vehRadialPage + 1
