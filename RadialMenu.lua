@@ -1329,25 +1329,122 @@ function main()
                     end
                 end
                 
-                local titleText = "[" .. currentCategory .. "] Page " .. animRadialPage .. "/" .. tp
+                local titleText = "[" .. currentCategory .. "]"
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, titleText, {0, 1, 1})
+                
+                -- PREV/NEXT Buttons (only if multiple pages)
+                if tp > 1 then
+                    local btnSize = 60
+                    local btnOffset = 200  -- Distance from center
+                    local btnAlpha = 0.8
+                    
+                    -- PREV Button (Left side, near Sector 4)
+                    local prevX = cx - btnOffset
+                    local prevY = cy
+                    local prevEnabled = animRadialPage > 1
+                    local prevBgAlpha = prevEnabled and (btnAlpha * 220) or (btnAlpha * 100)
+                    local prevIconAlpha = prevEnabled and (btnAlpha * 255) or (btnAlpha * 80)
+                    
+                    -- PREV Background
+                    draw_list:AddCircleFilled(
+                        imgui.ImVec2(prevX, prevY),
+                        btnSize / 2,
+                        math.floor(prevBgAlpha) * 0x01000000 + 0x00222222,
+                        32
+                    )
+                    draw_list:AddCircle(
+                        imgui.ImVec2(prevX, prevY),
+                        btnSize / 2,
+                        math.floor(prevIconAlpha) * 0x01000000 + 0x0088DDFF,
+                        32,
+                        2.5
+                    )
+                    
+                    -- PREV Arrow Icon (←)
+                    local arrowSize = btnSize * 0.3
+                    local prevIconColor = math.floor(prevIconAlpha) * 0x01000000 + 0x00FFFFFF
+                    -- Draw left arrow
+                    draw_list:AddTriangleFilled(
+                        imgui.ImVec2(prevX - arrowSize/2, prevY),
+                        imgui.ImVec2(prevX + arrowSize/2, prevY - arrowSize/2),
+                        imgui.ImVec2(prevX + arrowSize/2, prevY + arrowSize/2),
+                        prevIconColor
+                    )
+                    
+                    -- NEXT Button (Right side, near Sector 2)
+                    local nextX = cx + btnOffset
+                    local nextY = cy
+                    local nextEnabled = animRadialPage < tp
+                    local nextBgAlpha = nextEnabled and (btnAlpha * 220) or (btnAlpha * 100)
+                    local nextIconAlpha = nextEnabled and (btnAlpha * 255) or (btnAlpha * 80)
+                    
+                    -- NEXT Background
+                    draw_list:AddCircleFilled(
+                        imgui.ImVec2(nextX, nextY),
+                        btnSize / 2,
+                        math.floor(nextBgAlpha) * 0x01000000 + 0x00222222,
+                        32
+                    )
+                    draw_list:AddCircle(
+                        imgui.ImVec2(nextX, nextY),
+                        btnSize / 2,
+                        math.floor(nextIconAlpha) * 0x01000000 + 0x0088DDFF,
+                        32,
+                        2.5
+                    )
+                    
+                    -- NEXT Arrow Icon (→)
+                    local nextIconColor = math.floor(nextIconAlpha) * 0x01000000 + 0x00FFFFFF
+                    -- Draw right arrow
+                    draw_list:AddTriangleFilled(
+                        imgui.ImVec2(nextX + arrowSize/2, nextY),
+                        imgui.ImVec2(nextX - arrowSize/2, nextY - arrowSize/2),
+                        imgui.ImVec2(nextX - arrowSize/2, nextY + arrowSize/2),
+                        nextIconColor
+                    )
+                    
+                    -- Page Indicator (below radial)
+                    local pageText = "Page " .. animRadialPage .. "/" .. tp
+                    local pageTextSize = imgui.CalcTextSize(pageText)
+                    draw_list:AddText(
+                        imgui.ImVec2(cx - pageTextSize.x/2, cy + 170),
+                        0xFFFFFFFF,
+                        pageText
+                    )
+                end
                 
                 local currentTime = os.clock()
                 if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
                     lastClickTime = currentTime
                     if centerHovered then
-                        if tp <= 1 then
-                            showAnimRadial[0] = false
-                            showCatRadial[0] = true
-                            menuOpenTime = os.clock()
-                        elseif animRadialPage < tp then
-                            animRadialPage = animRadialPage + 1
-                        else
-                            animRadialPage = 1
-                        end
+                        -- Center button = CLOSE ALL
+                        closeAllRadial()
                     elseif hoveredSector >= 1 and hoveredSector <= 4 and pga[hoveredSector] then
                         executeCommand(pga[hoveredSector].cmd)
                         closeAllRadial()
+                    else
+                        -- Check PREV/NEXT button clicks
+                        if tp > 1 then
+                            local mouseX, mouseY = imgui.GetMousePos().x, imgui.GetMousePos().y
+                            local btnSize = 60
+                            local btnOffset = 200
+                            local prevX = cx - btnOffset
+                            local prevY = cy
+                            local nextX = cx + btnOffset
+                            local nextY = cy
+                            
+                            -- Check PREV click
+                            local distPrev = math.sqrt((mouseX - prevX)^2 + (mouseY - prevY)^2)
+                            if distPrev < btnSize/2 and animRadialPage > 1 then
+                                animRadialPage = animRadialPage - 1
+                            end
+                            
+                            -- Check NEXT click
+                            local distNext = math.sqrt((mouseX - nextX)^2 + (mouseY - nextY)^2)
+                            if distNext < btnSize/2 and animRadialPage < tp then
+                                animRadialPage = animRadialPage + 1
+                            end
+                        end
                     end
                 end
             end
