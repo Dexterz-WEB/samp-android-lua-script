@@ -296,6 +296,12 @@ local function drawFullMap(draw_list)
     else
         fullMapDragging = false
     end
+    
+    -- Clamp drag so map doesn't go out of screen
+    local maxOffsetX = mapDisplaySize / 2
+    local maxOffsetY = mapDisplaySize / 2
+    fullMapOffsetX = clamp(fullMapOffsetX, -maxOffsetX, maxOffsetX)
+    fullMapOffsetY = clamp(fullMapOffsetY, -maxOffsetY, maxOffsetY)
 
     -- Zoom controls (draw +/- buttons)
     local btnSize = 50
