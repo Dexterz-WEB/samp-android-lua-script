@@ -1,6 +1,60 @@
-# 📋 Changelog
+# Changelog
 
 All notable changes to this project will be documented in this file.
+
+---
+
+## [v3.0.0] - 2026-06-07
+
+### Configurable Type System (MENU/COMMAND/TOGGLE)
+
+Complete rewrite of the radial menu logic to support configurable sector types.
+Every sector and context item now has a `type` field that determines its behavior.
+
+#### Added - Type System
+- **Three sector types**: MENU (opens sub-menu), COMMAND (executes directly), TOGGLE (tracks ON/OFF state)
+- **TOGGLE behavior**: Tracks state per category, shows colored labels (GREEN=action-to-turn-on, RED=action-to-turn-off), executes cmdOn/cmdOff based on state, flips state on click
+- **Type selector buttons** in config window that cycle through available types on click
+- **Per-type config fields**: MENU shows target info, COMMAND shows cmd input, TOGGLE shows category/labelOn/labelOff/cmdOn/cmdOff
+- **Dynamic sector rendering**: Automatically skips empty sectors (name="" or name="-") and recalculates angles based on active item count
+- **Config migration**: Existing v2.x configs are auto-migrated to include type fields
+
+#### Changed
+- **Main Radial (Level 1)**: Now reads sector.type to determine action (MENU/COMMAND/TOGGLE) instead of hardcoded sector indices
+- **Vehicle Context (Level 2)**: TOGGLE items execute directly without sub-radial ON/OFF menu
+- **Anim Category (Level 2)**: Supports MENU (open anim items) or COMMAND (execute directly), no TOGGLE
+- **Config Window Tab 1**: Shows type selector + type-specific fields for each main sector
+- **Config Window Tab 2**: Anim categories have type selector (MENU/COMMAND only) + 21 anim slots
+- **Config Window Tab 3**: Full type support for IN-VEHICLE and ON-FOOT items with type-specific fields
+- **Version header**: Updated to v3.0
+
+#### Removed
+- **Context Sub-Radial (ON/OFF level)**: Replaced by direct TOGGLE execution
+- **showCtxSubRadial state**: No longer needed since toggles execute directly
+- **showVehCatRadial/showVehRadial states**: Simplified vehicle context flow
+- **VehCatSector1-4**: Removed unused vehicle category sectors
+- **RadialMenuBeta.lua**: Deleted (merged into main RadialMenu.lua)
+
+#### Default Config Examples
+- Sector1: VEHICLE (type=MENU, target=VehicleContext)
+- Sector3: ANIM (type=MENU, target=AnimCategory)
+- CtxVeh1: ENGINE (type=TOGGLE, category=engine, START/STOP)
+- CtxVeh2: LOCK (type=TOGGLE, category=lock, LOCK/UNLOCK)
+- CtxVeh3: LIGHTS (type=COMMAND, cmd=/lights)
+- CatSector1: DANCE (type=MENU), CatSector2: SIT (type=COMMAND, cmd=/anim sit1)
+
+#### Preserved Features (100% backward compatible)
+- Hamburger button with pulse animation
+- Profile system (auto-detect server, load/save profiles, server mapping)
+- inicfg config save/load
+- Auto-close on dialog active (sampIsDialogActive)
+- New Server Detection Dialog
+- All chat commands (/rcmdf, /rprofile)
+- 200ms click debounce
+- Ease animations (outCubic open, inCubic close, 300ms)
+- 21 animation slots with category-based pagination
+- FontAwesome 6 icons (optional)
+- Notifications (optional)
 
 ---
 
