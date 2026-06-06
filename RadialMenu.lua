@@ -35,26 +35,26 @@ local autoDetectServer = profilesData.Settings.autoDetectServer or true
 local defaultStructure = {
     ButtonSettings = { posX = 1100.0, posY = 140.0 },
     HamburgerButton = { enabled = true, posX = 50.0, posY = 300.0, size = 80.0, alpha = 0.8 },
-    CtxVeh1 = { name = "ENGINE", onCmd = "/engine", offCmd = "/engine" },
-    CtxVeh2 = { name = "LOCK", onCmd = "/lock", offCmd = "/unlock" },
-    CtxVeh3 = { name = "LIGHT", onCmd = "/lights", offCmd = "/lights" },
-    CtxVeh4 = { name = "-", onCmd = "", offCmd = "" },
-    CtxFoot1 = { name = "LOCK", onCmd = "/lock", offCmd = "/unlock" },
-    CtxFoot2 = { name = "TRUNK", onCmd = "/trunk", offCmd = "/trunk" },
-    CtxFoot3 = { name = "HOOD", onCmd = "/hood", offCmd = "/hood" },
-    CtxFoot4 = { name = "-", onCmd = "", offCmd = "" },
-    Sector1 = { name = "VEHICLE", cmd = "" },
-    Sector2 = { name = "-",       cmd = "" },
-    Sector3 = { name = "ANIM",    cmd = "" },
-    Sector4 = { name = "-",       cmd = "" },
+    CtxVeh1 = { name = "ENGINE", type = "TOGGLE", onCmd = "/engine", offCmd = "/engine" },
+    CtxVeh2 = { name = "LOCK", type = "TOGGLE", onCmd = "/lock", offCmd = "/unlock" },
+    CtxVeh3 = { name = "LIGHT", type = "TOGGLE", onCmd = "/lights", offCmd = "/lights" },
+    CtxVeh4 = { name = "-", type = "TOGGLE", onCmd = "", offCmd = "" },
+    CtxFoot1 = { name = "LOCK", type = "TOGGLE", onCmd = "/lock", offCmd = "/unlock" },
+    CtxFoot2 = { name = "TRUNK", type = "TOGGLE", onCmd = "/trunk", offCmd = "/trunk" },
+    CtxFoot3 = { name = "HOOD", type = "TOGGLE", onCmd = "/hood", offCmd = "/hood" },
+    CtxFoot4 = { name = "-", type = "TOGGLE", onCmd = "", offCmd = "" },
+    Sector1 = { name = "VEHICLE", type = "MENU", cmd = "", target = "vehicle" },
+    Sector2 = { name = "-", type = "COMMAND", cmd = "" },
+    Sector3 = { name = "ANIM", type = "MENU", cmd = "", target = "anim" },
+    Sector4 = { name = "-", type = "COMMAND", cmd = "" },
     CatSector1 = { name = "" }, CatSector2 = { name = "" },
     CatSector3 = { name = "" }, CatSector4 = { name = "" },
     VehCatSector1 = { name = "" }, VehCatSector2 = { name = "" },
     VehCatSector3 = { name = "" }, VehCatSector4 = { name = "" },
 }
 for i = 1, 21 do
-    defaultStructure["Anim"..i] = { label = "", cmd = "", category = "" }
-    defaultStructure["Veh"..i]  = { label = "", cmd = "", category = "" }
+    defaultStructure["Anim"..i] = { label = "", cmd = "", category = "", type = "COMMAND" }
+    defaultStructure["Veh"..i]  = { label = "", cmd = "", category = "", type = "COMMAND" }
 end
 
 local iniData = inicfg.load(defaultStructure, iniFileName)
@@ -65,6 +65,85 @@ end
 for k, v in pairs(defaultStructure) do
     if not iniData[k] then iniData[k] = v end
 end
+
+-- Run migration
+migrateConfig()
+-- ============================================================================
+-- CONFIG MIGRATION (v3.0): Auto-detect old configs and add type field
+-- ============================================================================
+function migrateConfig()
+    local migrated = false
+    
+    -- Migrate CtxVeh items
+    for i = 1, 4 do
+        local key = "CtxVeh"..i
+        if iniData[key] and not iniData[key].type then
+            local onCmd = iniData[key].onCmd or ""
+            local offCmd = iniData[key].offCmd or ""
+            if onCmd ~= "" or offCmd ~= "" then
+                iniData[key].type = "TOGGLE"
+                migrated = true
+            end
+        end
+    end
+    
+    -- Migrate CtxFoot items
+    for i = 1, 4 do
+        local key = "CtxFoot"..i
+        if iniData[key] and not iniData[key].type then
+            local onCmd = iniData[key].onCmd or ""
+            local offCmd = iniData[key].offCmd or ""
+            if onCmd ~= "" or offCmd ~= "" then
+                iniData[key].type = "TOGGLE"
+                migrated = true
+            end
+        end
+    end
+    
+    -- Migrate main Sectors
+    for i = 1, 4 do
+        local key = "Sector"..i
+        if iniData[key] and not iniData[key].type then
+            local name = (iniData[key].name or ""):lower()
+            local cmd = iniData[key].cmd or ""
+            
+            -- Auto-detect type based on behavior
+            if name == "vehicle" or name == "anim" then
+                iniData[key].type = "MENU"
+                iniData[key].target = name
+            elseif cmd ~= "" then
+                iniData[key].type = "COMMAND"
+            else
+                iniData[key].type = "COMMAND"
+            end
+            migrated = true
+        end
+    end
+    
+    -- Migrate Anim slots
+    for i = 1, 21 do
+        local key = "Anim"..i
+        if iniData[key] and not iniData[key].type then
+            iniData[key].type = "COMMAND"
+            migrated = true
+        end
+    end
+    
+    -- Migrate Veh slots
+    for i = 1, 21 do
+        local key = "Veh"..i
+        if iniData[key] and not iniData[key].type then
+            iniData[key].type = "COMMAND"
+            migrated = true
+        end
+    end
+    
+    if migrated then
+        inicfg.save(iniData, iniFileName)
+        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Config migrated to v3.0!", -1)
+    end
+end
+
 
 -- ============================================================================
 -- STATE VARIABLES
@@ -106,9 +185,6 @@ local vehRadialList      = {}
 local showContextVehRadial = imgui.new.bool(false)
 local contextVehCommands = {}
 
--- Context sub-radial (ON/OFF selection)
-local showCtxSubRadial = imgui.new.bool(false)
-local ctxSubRadialItem = { name = "", onCmd = "", offCmd = "" }
 
 local ON_FOOT_VEH_COMMANDS = {
     { name = "LOCK", cmd = "/lock" },
@@ -245,6 +321,50 @@ for i = 1, 4 do
     ctxFootOn[i] = imgui.new.char[64](s.onCmd or "")
     ctxFootOff[i] = imgui.new.char[64](s.offCmd or "")
 end
+
+-- Type selector state for config window
+local editSectorType = {}
+for i = 1, 4 do
+    local stype = iniData["Sector"..i].type or "COMMAND"
+    editSectorType[i] = stype
+end
+
+local editAnimType = {}
+for i = 1, 21 do
+    local atype = iniData["Anim"..i].type or "COMMAND"
+    editAnimType[i] = atype
+end
+
+local editVehType = {}
+for i = 1, 21 do
+    local vtype = iniData["Veh"..i].type or "COMMAND"
+    editVehType[i] = vtype
+end
+
+local editCtxVehType = {}
+for i = 1, 4 do
+    local ctype = iniData["CtxVeh"..i].type or "TOGGLE"
+    editCtxVehType[i] = ctype
+end
+
+local editCtxFootType = {}
+for i = 1, 4 do
+    local ftype = iniData["CtxFoot"..i].type or "TOGGLE"
+    editCtxFootType[i] = ftype
+end
+
+function cycleType(currentType, allowToggle)
+    if currentType == "COMMAND" then
+        return "MENU"
+    elseif currentType == "MENU" then
+        return allowToggle and "TOGGLE" or "COMMAND"
+    elseif currentType == "TOGGLE" then
+        return "COMMAND"
+    else
+        return "COMMAND"
+    end
+end
+
 
 -- ============================================================================
 -- HELPERS
@@ -486,6 +606,19 @@ function reloadEditBuffers()
         for j = 1, #(s.offCmd or "") do ctxFootOff[i][j-1] = string.byte(s.offCmd, j) end
     end
     
+
+    
+    -- Reload type selectors
+    for i = 1, 4 do
+        editSectorType[i] = iniData["Sector"..i].type or "COMMAND"
+        editCtxVehType[i] = iniData["CtxVeh"..i].type or "TOGGLE"
+        editCtxFootType[i] = iniData["CtxFoot"..i].type or "TOGGLE"
+    end
+    for i = 1, 21 do
+        editAnimType[i] = iniData["Anim"..i].type or "COMMAND"
+        editVehType[i] = iniData["Veh"..i].type or "COMMAND"
+    end
+    
     rebuildAnimList()
     rebuildVehList()
 end
@@ -587,7 +720,6 @@ function closeAllRadial()
     showVehCatRadial[0] = false
     showVehRadial[0]    = false
     showContextVehRadial[0] = false
-    showCtxSubRadial[0] = false
 end
 
 function executeCommand(cmd)
@@ -771,7 +903,19 @@ function saveAllConfig()
         iniData["CtxFoot"..i].offCmd = readCharBuffer(ctxFootOff[i], 64)
     end
     
-    -- Save to file
+
+    
+    -- Save types
+    for i = 1, 4 do
+        iniData["Sector"..i].type = editSectorType[i]
+        iniData["CtxVeh"..i].type = editCtxVehType[i]
+        iniData["CtxFoot"..i].type = editCtxFootType[i]
+    end
+    for i = 1, 21 do
+        iniData["Anim"..i].type = editAnimType[i]
+        iniData["Veh"..i].type = editVehType[i]
+    end
+        -- Save to file
     if inicfg.save(iniData, iniFileName) then
         if animChanged then rebuildAnimList() end
         if vehChanged then rebuildVehList() end
@@ -800,6 +944,31 @@ local function renderWithScale(key, showFlag, cx, cy, menuSize)
     return true, 1
 end
 
+
+-- ============================================================================
+-- DYNAMIC SECTOR RENDERING (v3.0)
+-- ============================================================================
+function filterActiveSectors(sectors)
+    local active = {}
+    for i, sector in ipairs(sectors) do
+        if sector and sector ~= "" and sector ~= "-" then
+            table.insert(active, {index = i, name = sector})
+        end
+    end
+    return active
+end
+
+function getDynamicSectorCenters(count)
+    if count == 1 then
+        return {{x = 0, y = -92}}  -- Top only
+    elseif count == 2 then
+        return {{x = 0, y = -92}, {x = 0, y = 92}}  -- Top, Bottom
+    elseif count == 3 then
+        return {{x = 0, y = -92}, {x = 92, y = 0}, {x = 0, y = 92}}  -- Top, Right, Bottom
+    else  -- 4 items
+        return {{x = 0, y = -92}, {x = 92, y = 0}, {x = 0, y = 92}, {x = -92, y = 0}}  -- All 4
+    end
+end
 -- ============================================================================
 -- DRAW RADIAL — label auto-center & auto-wrap
 -- ============================================================================
@@ -969,7 +1138,7 @@ function main()
         local dialogActive = false
         pcall(function() dialogActive = sampIsDialogActive() end)
         if dialogActive then
-            if showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0] or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] or showCtxSubRadial[0] then
+            if showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0] or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] then
                 closeAllRadial()
             end
         end
@@ -1069,12 +1238,27 @@ function main()
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0,1,1,1), "--- MAIN SECTORS ---")
                 for i = 1, 4 do
-                    imgui.Text("Sector "..i..":"); imgui.SameLine()
+                    imgui.Text("S"..i..":"); imgui.SameLine()
+                    
+                    -- Type button
+                    local typeColor = imgui.ImVec4(0.2, 0.7, 1.0, 1.0)
+                    if editSectorType[i] == "MENU" then typeColor = imgui.ImVec4(0.2, 0.8, 0.3, 1.0)
+                    elseif editSectorType[i] == "TOGGLE" then typeColor = imgui.ImVec4(1.0, 0.6, 0.2, 1.0) end
+                    imgui.PushStyleColor(imgui.Col.Button, imgui.GetColorU32(typeColor))
+                    if imgui.Button(editSectorType[i].."##type"..i, imgui.ImVec2(75, 20)) then
+                        editSectorType[i] = cycleType(editSectorType[i], true)
+                    end
+                    imgui.PopStyleColor()
+                    imgui.SameLine()
+                    
                     imgui.SetNextItemWidth(120); imgui.InputText("Name##n"..i, editName[i], 32); imgui.SameLine()
-                    if i == 1 or i == 3 then 
-                        imgui.TextDisabled(i == 1 and "(vehicle menu)" or "(anim menu)")
-                    else 
-                        imgui.SetNextItemWidth(180); imgui.InputText("Cmd##c"..i, editCmd[i], 64) 
+                    
+                    if editSectorType[i] == "COMMAND" then
+                        imgui.SetNextItemWidth(150); imgui.InputText("Cmd##c"..i, editCmd[i], 64)
+                    elseif editSectorType[i] == "MENU" then
+                        imgui.TextDisabled("(opens sub-menu)")
+                    elseif editSectorType[i] == "TOGGLE" then
+                        imgui.TextDisabled("(not supported in Main)")
                     end
                 end
 
@@ -1114,8 +1298,10 @@ function main()
             elseif configTab == 3 then
                 imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "IN-VEHICLE CONTEXT COMMANDS")
                 imgui.Spacing()
-                -- Header (LOCKED)
-                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("ON Cmd"); imgui.SameLine(350); imgui.Text("OFF Cmd")
+                imgui.TextDisabled("Type: TOGGLE - Direct execution (1 tap)")
+                imgui.Spacing()
+                -- Header
+                imgui.Text("Name"); imgui.SameLine(150); imgui.Text("ON Cmd"); imgui.SameLine(350); imgui.Text("OFF Cmd")
                 imgui.Separator()
                 imgui.Spacing()
                 -- Editable rows
@@ -1136,8 +1322,10 @@ function main()
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "ON-FOOT VEHICLE COMMANDS")
                 imgui.Spacing()
-                -- Header (LOCKED)
-                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("ON Cmd"); imgui.SameLine(350); imgui.Text("OFF Cmd")
+                imgui.TextDisabled("Type: TOGGLE - Direct execution (1 tap)")
+                imgui.Spacing()
+                -- Header
+                imgui.Text("Name"); imgui.SameLine(150); imgui.Text("ON Cmd"); imgui.SameLine(350); imgui.Text("OFF Cmd")
                 imgui.Separator()
                 imgui.Spacing()
                 -- Editable rows
@@ -1295,7 +1483,7 @@ function main()
         local hbsHalf = hbs / 2  -- Cache commonly used value
         
         local anyRadialOpen2 = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0]
-                            or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] or showCtxSubRadial[0]
+                            or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0]
         
         -- Draw hamburger icon using background draw list
         local hCenterX = hbx + hbsHalf
@@ -1465,7 +1653,7 @@ function main()
             end
         end
 
-        -- LEVEL 2a-CTX: CONTEXT VEHICLE (auto-detected ON_FOOT / IN_VEHICLE)
+        -- LEVEL 2a-CTX: CONTEXT VEHICLE with DIRECT TOGGLE (auto-detected ON_FOOT / IN_VEHICLE)
         do
             local s
             local ok; ok, s = renderWithScale("ctxveh", showContextVehRadial, cx, cy, menuSize)
@@ -1474,20 +1662,55 @@ function main()
                     imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
                     if s > 0.3 then
                         local ctxLabels = {}
+                        local ctxColors = {}
+                        
                         for i = 1, 4 do
-                            ctxLabels[i] = contextVehCommands[i] and contextVehCommands[i].name or "---"
+                            local slot = contextVehCommands[i]
+                            if slot and slot.name and slot.name ~= "-" and slot.name ~= "" then
+                                local cat = (slot.name or ""):lower()
+                                local isOn = toggleState[cat]
+                                
+                                -- Dynamic label based on state
+                                local label = slot.name
+                                if cat == "lock" then
+                                    label = isOn and "UNLOCK" or "LOCK"
+                                elseif cat == "trunk" or cat == "hood" then
+                                    label = isOn and "CLOSE" or "OPEN"
+                                elseif cat == "engine" or cat == "light" or cat == "lights" then
+                                    label = isOn and "OFF" or "ON"
+                                else
+                                    label = slot.name
+                                end
+                                
+                                ctxLabels[i] = label
+                                -- GREEN = available action to take
+                                ctxColors[i] = 0xFF44FF44
+                            else
+                                ctxLabels[i] = "---"
+                                ctxColors[i] = 0x55FFFFFF
+                            end
                         end
+                        
                         draw_list:AddText(imgui.ImVec2(cx-50, cy-120), 0xFF88DDFF, "[QUICK VEH]")
-                        local p = drawRadialMenu(draw_list, cx, cy, ctxLabels, "BACK", 0xFF88DDFF, "ctxveh")
+                        local p = drawRadialMenu(draw_list, cx, cy, ctxLabels, "BACK", 0xFF88DDFF, "ctxveh", ctxColors)
+                        
                         if p and p >= 1 and p <= 4 then
                             local slot = contextVehCommands[p]
                             if slot and slot.name and slot.name ~= "-" and slot.name ~= "" then
-                                if (slot.onCmd and slot.onCmd ~= "") or (slot.offCmd and slot.offCmd ~= "") then
-                                    -- Open sub-radial for ON/OFF selection
-                                    ctxSubRadialItem = { name = slot.name, onCmd = slot.onCmd or "", offCmd = slot.offCmd or "" }
-                                    showContextVehRadial[0] = false
-                                    showCtxSubRadial[0] = true
+                                local cat = (slot.name or ""):lower()
+                                local isOn = toggleState[cat]
+                                
+                                -- Direct toggle execution (1 tap)
+                                if isOn then
+                                    -- Execute OFF command
+                                    executeCommand(slot.offCmd)
+                                    toggleState[cat] = false
+                                else
+                                    -- Execute ON command
+                                    executeCommand(slot.onCmd)
+                                    toggleState[cat] = true
                                 end
+                                closeAllRadial()
                             end
                         elseif p == 5 then
                             showContextVehRadial[0] = false
@@ -1498,237 +1721,6 @@ function main()
             end
         end
 
-        -- CONTEXT SUB-RADIAL (ON/OFF selection)
-        do
-            local s
-            local ok; ok, s = renderWithScale("ctxsub", showCtxSubRadial, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialCtxSub", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then
-                        local item = ctxSubRadialItem
-                        local cat = (item.name or ""):lower()
-                        local isOn = toggleState[cat]
-
-                        -- Customize labels based on category
-                        local onLabel = "ON"
-                        local offLabel = "OFF"
-                        if cat == "lock" then
-                            onLabel = "LOCK"
-                            offLabel = "UNLOCK"
-                        elseif cat == "trunk" or cat == "hood" then
-                            onLabel = "OPEN"
-                            offLabel = "CLOSE"
-                        elseif cat == "engine" then
-                            onLabel = "ON"
-                            offLabel = "OFF"
-                        elseif cat == "light" or cat == "lights" then
-                            onLabel = "ON"
-                            offLabel = "OFF"
-                        end
-
-                        -- Colors: grey out the active state
-                        local onColor = isOn and 0x55FFFFFF or 0xFF44FF44
-                        local offColor = isOn and 0xFFFF4444 or 0x55FFFFFF
-
-                        local labels = { onLabel, "-", offLabel, "-" }
-                        local labelColors = { onColor, 0x55FFFFFF, offColor, 0x55FFFFFF }
-
-                        -- Draw title
-                        draw_list:AddText(imgui.ImVec2(cx - 40, cy - 120), 0xFF00FFFF, "[" .. item.name .. "]")
-
-                        local p = drawRadialMenu(draw_list, cx, cy, labels, "BACK", 0xFF00FFFF, "ctxsub", labelColors)
-
-                        -- Handle press
-                        if p == 1 and not isOn then
-                            -- ON pressed (only if not already ON)
-                            executeCommand(item.onCmd)
-                            toggleState[cat] = true
-                            closeAllRadial()
-                        elseif p == 3 and isOn then
-                            -- OFF pressed (only if not already OFF)
-                            executeCommand(item.offCmd)
-                            toggleState[cat] = false
-                            closeAllRadial()
-                        elseif p == 1 and isOn then
-                            -- Already ON, do nothing (greyed out)
-                        elseif p == 3 and not isOn then
-                            -- Already OFF, do nothing (greyed out)
-                        elseif p == 5 then
-                            -- BACK - go back to context menu
-                            showCtxSubRadial[0] = false
-                            showContextVehRadial[0] = true
-                        end
-                    end
-                imgui.End()
-            end
-        end
-
-        -- LEVEL 2b: CATEGORY VEHICLE
-        do
-            local s
-            local ok; ok, s = renderWithScale("vehcat", showVehCatRadial, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialVehCat", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then
-                        local vcats = {
-                            tostring(iniData.VehCatSector1.name), tostring(iniData.VehCatSector2.name),
-                            tostring(iniData.VehCatSector3.name), tostring(iniData.VehCatSector4.name),
-                        }
-                        draw_list:AddText(imgui.ImVec2(cx-40, cy-120), 0xFF88DDFF, "[VEHICLE]")
-                        local p = drawRadialMenu(draw_list, cx, cy, vcats, "BACK", 0xFF88DDFF, "vehcat")
-                        if p and p >= 1 and p <= 4 then
-                            local sectorName = tostring(vcats[p] or "")
-                            if sectorName ~= "" and sectorName ~= "-" then
-                                loadVehForCategory(sectorName)
-                                if #vehRadialList > 0 then
-                                    currentVehCategory = sectorName
-                                    showVehCatRadial[0] = false
-                                    showVehRadial[0] = true
-                                else
-                                    sampAddChatMessage("{FF8800}[Radial] {FFFFFF}No vehicles found. Use /rcmdf to configure: "..sectorName, -1)
-                                end
-                            end
-                        elseif p == 5 then
-                            showVehCatRadial[0] = false
-                            showRadialMenu[0] = true
-                        end
-                    end
-                imgui.End()
-            end
-        end
-
-        -- LEVEL 3b: VEHICLE
-        do
-            local s
-            local ok; ok, s = renderWithScale("veh", showVehRadial, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialVeh", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then
-                local tp  = totalVehPages()
-                local pgv = layoutVehPage(vehRadialPage)
-                local cl, cc = "BACK", 0xFF88DDFF
-                if tp > 1 then cl = vehRadialPage < tp and "NEXT" or "PREV"; cc = 0xFF44BBFF end
-                draw_list:AddText(imgui.ImVec2(cx-30, cy+110), 0xAAFFFFFF, string.format("Hal %d/%d", vehRadialPage, tp))
-                draw_list:AddText(imgui.ImVec2(cx-40, cy-120), 0xFF88DDFF, "["..currentVehCategory.."]")
-
-                -- Hitung warna & disabled state tiap slot
-                local vlColors   = {}
-                local vlDisabled = {}  -- true = beneran disabled, ga bisa dipencet
-                for i = 1, 4 do
-                    local slot = pgv[i]
-                    if isDummySlot(slot) then
-                        vlColors[i]   = 0x33FFFFFF
-                        vlDisabled[i] = true
-                    else
-                        local cat   = (slot.category or ""):lower()
-                        local lbl   = slot.label or ""
-                        local isOn  = toggleState[cat]  -- true = kondisi aktif/ON
-
-                        if isOnLabel(lbl) then
-                            -- Tombol ON: disabled kalau state sudah ON
-                            if isOn then
-                                vlColors[i]   = 0x33FFFFFF  -- grey
-                                vlDisabled[i] = true
-                            else
-                                vlColors[i]   = 0xFF44FF44  -- hijau = bisa dipencet
-                                vlDisabled[i] = false
-                            end
-                        elseif isOffLabel(lbl) then
-                            -- Tombol OFF: disabled kalau state masih OFF
-                            if not isOn then
-                                vlColors[i]   = 0x33FFFFFF  -- grey
-                                vlDisabled[i] = true
-                            else
-                                vlColors[i]   = 0xFFFF4444  -- merah = bisa dipencet
-                                vlDisabled[i] = false
-                            end
-                        else
-                            -- Slot biasa (bukan ON/OFF pair) — selalu bisa dipencet
-                            vlColors[i]   = 0xFFFFFFFF
-                            vlDisabled[i] = false
-                        end
-                    end
-                end
-
-                -- Gambar label
-                local vl = {}
-                for i = 1, 4 do vl[i] = pgv[i] and not isDummySlot(pgv[i]) and pgv[i].label or nil end
-
-                -- Gambar radial (tanpa invisible button dulu)
-                local rO = 135
-                local rI = 50
-                draw_list:AddCircleFilled(imgui.ImVec2(cx, cy), rO, 0xDD151515, 64)
-                draw_list:AddCircleFilled(imgui.ImVec2(cx, cy), rI, 0xFF222222, 64)
-                local oi, oo = rI * 0.7071, rO * 0.7071
-                draw_list:AddLine(imgui.ImVec2(cx+oi, cy-oi), imgui.ImVec2(cx+oo, cy-oo), 0x55FFFFFF, 1.0)
-                draw_list:AddLine(imgui.ImVec2(cx+oi, cy+oi), imgui.ImVec2(cx+oo, cy+oo), 0x55FFFFFF, 1.0)
-                draw_list:AddLine(imgui.ImVec2(cx-oi, cy+oi), imgui.ImVec2(cx-oo, cy+oo), 0x55FFFFFF, 1.0)
-                draw_list:AddLine(imgui.ImVec2(cx-oi, cy-oi), imgui.ImVec2(cx-oo, cy-oo), 0x55FFFFFF, 1.0)
-
-                for i = 1, 4 do
-                    local sc  = SECTOR_CENTERS[i]
-                    local lbl = vl[i]
-                    drawLabelCentered(draw_list, lbl, cx + sc.x, cy + sc.y, vlColors[i])
-                end
-
-                -- Center label (BACK/NEXT/PREV)
-                local cts = imgui.CalcTextSize(cl)
-                draw_list:AddText(imgui.ImVec2(cx - cts.x*0.5, cy - cts.y*0.5), cc, cl)
-
-                -- Invisible buttons — skip kalau disabled
-                local sectorPos = {
-                    { x=110, y= 20,  w=120, h=70 },  -- 1 atas
-                    { x=235, y=135,  w= 85, h=70 },  -- 2 kanan
-                    { x=110, y=250,  w=120, h=70 },  -- 3 bawah
-                    { x= 20, y=135,  w= 85, h=70 },  -- 4 kiri
-                }
-                local pressed = nil
-                for i = 1, 4 do
-                    imgui.SetCursorPos(imgui.ImVec2(sectorPos[i].x, sectorPos[i].y))
-                    if not vlDisabled[i] then
-                        if imgui.InvisibleButton("##vs"..i.."_veh", imgui.ImVec2(sectorPos[i].w, sectorPos[i].h)) then
-                            pressed = i
-                        end
-                    else
-                        -- render dummy area (tidak clickable)
-                        imgui.Dummy(imgui.ImVec2(sectorPos[i].w, sectorPos[i].h))
-                    end
-                end
-                -- center button
-                imgui.SetCursorPos(imgui.ImVec2(125, 135))
-                if imgui.InvisibleButton("##vcenter_veh", imgui.ImVec2(90, 70)) then pressed = 5 end
-
-                -- Handle klik
-                for i = 1, 4 do
-                    if pressed == i and pgv[i] and not vlDisabled[i] then
-                        local slot = pgv[i]
-                        local cat  = (slot.category or ""):lower()
-                        local lbl  = slot.label or ""
-
-                        executeCommand(slot.cmd)
-
-                        if isOnLabel(lbl) then
-                            toggleState[cat] = true
-                        elseif isOffLabel(lbl) then
-                            toggleState[cat] = false
-                        end
-                        closeAllRadial()
-                    end
-                end
-                if pressed == 5 then
-                    if tp <= 1 then
-                        showVehRadial[0] = false
-                        showVehCatRadial[0] = true
-                    elseif vehRadialPage < tp then vehRadialPage = vehRadialPage + 1
-                    else vehRadialPage = vehRadialPage - 1 end
-                end
-                    end  -- if s > 0.3
-                imgui.End()
-            end  -- if ok
-        end  -- do
 
     end)
 
