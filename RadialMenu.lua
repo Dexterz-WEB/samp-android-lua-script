@@ -113,6 +113,10 @@ local showVehRadial    = imgui.new.bool(false)
 local showContextVehRadial = imgui.new.bool(false)
 local showCtxSubRadial = imgui.new.bool(false)
 
+-- Click debounce to prevent rapid menu transitions
+local lastClickTime = 0
+local CLICK_COOLDOWN = 0.2  -- 200ms cooldown between clicks
+
 -- Animation state
 local menuOpenTime = 0
 local menuScale = 0
@@ -1074,7 +1078,9 @@ function main()
                 
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[MAIN]", {1, 1, 0})
                 
-                if imgui.IsMouseClicked(0) then
+                local currentTime = os.clock()
+                if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
+                    lastClickTime = currentTime
                     if centerHovered then
                         closeAllRadial()
                     elseif hoveredSector == 1 then
@@ -1117,7 +1123,9 @@ function main()
                 
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[QUICK VEH]", {0.53, 0.86, 1.0})
                 
-                if imgui.IsMouseClicked(0) then
+                local currentTime = os.clock()
+                if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
+                    lastClickTime = currentTime
                     if centerHovered then
                         showContextVehRadial[0] = false
                         showRadialMenu[0] = true
@@ -1163,8 +1171,9 @@ function main()
                 
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[" .. item.name .. "]", {0, 1, 1})
 
-                
-                if imgui.IsMouseClicked(0) then
+                local currentTime = os.clock()
+                if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
+                    lastClickTime = currentTime
                     if centerHovered then
                         showCtxSubRadial[0] = false
                         showContextVehRadial[0] = true
@@ -1172,11 +1181,19 @@ function main()
                     elseif hoveredSector == 1 and not isOn then
                         executeCommand(item.onCmd)
                         toggleState[cat] = true
-                        closeAllRadial()
+                        -- Close sub-radial and context, back to main
+                        showCtxSubRadial[0] = false
+                        showContextVehRadial[0] = false
+                        showRadialMenu[0] = true
+                        menuOpenTime = os.clock()
                     elseif hoveredSector == 3 and isOn then
                         executeCommand(item.offCmd)
                         toggleState[cat] = false
-                        closeAllRadial()
+                        -- Close sub-radial and context, back to main
+                        showCtxSubRadial[0] = false
+                        showContextVehRadial[0] = false
+                        showRadialMenu[0] = true
+                        menuOpenTime = os.clock()
                     end
                 end
             end
@@ -1195,7 +1212,9 @@ function main()
                 
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[ANIM]", {0, 1, 1})
                 
-                if imgui.IsMouseClicked(0) then
+                local currentTime = os.clock()
+                if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
+                    lastClickTime = currentTime
                     if centerHovered then
                         showCatRadial[0] = false
                         showRadialMenu[0] = true
@@ -1234,7 +1253,9 @@ function main()
                 local titleText = "[" .. currentCategory .. "] Page " .. animRadialPage .. "/" .. tp
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, titleText, {0, 1, 1})
                 
-                if imgui.IsMouseClicked(0) then
+                local currentTime = os.clock()
+                if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
+                    lastClickTime = currentTime
                     if centerHovered then
                         if tp <= 1 then
                             showAnimRadial[0] = false

@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v2.0.1] - 2026-06-06
+
+### 🐛 Bug Fixes
+
+#### Fixed Click Handling Issues
+- **Fixed rapid click issue** causing unintended command execution
+  - Added 200ms click cooldown (`CLICK_COOLDOWN`) to prevent rapid menu transitions
+  - Prevents accidental double-clicks during menu animations
+  - Each menu level now checks `(currentTime - lastClickTime) > CLICK_COOLDOWN` before processing clicks
+  
+- **Fixed Context Sub-Radial flow**
+  - After executing ON/OFF command, menu now returns to Main Radial (not closing completely)
+  - Flow: Main → Context Vehicle → Sub-Radial → Execute → **Back to Main**
+  - User can immediately tap VEHICLE again to access context menu
+  - Matches expected UX: quick access without full menu close/reopen
+
+#### Technical Details
+- Added `lastClickTime` tracking with `os.clock()`
+- Applied cooldown check to all 5 menu levels:
+  - Main Radial (Level 1)
+  - Context Vehicle (Level 2)
+  - Context Sub-Radial ON/OFF (Level 3)
+  - Anim Category (Level 2)
+  - Anim Items (Level 3)
+- Cooldown timer resets on successful click to allow next interaction
+
+---
+
 ## [v2.0.0] - 2026-06-06
 
 ### 🎉 MAJOR REDESIGN - PIE CHART RENDERING
