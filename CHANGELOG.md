@@ -4,9 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [v1.4.0] - 2026-06-06
+## [v1.4.0-alpha] - 2026-06-06
 
-### 🔄 Complete Rebuild - PieMenuDemo Structure
+### 🔄 Complete Rebuild - PieMenuDemo Structure (Alpha Release)
+
+#### ⚠️ **Alpha Status - Known Limitations**
+This is an **alpha release** with core functionality working but missing config UI:
+- ✅ **Pie menu rendering** - Fully working
+- ✅ **Navigation system** - Fully working  
+- ✅ **Commands execution** - Fully working
+- ✅ **Context detection** - Fully working
+- ✅ **INI config** - Fully working (read from files)
+- ❌ **Config UI** - Not yet implemented (use manual .ini editing)
+- ❌ **Profile UI** - Not yet implemented (INI files work)
 
 #### ✨ Features
 - **Complete rewrite** using PieMenuDemo.lua structure
@@ -35,8 +45,21 @@ All notable changes to this project will be documented in this file.
 
 #### 📝 Commands
 - `/rmenu` - Toggle pie menu
-- `/rcfg` - Open config window
-- All existing config preserved
+- `/rcfg` - Placeholder (config UI not yet implemented)
+- **Manual config**: Edit `RadialMenuConfig.ini` directly
+
+#### 🚧 **What's Missing (Coming in v1.4.0 final)**
+- Config window UI (4 tabs)
+- Profile management UI
+- In-game config editing
+- Profile dialog for new servers
+- Save/Load buttons
+
+**Workaround**: Edit `.ini` files manually in MoonLoader folder:
+- `RadialMenuConfig.ini` - Main config
+- `RadialMenuProfiles.ini` - Profile settings
+
+All INI structure is **preserved** and **compatible** with v1.3.0!
 
 #### 🔧 Technical
 - **Angle-based detection**: `math.atan2()` for precise sector detection

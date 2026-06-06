@@ -761,6 +761,17 @@ imgui.OnFrame(function() return showTrigger[0] end, function(self)
 end)
 
 -- ============================================================================
+-- CONFIG MANAGEMENT (Missing from rebuild - TODO)
+-- ============================================================================
+-- TODO: Add config window UI
+-- TODO: Add profile management functions
+-- TODO: Add save/load functions
+-- TODO: Add ImGui editor buffers
+-- TODO: Add profile dialog
+-- NOTE: Config functionality is preserved in INI files but UI is missing
+-- Use /rcfg command placeholder for now
+
+-- ============================================================================
 -- MAIN
 -- ============================================================================
 function main()
@@ -773,13 +784,14 @@ function main()
     end)
     
     sampRegisterChatCommand("rcfg", function()
+        showNotification("Config UI coming soon! Config files still work.", notif_loaded and Notifications.TYPE.INFO, 3)
         showConfigWindow[0] = not showConfigWindow[0]
     end)
     
     -- Startup messages
-    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}v1.4.0 loaded!", -1)
+    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}v1.4.0-alpha loaded!", -1)
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Use {FFFF00}/rmenu{FFFFFF} to toggle menu", -1)
-    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Use {FFFF00}/rcfg{FFFFFF} to configure", -1)
+    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Config: Edit .ini files manually (UI coming soon)", -1)
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Profile: {FFFF00}" .. currentProfile, -1)
     
     -- Startup notification
