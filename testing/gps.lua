@@ -211,18 +211,38 @@ hkRadar = hook.new("void(__cdecl*)(void*)", function(thiz)
     local playa = gtasa._Z13FindPlayerPedi(0)
     if playa == nil then return end
 
-    local mm    = gmm()
-    local tblip = memory.getint32(mm + MM_TBLIP)
-    if not ValidBlipHandle(tblip) then
+    -- Try to get target from: 1) Global waypoint (from MinimapHUD), 2) GTA blip
+    local bx, by, bz
+    local hasTarget = false
+    
+    -- Check global waypoint from MinimapHUD
+    if _G.MINIMAP_WAYPOINT and _G.MINIMAP_WAYPOINT.active then
+        bx = _G.MINIMAP_WAYPOINT.x
+        by = _G.MINIMAP_WAYPOINT.y
+        bz = gtasa._ZN6CWorld19FindGroundZForCoordEff(bx, by)
+        hasTarget = true
+    end
+    
+    -- Fallback: check GTA blip
+    if not hasTarget then
+        local mm    = gmm()
+        local tblip = memory.getint32(mm + MM_TBLIP)
+        if not ValidBlipHandle(tblip) then
+            cacheValid = false
+            return
+        end
+        local idx = bit.band(tblip, 0xFFFF)
+        local tr  = grt() + idx * RT_SIZE
+        bx  = ffi.cast("float*", tr + RT_POS)[0]
+        by  = ffi.cast("float*", tr + RT_POS)[1]
+        bz  = gtasa._ZN6CWorld19FindGroundZForCoordEff(bx, by)
+        hasTarget = true
+    end
+    
+    if not hasTarget then
         cacheValid = false
         return
     end
-
-    local idx = bit.band(tblip, 0xFFFF)
-    local tr  = grt() + idx * RT_SIZE
-    local bx  = ffi.cast("float*", tr + RT_POS)[0]
-    local by  = ffi.cast("float*", tr + RT_POS)[1]
-    local bz  = gtasa._ZN6CWorld19FindGroundZForCoordEff(bx, by)
 
     local sc = gtasa._Z15FindPlayerCoorsi(0)
 
@@ -231,6 +251,10 @@ hkRadar = hook.new("void(__cdecl*)(void*)", function(thiz)
     if distToTarget < 10.0 then
         cacheValid = false
         gpsShown = false
+        -- Also clear global waypoint
+        if _G.MINIMAP_WAYPOINT then
+            _G.MINIMAP_WAYPOINT.active = false
+        end
         return
     end
 

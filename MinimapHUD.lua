@@ -163,21 +163,13 @@ local function getDistanceTo(tx, ty)
 end
 
 local function setGTAWaypoint(wx, wy)
-    -- Set waypoint blip in GTA SA via opcode
-    pcall(function()
-        -- Remove old waypoint first if exists
-        removeWaypointBlip()
-    end)
-    pcall(function()
-        -- Set new target blip
-        placeWaypoint(wx, wy)
-    end)
+    -- Share waypoint via global variable (GPS script can read this)
+    _G.MINIMAP_WAYPOINT = { x = wx, y = wy, active = true }
 end
 
 local function removeGTAWaypoint()
-    pcall(function()
-        removeWaypointBlip()
-    end)
+    -- Clear shared waypoint
+    _G.MINIMAP_WAYPOINT = { x = 0, y = 0, active = false }
 end
 
 local function saveConfig()
