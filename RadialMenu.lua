@@ -1075,6 +1075,26 @@ function main()
                         sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile created: " .. pName, -1)
                     end
                 end
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), "LOAD PROFILE:")
+                availableProfiles = listProfiles()
+                imgui.SetNextItemWidth(300)
+                if imgui.BeginCombo("##loadprofile", currentProfile) then
+                    for _, pName in ipairs(availableProfiles) do
+                        local isSelected = (pName == currentProfile)
+                        if imgui.Selectable(pName, isSelected) then
+                            loadProfile(pName)
+                        end
+                        if isSelected then imgui.SetItemDefaultFocus() end
+                    end
+                    imgui.EndCombo()
+                end
+                imgui.SameLine()
+                if imgui.Button("Load", imgui.ImVec2(80, 25)) then
+                    -- Already loaded via combo selection
+                    sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile active: {FFFF00}" .. currentProfile, -1)
+                end
             end
             
             imgui.Spacing()
