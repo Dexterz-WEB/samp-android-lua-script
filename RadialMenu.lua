@@ -969,6 +969,14 @@ function main()
 
 
             elseif configTab == 2 then
+                imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIM CATEGORIES")
+                imgui.Spacing()
+                for i = 1, 4 do
+                    imgui.Text("Cat "..i..":"); imgui.SameLine()
+                    imgui.SetNextItemWidth(80); imgui.InputText("##ca"..i, editCatName[i], 32)
+                    if i < 4 then imgui.SameLine() end
+                end
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIMATION COMMANDS")
                 imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
