@@ -976,14 +976,22 @@ function main()
                 for i = 1, MAX_ANIM_SLOTS do
                     imgui.Text(string.format("%2d|", i))
                     imgui.SameLine(40)
-                    imgui.PushItemWidth(100); imgui.InputText("##ac"..i, animEditCategory[i], 32); imgui.PopItemWidth()
+                    imgui.PushItemWidth(100); imgui.InputText("##animcat"..i, animEditCategory[i], 32); imgui.PopItemWidth()
                     imgui.SameLine(130)
-                    imgui.PushItemWidth(100); imgui.InputText("##al"..i, animEditLabel[i], 64); imgui.PopItemWidth()
+                    imgui.PushItemWidth(100); imgui.InputText("##animlbl"..i, animEditLabel[i], 64); imgui.PopItemWidth()
                     imgui.SameLine(260)
-                    imgui.PushItemWidth(-1); imgui.InputText("##acmd"..i, animEditCmd[i], 128); imgui.PopItemWidth()
+                    imgui.PushItemWidth(-1); imgui.InputText("##animcmd"..i, animEditCmd[i], 128); imgui.PopItemWidth()
                 end
                 imgui.EndChild()
             elseif configTab == 3 then
+                imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.4, 1), "VEHICLE CATEGORIES")
+                imgui.Spacing()
+                for i = 1, 4 do
+                    imgui.Text("Cat "..i..":"); imgui.SameLine()
+                    imgui.SetNextItemWidth(80); imgui.InputText("##vca"..i, editVehCatName[i], 32)
+                    if i < 4 then imgui.SameLine() end
+                end
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "IN-VEHICLE COMMANDS")
                 imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
