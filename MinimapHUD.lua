@@ -120,8 +120,11 @@ local function worldToUV(wx, wy)
 end
 
 local function drawRotatedImage(draw_list, texture, cx, cy, size, angle, color)
-    local cos_a = math.cos(angle)
-    local sin_a = math.sin(angle)
+    -- Offset -90° karena arrow texture menghadap kanan (0° screen = kanan)
+    -- tapi heading 0° = Utara (atas di screen)
+    local adjustedAngle = angle - math.pi / 2
+    local cos_a = math.cos(adjustedAngle)
+    local sin_a = math.sin(adjustedAngle)
     local half = size / 2
     local p1 = imgui.ImVec2(cx + (-half * cos_a - (-half) * sin_a), cy + (-half * sin_a + (-half) * cos_a))
     local p2 = imgui.ImVec2(cx + (half * cos_a - (-half) * sin_a), cy + (half * sin_a + (-half) * cos_a))
