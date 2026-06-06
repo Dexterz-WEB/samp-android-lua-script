@@ -11,6 +11,174 @@ script_author("OnlyDexterZ")
 -- ============================================================================
 local imgui = require 'mimgui'
 local inicfg = require 'inicfg'
+local ffi = require("ffi")
+local memory = require("memory")
+local hook = require("monethook")
+
+local BASE = MONET_GTASA_BASE
+
+-- ============================================================================
+-- GPS FFI DECLARATIONS
+-- ============================================================================
+ffi.cdef[[
+typedef struct { float x, y, z; } CVector;
+typedef struct { float x, y; } CVector2D;
+typedef struct { short areaId; short nodeId; } CNodeAddress;
+
+void* _Z13FindPlayerPedi(int n);
+CVector _Z15FindPlayerCoorsi(int n);
+
+void _ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb(
+    void* thiz, uint8_t graphType,
+    CVector startCoors, CNodeAddress startNode,
+    CVector targetCoors, CNodeAddress* pNodeList,
+    int16_t* pNumNodes, int32_t numReq,
+    float* pDist, float cutoff,
+    CNodeAddress* pGivenTarget, float maxDist,
+    bool noWrongWay, CNodeAddress avoid,
+    bool amphibious, bool boat
+);
+
+void _ZN6CRadar12DrawRadarMapEv(void* thiz);
+float _ZN6CWorld19FindGroundZForCoordEff(float x, float y);
+]]
+
+local gtasa = ffi.load("GTASA")
+
+-- GPS Constants
+local GPS_MAX_NODES = 5000
+local GOT_THEPATHS = BASE + 0x677378
+local GOT_GMM = BASE + 0x679CCC
+local GOT_MSRT = BASE + 0x6773CC
+local MM_TBLIP = 0x48
+local RT_SIZE = 0x28
+local RT_POS = 0x08
+local RT_CTR = 0x14
+local RT_DISP = 0x26
+local PF_NODES = 0x804
+local PN_SIZE = 0x1C
+local PN_POS = 0x08
+
+-- GPS State
+local gpsNodeCount = 0
+local gpsDistance = 0.0
+local gpsActive = false
+local gpsLastCalcX = 0
+local gpsLastCalcY = 0
+local gpsRecalcDist = 30.0
+
+-- GPS Buffers
+local gpsResultNodes = ffi.new("CNodeAddress[?]", GPS_MAX_NODES)
+local gpsOutCount = ffi.new("int16_t[1]")
+local gpsOutDist = ffi.new("float[1]")
+local gpsNullNode = ffi.new("CNodeAddress")
+
+-- GPS Cached path world coords (for drawing on our map)
+local gpsCachedPath = {}
+
+-- GPS Helper functions
+local function gps_gtp() return memory.getuint32(GOT_THEPATHS) end
+local function gps_gmm() return memory.getuint32(GOT_GMM) end
+local function gps_grt() return memory.getuint32(GOT_MSRT) end
+
+local function gps_ValidBlip(h)
+    if h == 0 then return false end
+    local idx = bit.band(h, 0xFFFF)
+    local ctr = bit.rshift(h, 16)
+    local tr = gps_grt() + idx * RT_SIZE
+    return memory.getuint16(tr + RT_CTR) == ctr
+       and bit.band(memory.getuint8(tr + RT_DISP), 0x3) ~= 0
+end
+
+local function gps_GetNodeCoors(areaId, nodeId)
+    local arr = memory.getuint32(gps_gtp() + PF_NODES + areaId * 4)
+    if arr == 0 then return nil end
+    local np = arr + nodeId * PN_SIZE
+    local p = ffi.cast("int16_t*", np + PN_POS)
+    return p[0] / 8.0, p[1] / 8.0, p[2] / 8.0
+end
+
+local function gps_isInVehicle()
+    local result = false
+    pcall(function() result = isCharInAnyCar(PLAYER_PED) end)
+    return result
+end
+
+-- GPS Hook (DrawRadarMap)
+local addrRadar = tonumber(ffi.cast("uintptr_t", ffi.cast("void*",
+    gtasa._ZN6CRadar12DrawRadarMapEv)))
+
+local hkRadar
+hkRadar = hook.new("void(__cdecl*)(void*)", function(thiz)
+    hkRadar(thiz)
+    gpsActive = false
+
+    -- Vehicle only
+    if not gps_isInVehicle() then
+        gpsCachedPath = {}
+        return
+    end
+
+    local playa = gtasa._Z13FindPlayerPedi(0)
+    if playa == nil then return end
+
+    -- Check for waypoint blip
+    local mm = gps_gmm()
+    local tblip = memory.getint32(mm + MM_TBLIP)
+    if not gps_ValidBlip(tblip) then
+        gpsCachedPath = {}
+        return
+    end
+
+    local idx = bit.band(tblip, 0xFFFF)
+    local tr = gps_grt() + idx * RT_SIZE
+    local bx = ffi.cast("float*", tr + RT_POS)[0]
+    local by = ffi.cast("float*", tr + RT_POS)[1]
+    local bz = gtasa._ZN6CWorld19FindGroundZForCoordEff(bx, by)
+
+    local sc = gtasa._Z15FindPlayerCoorsi(0)
+
+    -- Auto clear < 10m
+    local dx, dy = sc.x - bx, sc.y - by
+    if math.sqrt(dx*dx + dy*dy) < 10.0 then
+        gpsCachedPath = {}
+        return
+    end
+
+    -- Recalculate only if moved > 30m
+    local pdx, pdy = sc.x - gpsLastCalcX, sc.y - gpsLastCalcY
+    if math.sqrt(pdx*pdx + pdy*pdy) > gpsRecalcDist or #gpsCachedPath == 0 then
+        local dc = ffi.new("CVector", {x = bx, y = by, z = bz})
+        gpsOutCount[0] = 0
+        gpsOutDist[0] = 0.0
+
+        gtasa._ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb(
+            ffi.cast("void*", gps_gtp()),
+            0, sc, gpsNullNode, dc,
+            gpsResultNodes, gpsOutCount, GPS_MAX_NODES,
+            gpsOutDist, 999999.0, nil, 999999.0,
+            false, gpsNullNode, false, false
+        )
+
+        gpsNodeCount = gpsOutCount[0]
+        gpsDistance = gpsOutDist[0]
+        gpsLastCalcX = sc.x
+        gpsLastCalcY = sc.y
+
+        -- Cache path world coords
+        gpsCachedPath = {}
+        for i = 0, gpsNodeCount - 1 do
+            local nx, ny, nz = gps_GetNodeCoors(gpsResultNodes[i].areaId, gpsResultNodes[i].nodeId)
+            if nx then
+                gpsCachedPath[#gpsCachedPath + 1] = {x = nx, y = ny}
+            end
+        end
+    end
+
+    if gpsNodeCount > 0 then
+        gpsActive = true
+    end
+end, addrRadar)
 
 -- ============================================================================
 -- CONFIG
@@ -606,6 +774,14 @@ function main()
     -- Register config command
     sampRegisterChatCommand("mapcfg", function()
         showConfigWindow[0] = not showConfigWindow[0]
+    end)
+
+    -- GPS Debug command (Step 1: confirm pathfinding works)
+    sampRegisterChatCommand("gpsdebug", function()
+        sampAddChatMessage("{00FFFF}=== GPS DEBUG ==={FFFFFF}", -1)
+        sampAddChatMessage(string.format("{FFFF00}Active: %s | Nodes: %d | Distance: %.0fm", tostring(gpsActive), gpsNodeCount, gpsDistance), -1)
+        sampAddChatMessage(string.format("{FFFF00}Cached path points: %d", #gpsCachedPath), -1)
+        sampAddChatMessage(string.format("{FFFF00}In vehicle: %s", tostring(gps_isInVehicle())), -1)
     end)
 
     -- Disable built-in radar if configured
