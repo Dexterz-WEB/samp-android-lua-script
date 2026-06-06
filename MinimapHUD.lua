@@ -232,123 +232,69 @@ local function drawFullMap(draw_list)
     pcall(function() sw, sh = getScreenResolution() end)
     if sw == 0 or sh == 0 then sw, sh = 1280, 720 end
 
-    -- Fullscreen window to block GTA SA camera/touch input
-    imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
-    imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
-    imgui.Begin('##FullMapOverlay', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings + imgui.WindowFlags.NoBackground)
-    imgui.End()
-
-    local io = imgui.GetIO()
-    local mx = io.MousePos.x
-    local my = io.MousePos.y
-
-    -- Background overlay
-    draw_list:AddRectFilled(
-        imgui.ImVec2(0, 0),
-        imgui.ImVec2(sw, sh),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0, 0, 0, 0.7))
-    )
-
-    -- Get player UV position for centering zoom on player
+    -- Get player data
     getPlayerData()
     local playerUVX, playerUVY = worldToUV(cachedPlayerX, cachedPlayerY)
 
-    -- Calculate map display area (zoom centered on player position)
+    -- Calculate map display
     local baseSize = math.min(sw, sh) * 0.9
     local mapDisplaySize = baseSize * fullMapZoom
-    
-    -- Center map so that player is at screen center, then apply drag offset
-    local playerScreenX = sw / 2
-    local playerScreenY = sh / 2
-    local mapX = playerScreenX - (playerUVX * mapDisplaySize) + fullMapOffsetX
-    local mapY = playerScreenY - (playerUVY * mapDisplaySize) + fullMapOffsetY
+    local mapX = (sw / 2) - (playerUVX * mapDisplaySize) + fullMapOffsetX
+    local mapY = (sh / 2) - (playerUVY * mapDisplaySize) + fullMapOffsetY
+
+    -- === ALL INSIDE IMGUI WINDOW (like RadialMenu PieOverlay) ===
+    imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
+    imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0.7))
+    imgui.Begin('##FullMapOverlay', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoScrollWithMouse + imgui.WindowFlags.NoSavedSettings)
+
+    local wdl = imgui.GetWindowDrawList()
 
     -- Draw the full map
-    local pMin = imgui.ImVec2(mapX, mapY)
-    local pMax = imgui.ImVec2(mapX + mapDisplaySize, mapY + mapDisplaySize)
-    local colorU32 = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 0.95))
-    draw_list:AddImage(mapTexture, pMin, pMax, imgui.ImVec2(0, 0), imgui.ImVec2(1, 1), colorU32)
+    wdl:AddImage(mapTexture, imgui.ImVec2(mapX, mapY), imgui.ImVec2(mapX + mapDisplaySize, mapY + mapDisplaySize),
+        imgui.ImVec2(0, 0), imgui.ImVec2(1, 1),
+        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 0.95)))
 
     -- Draw player arrow on full map
     if arrowTexture then
-        local playerMapX = mapX + playerUVX * mapDisplaySize
-        local playerMapY = mapY + playerUVY * mapDisplaySize
+        local pMapX = mapX + playerUVX * mapDisplaySize
+        local pMapY = mapY + playerUVY * mapDisplaySize
         local headingRad = -math.rad(cachedHeading)
-        local arrowSz = 28
-        local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1))
-        drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
+        drawRotatedImage(wdl, arrowTexture, pMapX, pMapY, 28, headingRad,
+            imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)))
     end
 
-    -- Handle drag (touch hold and move)
-    if imgui.IsMouseDown(0) then
-        if not fullMapDragging then
-            fullMapDragging = true
-            fullMapLastX = mx
-            fullMapLastY = my
-        else
-            local dx = mx - fullMapLastX
-            local dy = my - fullMapLastY
-            fullMapOffsetX = fullMapOffsetX + dx
-            fullMapOffsetY = fullMapOffsetY + dy
-            fullMapLastX = mx
-            fullMapLastY = my
-        end
-    else
-        fullMapDragging = false
+    -- Drag: use ImGui native drag detection (inside window)
+    if imgui.IsWindowHovered() and imgui.IsMouseDragging(0, 3.0) then
+        local delta = imgui.GetMouseDragDelta(0, 3.0)
+        fullMapOffsetX = fullMapOffsetX + delta.x
+        fullMapOffsetY = fullMapOffsetY + delta.y
+        imgui.ResetMouseDragDelta(0)
     end
-    
-    -- Clamp drag so map edge stays visible on screen
+
+    -- Clamp drag
     local maxOffsetX = math.max(0, (mapDisplaySize - sw) / 2 + sw / 2)
     local maxOffsetY = math.max(0, (mapDisplaySize - sh) / 2 + sh / 2)
     fullMapOffsetX = clamp(fullMapOffsetX, -maxOffsetX, maxOffsetX)
     fullMapOffsetY = clamp(fullMapOffsetY, -maxOffsetY, maxOffsetY)
 
-    -- Zoom controls (draw +/- buttons)
-    local btnSize = 50
-    local zoomInPos = imgui.ImVec2(sw - btnSize - 20, sh / 2 - btnSize - 10)
-    local zoomOutPos = imgui.ImVec2(sw - btnSize - 20, sh / 2 + 10)
-
-    -- Zoom In button
-    draw_list:AddRectFilled(zoomInPos, imgui.ImVec2(zoomInPos.x + btnSize, zoomInPos.y + btnSize),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.2, 0.2, 0.3, 0.9)), 8)
-    local plusSize = imgui.CalcTextSize("+")
-    draw_list:AddText(imgui.ImVec2(zoomInPos.x + (btnSize - plusSize.x) / 2, zoomInPos.y + (btnSize - plusSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "+")
-
-    -- Zoom Out button
-    draw_list:AddRectFilled(zoomOutPos, imgui.ImVec2(zoomOutPos.x + btnSize, zoomOutPos.y + btnSize),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.2, 0.2, 0.3, 0.9)), 8)
-    local minusSize = imgui.CalcTextSize("-")
-    draw_list:AddText(imgui.ImVec2(zoomOutPos.x + (btnSize - minusSize.x) / 2, zoomOutPos.y + (btnSize - minusSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "-")
-
-    -- Close button (top-right)
-    local closeBtnPos = imgui.ImVec2(sw - btnSize - 20, 20)
-    draw_list:AddRectFilled(closeBtnPos, imgui.ImVec2(closeBtnPos.x + btnSize, closeBtnPos.y + btnSize),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.6, 0.1, 0.1, 0.9)), 8)
-    local xSize = imgui.CalcTextSize("X")
-    draw_list:AddText(imgui.ImVec2(closeBtnPos.x + (btnSize - xSize.x) / 2, closeBtnPos.y + (btnSize - xSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "X")
-
-    -- Handle tap for buttons (X button and zoom only)
-    local mapCooldown = (os.clock() - fullMapOpenTime) > 0.3
-    if imgui.IsMouseClicked(0) and mapCooldown then
-        -- Zoom In
-        if mx >= zoomInPos.x and mx <= zoomInPos.x + btnSize and my >= zoomInPos.y and my <= zoomInPos.y + btnSize then
-            fullMapZoom = clamp(fullMapZoom + 0.3, 0.5, 5.0)
-            return
-        end
-        -- Zoom Out
-        if mx >= zoomOutPos.x and mx <= zoomOutPos.x + btnSize and my >= zoomOutPos.y and my <= zoomOutPos.y + btnSize then
-            fullMapZoom = clamp(fullMapZoom - 0.3, 0.5, 5.0)
-            return
-        end
-        -- Close button (X only)
-        if mx >= closeBtnPos.x and mx <= closeBtnPos.x + btnSize and my >= closeBtnPos.y and my <= closeBtnPos.y + btnSize then
-            fullMapMode = false
-            return
-        end
+    -- Zoom + Close buttons (ImGui native buttons)
+    local btnW, btnH = 60, 50
+    imgui.SetCursorPos(imgui.ImVec2(sw - btnW - 20, sh / 2 - btnH - 5))
+    if imgui.Button("+##zoom", imgui.ImVec2(btnW, btnH)) then
+        fullMapZoom = clamp(fullMapZoom + 0.3, 0.5, 5.0)
     end
+    imgui.SetCursorPos(imgui.ImVec2(sw - btnW - 20, sh / 2 + 5))
+    if imgui.Button("-##zoom", imgui.ImVec2(btnW, btnH)) then
+        fullMapZoom = clamp(fullMapZoom - 0.3, 0.5, 5.0)
+    end
+    imgui.SetCursorPos(imgui.ImVec2(sw - btnW - 20, 20))
+    if imgui.Button("X##close", imgui.ImVec2(btnW, btnH)) then
+        fullMapMode = false
+    end
+
+    imgui.End()
+    imgui.PopStyleColor()
 end
 
 -- ============================================================================
