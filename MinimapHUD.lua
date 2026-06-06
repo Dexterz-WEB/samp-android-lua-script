@@ -264,21 +264,7 @@ local function drawFullMap(draw_list)
             imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)))
     end
 
-    -- Drag: use ImGui native drag detection (inside window)
-    if imgui.IsWindowHovered() and imgui.IsMouseDragging(0, 3.0) then
-        local delta = imgui.GetMouseDragDelta(0, 3.0)
-        fullMapOffsetX = fullMapOffsetX + delta.x
-        fullMapOffsetY = fullMapOffsetY + delta.y
-        imgui.ResetMouseDragDelta(0)
-    end
-
-    -- Clamp drag
-    local maxOffsetX = math.max(0, (mapDisplaySize - sw) / 2 + sw / 2)
-    local maxOffsetY = math.max(0, (mapDisplaySize - sh) / 2 + sh / 2)
-    fullMapOffsetX = clamp(fullMapOffsetX, -maxOffsetX, maxOffsetX)
-    fullMapOffsetY = clamp(fullMapOffsetY, -maxOffsetY, maxOffsetY)
-
-    -- Zoom + Close buttons (ImGui native buttons)
+    -- Zoom +/- buttons (right side)
     local btnW, btnH = 60, 50
     imgui.SetCursorPos(imgui.ImVec2(sw - btnW - 20, sh / 2 - btnH - 5))
     if imgui.Button("+##zoom", imgui.ImVec2(btnW, btnH)) then
@@ -288,10 +274,54 @@ local function drawFullMap(draw_list)
     if imgui.Button("-##zoom", imgui.ImVec2(btnW, btnH)) then
         fullMapZoom = clamp(fullMapZoom - 0.3, 0.5, 5.0)
     end
+
+    -- Close X button (top-right)
     imgui.SetCursorPos(imgui.ImVec2(sw - btnW - 20, 20))
     if imgui.Button("X##close", imgui.ImVec2(btnW, btnH)) then
         fullMapMode = false
     end
+
+    -- D-pad directional buttons (left side)
+    local dpadX = 20
+    local dpadCenterY = sh / 2
+    local dpadBtnW, dpadBtnH = 50, 50
+
+    -- Up (^)
+    imgui.SetCursorPos(imgui.ImVec2(dpadX + dpadBtnW, dpadCenterY - dpadBtnH * 1.5))
+    if imgui.Button("^##up", imgui.ImVec2(dpadBtnW, dpadBtnH)) then
+        fullMapOffsetY = fullMapOffsetY + 50
+    end
+
+    -- Down (v)
+    imgui.SetCursorPos(imgui.ImVec2(dpadX + dpadBtnW, dpadCenterY + dpadBtnH * 0.5))
+    if imgui.Button("v##down", imgui.ImVec2(dpadBtnW, dpadBtnH)) then
+        fullMapOffsetY = fullMapOffsetY - 50
+    end
+
+    -- Left (<)
+    imgui.SetCursorPos(imgui.ImVec2(dpadX, dpadCenterY - dpadBtnH * 0.5))
+    if imgui.Button("<##left", imgui.ImVec2(dpadBtnW, dpadBtnH)) then
+        fullMapOffsetX = fullMapOffsetX + 50
+    end
+
+    -- Right (>)
+    imgui.SetCursorPos(imgui.ImVec2(dpadX + dpadBtnW * 2, dpadCenterY - dpadBtnH * 0.5))
+    if imgui.Button(">##right", imgui.ImVec2(dpadBtnW, dpadBtnH)) then
+        fullMapOffsetX = fullMapOffsetX - 50
+    end
+
+    -- Center (O) - reset offset
+    imgui.SetCursorPos(imgui.ImVec2(dpadX + dpadBtnW, dpadCenterY - dpadBtnH * 0.5))
+    if imgui.Button("O##center", imgui.ImVec2(dpadBtnW, dpadBtnH)) then
+        fullMapOffsetX = 0
+        fullMapOffsetY = 0
+    end
+
+    -- Clamp offsets
+    local maxOffsetX = math.max(0, (mapDisplaySize - sw) / 2 + sw / 2)
+    local maxOffsetY = math.max(0, (mapDisplaySize - sh) / 2 + sh / 2)
+    fullMapOffsetX = clamp(fullMapOffsetX, -maxOffsetX, maxOffsetX)
+    fullMapOffsetY = clamp(fullMapOffsetY, -maxOffsetY, maxOffsetY)
 
     imgui.End()
     imgui.PopStyleColor()
