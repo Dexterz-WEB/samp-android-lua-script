@@ -297,9 +297,9 @@ local function drawFullMap(draw_list)
         fullMapDragging = false
     end
     
-    -- Clamp drag so map edge stays visible on screen
-    local maxOffsetX = math.max(0, (mapDisplaySize - sw) / 2 + sw / 2)
-    local maxOffsetY = math.max(0, (mapDisplaySize - sh) / 2 + sh / 2)
+    -- Clamp drag so map doesn't go out of screen
+    local maxOffsetX = mapDisplaySize / 2
+    local maxOffsetY = mapDisplaySize / 2
     fullMapOffsetX = clamp(fullMapOffsetX, -maxOffsetX, maxOffsetX)
     fullMapOffsetY = clamp(fullMapOffsetY, -maxOffsetY, maxOffsetY)
 
