@@ -75,7 +75,7 @@ imgui.OnFrame(function() return showWindow[0] end, function()
     -- ========================================================================
     -- TAB CONTENT (scrollable child)
     -- ========================================================================
-    imgui.BeginChild("##tabcontent", imgui.ImVec2(-1, -50), true)
+    imgui.BeginChild("##tabcontent", imgui.ImVec2(-1, -50), true, imgui.WindowFlags.NoScrollbar)
 
     -- ====================================================================
     -- TAB 1: MAIN
