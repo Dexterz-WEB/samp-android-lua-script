@@ -399,6 +399,34 @@ local function drawMinimap(draw_list)
 
     draw_list:AddImageRounded(mapTexture, pMin, pMax, uvMin, uvMax, colorU32, radius, 15)
 
+    -- Draw GPS line on minimap
+    if gpsActive and #gpsCachedPath >= 2 then
+        local lineColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.7, 0.8 * opacity))
+        for i = 1, #gpsCachedPath - 1 do
+            local n0 = gpsCachedPath[i]
+            local n1 = gpsCachedPath[i + 1]
+            local uv0x, uv0y = worldToUV(n0.x, n0.y)
+            local uv1x, uv1y = worldToUV(n1.x, n1.y)
+            
+            -- Check if segment is within visible UV area
+            if (uv0x >= uvMinX and uv0x <= uvMaxX and uv0y >= uvMinY and uv0y <= uvMaxY) or
+               (uv1x >= uvMinX and uv1x <= uvMaxX and uv1y >= uvMinY and uv1y <= uvMaxY) then
+                -- Convert UV to screen position within minimap
+                local sx0 = posX + ((uv0x - uvMinX) / (uvMaxX - uvMinX)) * mapSize
+                local sy0 = posY + ((uv0y - uvMinY) / (uvMaxY - uvMinY)) * mapSize
+                local sx1 = posX + ((uv1x - uvMinX) / (uvMaxX - uvMinX)) * mapSize
+                local sy1 = posY + ((uv1y - uvMinY) / (uvMaxY - uvMinY)) * mapSize
+                
+                -- Simple clip: only draw if points roughly inside minimap circle
+                local d0 = math.sqrt((sx0 - centerX)^2 + (sy0 - centerY)^2)
+                local d1 = math.sqrt((sx1 - centerX)^2 + (sy1 - centerY)^2)
+                if d0 <= radius * 1.1 and d1 <= radius * 1.1 then
+                    draw_list:AddLine(imgui.ImVec2(sx0, sy0), imgui.ImVec2(sx1, sy1), lineColor, 2.0)
+                end
+            end
+        end
+    end
+
     -- Draw player arrow in center (rotated by heading)
     if arrowTexture then
         local headingRad = -math.rad(cachedHeading)
