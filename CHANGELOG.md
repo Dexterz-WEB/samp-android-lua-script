@@ -4,6 +4,53 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v1.4.0] - 2026-06-06
+
+### 🔄 Complete Rebuild - PieMenuDemo Structure
+
+#### ✨ Features
+- **Complete rewrite** using PieMenuDemo.lua structure
+- **Pie chart rendering** with angle-based hover detection
+- **Smooth animations** using ease library (outCubic/inCubic)
+- **FontAwesome icons** with text fallbacks
+- **Toast notifications** system
+- **Context-aware menus** (in vehicle vs on foot)
+- **Menu stack navigation** (main → categories → items)
+- **Profile system** with auto-detect (preserved from v1.3.0)
+
+#### 🎨 Visual Design (from PieMenuDemo.lua)
+- **Pie chart sectors**: Blue, Orange, Pink, Green
+- **Sector opacity**: 60% on hover, 20% normal
+- **Smooth animations**: 0.3s duration with easing
+- **Outer glow effect**: Blue pulsing glow
+- **Hamburger button**: Animated with pulse effect
+- **Modern styling**: All ImGui styling functions correct for MonetLoader
+
+#### 🏗️ Architecture
+- **Clean structure**: Based on working PieMenuDemo.lua
+- **Modular functions**: Separate rendering, navigation, and logic
+- **Menu stack system**: Proper back navigation
+- **Dynamic item loading**: Animations and vehicles from config
+- **Context detection**: Automatic in-vehicle vs on-foot menus
+
+#### 📝 Commands
+- `/rmenu` - Toggle pie menu
+- `/rcfg` - Open config window
+- All existing config preserved
+
+#### 🔧 Technical
+- **Angle-based detection**: `math.atan2()` for precise sector detection
+- **Arc rendering**: Quad-based with 20 segments per sector
+- **MonetLoader compatible**: All correct styling functions
+  - `PushStyleVarFloat()` ✅
+  - `PushStyleVarVec2()` ✅  
+  - `ColorConvertFloat4ToU32()` ✅
+  - `ImVec4()` ✅
+- **Performance**: Single angle calculation, no invisible buttons
+- **794 lines**: Clean, readable, maintainable
+
+---
+
 ## [v1.3.0] - 2026-06-06
 
 ### 🎨 Major Update - Modern UI & Visual Enhancements
