@@ -4,6 +4,83 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v1.3.0] - 2026-06-06
+
+### 🎨 Major Update - Modern UI & Visual Enhancements
+
+#### ✨ Added
+- **Ease Animations System**
+  - Smooth open/close transitions for all radial menus
+  - Uses cubic easing functions (outCubic for opening, inCubic for closing)
+  - 250ms animation duration with proper scaling
+  - Individual animation tracking per menu (main, category, animations, vehicles, context)
+  - Graceful fallback when ease library is not available
+
+- **FontAwesome Icons Support**
+  - Icon display above menu labels for better visual recognition
+  - Support for FontAwesome 6 icons (via fAwesome6 library)
+  - Text-based fallback icons when library not available
+  - Icons for main sectors (Vehicle, Anim, etc.)
+  - Icons for context commands (Lock, Engine, Lights, Trunk, Hood)
+  - Icon field added to configuration structure
+
+- **Toast Notifications System**
+  - Modern toast notifications for user feedback
+  - Uses Notifications library with graceful fallback to chat
+  - Notification types: OK (green), ERROR (red), INFO (blue), WARNING (orange)
+  - Notifications for: command execution, profile operations, config save, server mapping
+  - Configurable duration per notification
+
+- **Modern UI Styling**
+  - Rounded windows and buttons (8-10px window rounding, 4-5px frame rounding)
+  - Custom color scheme with dark blue theme
+  - Gradient title bars for windows and dialogs
+  - Custom padding and spacing for better readability
+  - Outer glow effect on radial menus
+  - Subtle border highlights on menu circles
+
+- **Pie Chart / Arc Rendering**
+  - Filled arc segments for sector highlighting
+  - Real-time hover detection on radial menu sectors
+  - Colored sector highlights (Blue, Orange, Pink, Green)
+  - Smooth quad-based triangulation for arc rendering
+  - Interactive hover feedback with 27% opacity overlays
+
+- **Safe Library Loading**
+  - Protected loading with pcall for optional libraries
+  - Prevents crashes when libraries are not installed
+  - Libraries: ease, fAwesome6, notifications
+  - Graceful degradation with fallback features
+
+#### 🔧 Changed
+- Radial menu rendering now supports hover effects
+- `drawRadialMenu()` function now returns both pressed and hovered sector
+- Profile loading/saving now uses notification system instead of direct chat
+- Config save operations now show toast notifications
+- Enhanced visual feedback for all user interactions
+
+#### ⚡ Optimized
+- Menu scale calculation with proper animation timing
+- Hover state tracking per menu for smooth interactions
+- Icon rendering with centered positioning
+- Arc segment rendering with configurable segment count
+
+#### 🎨 Visual Improvements
+- Config window: dark theme with rounded corners and gradient title
+- New Server Dialog: modern styling with 10px rounding
+- Radial menus: outer glow, subtle borders, and sector highlights
+- Buttons: rounded with hover states and active feedback
+- Icons: displayed above labels with proper spacing
+
+#### 📝 Technical Details
+- Animation state: `menuOpenTime`, `menuScale`, `menuHovered` tracking
+- Helper functions: `getEase()`, `clamp()`, `updateMenuAnimation()`
+- Icon system: `getIcon()`, `drawLabelWithIcon()`
+- Notification: `showNotification()` with type and duration support
+- Arc rendering: `drawFilledArc()`, `drawSectorHighlight()`
+
+---
+
 ## [v1.2.0] - 2026-06-04
 
 ### 🎉 Major Update - Profile System & Auto-detection
