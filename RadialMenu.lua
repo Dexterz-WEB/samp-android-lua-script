@@ -73,10 +73,22 @@ local defaultStructure = {
     CtxVeh2 = { name = "LOCK", onCmd = "/lock", offCmd = "/unlock" },
     CtxVeh3 = { name = "LIGHT", onCmd = "/lights", offCmd = "/lights" },
     CtxVeh4 = { name = "-", onCmd = "", offCmd = "" },
+    CtxVeh5 = { name = "-", onCmd = "", offCmd = "" },
+    CtxVeh6 = { name = "-", onCmd = "", offCmd = "" },
+    CtxVeh7 = { name = "-", onCmd = "", offCmd = "" },
+    CtxVeh8 = { name = "-", onCmd = "", offCmd = "" },
+    CtxVeh9 = { name = "-", onCmd = "", offCmd = "" },
+    CtxVeh10 = { name = "-", onCmd = "", offCmd = "" },
     CtxFoot1 = { name = "LOCK", onCmd = "/lock", offCmd = "/unlock" },
     CtxFoot2 = { name = "TRUNK", onCmd = "/trunk", offCmd = "/trunk" },
     CtxFoot3 = { name = "HOOD", onCmd = "/hood", offCmd = "/hood" },
     CtxFoot4 = { name = "-", onCmd = "", offCmd = "" },
+    CtxFoot5 = { name = "-", onCmd = "", offCmd = "" },
+    CtxFoot6 = { name = "-", onCmd = "", offCmd = "" },
+    CtxFoot7 = { name = "-", onCmd = "", offCmd = "" },
+    CtxFoot8 = { name = "-", onCmd = "", offCmd = "" },
+    CtxFoot9 = { name = "-", onCmd = "", offCmd = "" },
+    CtxFoot10 = { name = "-", onCmd = "", offCmd = "" },
     Sector1 = { name = "VEHICLE", cmd = "" },
     Sector2 = { name = "-",       cmd = "" },
     Sector3 = { name = "ANIM",    cmd = "" },
@@ -197,7 +209,7 @@ end
 
 -- Context Vehicle Command Buffers
 local ctxVehName, ctxVehOn, ctxVehOff = {}, {}, {}
-for i = 1, 4 do
+for i = 1, 10 do
     local s = iniData["CtxVeh"..i] or { name = "", onCmd = "", offCmd = "" }
     ctxVehName[i] = imgui.new.char[32](s.name or "")
     ctxVehOn[i] = imgui.new.char[64](s.onCmd or "")
@@ -206,7 +218,7 @@ end
 
 -- Context Foot Command Buffers
 local ctxFootName, ctxFootOn, ctxFootOff = {}, {}, {}
-for i = 1, 4 do
+for i = 1, 10 do
     local s = iniData["CtxFoot"..i] or { name = "", onCmd = "", offCmd = "" }
     ctxFootName[i] = imgui.new.char[32](s.name or "")
     ctxFootOn[i] = imgui.new.char[64](s.onCmd or "")
@@ -421,7 +433,7 @@ function reloadEditBuffers()
         for j = 1, #(s.cmd or "") do vehEditCmd[i][j-1] = string.byte(s.cmd, j) end
         for j = 1, #(s.category or "") do vehEditCategory[i][j-1] = string.byte(s.category, j) end
     end
-    for i = 1, 4 do
+    for i = 1, 10 do
         local s = iniData["CtxVeh"..i] or { name = "", onCmd = "", offCmd = "" }
         for j = 0, 31 do ctxVehName[i][j] = 0 end
         for j = 0, 63 do ctxVehOn[i][j] = 0; ctxVehOff[i][j] = 0 end
@@ -429,11 +441,10 @@ function reloadEditBuffers()
         for j = 1, #(s.onCmd or "") do ctxVehOn[i][j-1] = string.byte(s.onCmd, j) end
         for j = 1, #(s.offCmd or "") do ctxVehOff[i][j-1] = string.byte(s.offCmd, j) end
     end
-    for i = 1, 4 do
+    for i = 1, 10 do
         local s = iniData["CtxFoot"..i] or { name = "", onCmd = "", offCmd = "" }
         for j = 0, 31 do ctxFootName[i][j] = 0 end
         for j = 0, 63 do ctxFootOn[i][j] = 0; ctxFootOff[i][j] = 0 end
-
         for j = 1, #(s.name or "") do ctxFootName[i][j-1] = string.byte(s.name, j) end
         for j = 1, #(s.onCmd or "") do ctxFootOn[i][j-1] = string.byte(s.onCmd, j) end
         for j = 1, #(s.offCmd or "") do ctxFootOff[i][j-1] = string.byte(s.offCmd, j) end
@@ -507,7 +518,7 @@ function totalVehPages() return math.max(1, math.ceil(#vehRadialList / 4)) end
 -- ============================================================================
 function getOnFootCommands()
     local cmds = {}
-    for i = 1, 4 do
+    for i = 1, 10 do
         local s = iniData["CtxFoot"..i] or { name = "-", onCmd = "", offCmd = "" }
         cmds[i] = { name = s.name or "-", onCmd = s.onCmd or "", offCmd = s.offCmd or "" }
     end
@@ -516,7 +527,7 @@ end
 
 function getInVehicleCommands()
     local cmds = {}
-    for i = 1, 4 do
+    for i = 1, 10 do
         local s = iniData["CtxVeh"..i] or { name = "-", onCmd = "", offCmd = "" }
         cmds[i] = { name = s.name or "-", onCmd = s.onCmd or "", offCmd = s.offCmd or "" }
     end
@@ -564,13 +575,13 @@ function saveAllConfig()
         iniData["Veh"..i].cmd = newCmd
         iniData["Veh"..i].category = newCat
     end
-    for i = 1, 4 do
+    for i = 1, 10 do
         if not iniData["CtxVeh"..i] then iniData["CtxVeh"..i] = {} end
         iniData["CtxVeh"..i].name = readCharBuffer(ctxVehName[i], 32)
         iniData["CtxVeh"..i].onCmd = readCharBuffer(ctxVehOn[i], 64)
         iniData["CtxVeh"..i].offCmd = readCharBuffer(ctxVehOff[i], 64)
     end
-    for i = 1, 4 do
+    for i = 1, 10 do
         if not iniData["CtxFoot"..i] then iniData["CtxFoot"..i] = {} end
         iniData["CtxFoot"..i].name = readCharBuffer(ctxFootName[i], 32)
         iniData["CtxFoot"..i].onCmd = readCharBuffer(ctxFootOn[i], 64)
@@ -980,7 +991,7 @@ function main()
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "ON Cmd"); imgui.SameLine(310)
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "OFF Cmd")
                 imgui.Separator(); imgui.Spacing()
-                for i = 1, 4 do
+                for i = 1, 10 do
                     imgui.PushItemWidth(100); imgui.InputText("##vn"..i, ctxVehName[i], 32); imgui.PopItemWidth()
                     imgui.SameLine(130)
                     imgui.PushItemWidth(150); imgui.InputText("##vo"..i, ctxVehOn[i], 64); imgui.PopItemWidth()
@@ -994,7 +1005,7 @@ function main()
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "ON Cmd"); imgui.SameLine(310)
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "OFF Cmd")
                 imgui.Separator(); imgui.Spacing()
-                for i = 1, 4 do
+                for i = 1, 10 do
                     imgui.PushItemWidth(100); imgui.InputText("##fn"..i, ctxFootName[i], 32); imgui.PopItemWidth()
                     imgui.SameLine(130)
                     imgui.PushItemWidth(150); imgui.InputText("##fo"..i, ctxFootOn[i], 64); imgui.PopItemWidth()
@@ -1002,7 +1013,7 @@ function main()
                     imgui.PushItemWidth(-1); imgui.InputText("##ff"..i, ctxFootOff[i], 64); imgui.PopItemWidth()
                 end
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.4, 1), "VEHICLE SLOTS (21 items)")
+                imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.4, 1), "VEHICLE COMMANDS")
                 imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Label"); imgui.SameLine(260)
@@ -1010,8 +1021,6 @@ function main()
                 imgui.Separator(); imgui.Spacing()
                 imgui.BeginChild("##vehscroll", imgui.ImVec2(-1, -50), true)
                 for i = 1, MAX_VEH_SLOTS do
-                    imgui.Text(string.format("%2d|", i))
-                    imgui.SameLine(40)
                     imgui.PushItemWidth(100); imgui.InputText("##vc"..i, vehEditCategory[i], 32); imgui.PopItemWidth()
                     imgui.SameLine(130)
                     imgui.PushItemWidth(100); imgui.InputText("##vl"..i, vehEditLabel[i], 64); imgui.PopItemWidth()
