@@ -4,6 +4,100 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v2.0.0] - 2026-06-06
+
+### 🎉 MAJOR REDESIGN - PIE CHART RENDERING
+
+#### ✨ Added - New Rendering System
+- **Pie Chart / Circular Sector Rendering** (from PieMenuDemo.lua)
+  - Smooth circular sectors with gradient fills
+  - Angle-based sector detection (no more invisible buttons)
+  - 64-segment circles for smooth edges
+  - 20-segment arc fills per sector
+  - Animated sector highlighting on hover
+  - Sector divider lines with transparency
+
+- **Ease Animations** (optional ease.lua library)
+  - `outCubic` easing for menu opening
+  - `inCubic` easing for menu closing
+  - Smooth scale transitions (0.3s duration)
+  - Fallback to linear animation if ease library not found
+
+- **FontAwesome 6 Icons Support** (optional fAwesome6.lua)
+  - XMARK icon for close button in center
+  - Fallback to "X" text if library not found
+  - Ready for sector icon support in future updates
+
+- **Modern Config Window Redesign** (from ConfigWindowRedesign.lua)
+  - Adaptive window sizing per tab (250-400px height)
+  - Clean modern styling with rounded corners
+  - Correct MonetLoader mimgui functions:
+    - `PushStyleVarFloat()` - for float style vars
+    - `PushStyleVarVec2()` - for Vec2 style vars
+    - `PushStyleColor()` - for colors (NO per-tab switching)
+  - Compact tab buttons (4 tabs fit cleanly)
+  - Improved spacing and visual hierarchy
+
+#### 🔧 Changed - Core Rendering
+- **Replaced old radial menu rendering**
+  - Old: Square invisible button zones + DrawList decorations
+  - New: True circular pie chart with angle detection
+  - Better touch accuracy on Android
+  - More intuitive visual feedback
+
+- **Menu overlay system**
+  - Full-screen dark overlay (40% opacity * scale)
+  - Smooth fade in/out with animations
+  - Better visual separation from game
+
+- **Hamburger button improvements**
+  - Pulse animation with sine wave
+  - Outer glow effect (animated radius)
+  - 3-line icon (white, clean design)
+  - Better visibility on all backgrounds
+
+#### ⚡ Performance Optimizations
+- Cached commonly used values in rendering
+- Reduced draw calls per frame
+- Efficient sector detection algorithm
+- Animation scale clamping (skip render if scale < 0.01)
+
+#### 🐛 Fixed - MonetLoader Compatibility
+- **CRITICAL FIX: Correct style functions**
+  - Changed `PushStyleVar()` to `PushStyleVarFloat()` and `PushStyleVarVec2()`
+  - Prevents crashes on MonetLoader Android
+  - Removed per-tab color switching (crash issue)
+  - Applied same styling to all tabs safely
+
+- **Animation timing fixes**
+  - Proper `os.clock()` usage for animations
+  - Smooth transitions between menu levels
+  - No animation glitches or stuttering
+
+#### 📦 Dependencies (All Optional)
+- `mimgui` - Required (base library)
+- `inicfg` - Required (config storage)
+- `ease` - Optional (smooth animations, fallback to linear)
+- `fAwesome6` - Optional (icons, fallback to text)
+
+#### 🔄 Preserved Features
+- ✅ All existing logic from v1.2.0
+- ✅ Profile system (unlimited profiles, server auto-detect)
+- ✅ Context detection (in-vehicle vs on-foot)
+- ✅ ON/OFF toggle system with state memory
+- ✅ CtxVeh and CtxFoot commands
+- ✅ Animation & vehicle management (21 slots each)
+- ✅ Category-based organization
+- ✅ Pagination support
+- ✅ Auto-close on dialog active
+
+#### 📝 Technical Notes
+- Tested and confirmed working on MonetLoader Android
+- PieMenuDemo.lua and ConfigWindowRedesign.lua remain in testing/ folder as reference
+- Compatible with all existing config files (RadialMenuConfig.ini, RadialMenuProfiles.ini)
+
+---
+
 ## [v1.2.0] - 2026-06-04
 
 ### 🎉 Major Update - Profile System & Auto-detection
