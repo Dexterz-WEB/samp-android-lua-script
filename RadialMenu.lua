@@ -760,6 +760,27 @@ function main()
         end
     end)
     
+    -- DEBUG COMMAND: Check animation config
+    sampRegisterChatCommand("animdebug", function()
+        sampAddChatMessage("{00FFFF}=== ANIMATION DEBUG ==={FFFFFF}", -1)
+        sampAddChatMessage("{FFFF00}Categories:{FFFFFF}", -1)
+        for i = 1, 4 do
+            local catName = iniData["CatSector"..i].name or ""
+            sampAddChatMessage(string.format("  Cat%d: '%s'", i, catName), -1)
+        end
+        sampAddChatMessage("{FFFF00}Animation Slots:{FFFFFF}", -1)
+        local count = 0
+        for i = 1, MAX_ANIM_SLOTS do
+            local e = iniData["Anim"..i]
+            if e and e.label ~= "" and e.category ~= "" then
+                count = count + 1
+                sampAddChatMessage(string.format("  Anim%d: Cat='%s' Lbl='%s' Cmd='%s'", i, e.category, e.label, e.cmd), -1)
+            end
+        end
+        sampAddChatMessage(string.format("{00FF00}Total valid anims: %d{FFFFFF}", count), -1)
+        sampAddChatMessage(string.format("{00FF00}animList size: %d{FFFFFF}", #animList), -1)
+    end)
+    
     sampRegisterChatCommand("rprofile", function(param)
         local args = {}
         for word in param:gmatch("%S+") do table.insert(args, word) end
