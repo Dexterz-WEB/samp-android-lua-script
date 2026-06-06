@@ -276,8 +276,9 @@ local function drawFullMap(draw_list)
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
     end
 
-    -- Handle drag (touch hold and move)
-    if imgui.IsMouseDown(0) then
+    -- Handle drag (only when zoomed in - map larger than screen)
+    local canDrag = mapDisplaySize > math.min(sw, sh)
+    if canDrag and imgui.IsMouseDown(0) then
         if not fullMapDragging then
             fullMapDragging = true
             fullMapLastX = mx
@@ -292,6 +293,11 @@ local function drawFullMap(draw_list)
         end
     else
         fullMapDragging = false
+        -- Reset offset when zoomed out (can't drag)
+        if not canDrag then
+            fullMapOffsetX = 0
+            fullMapOffsetY = 0
+        end
     end
 
     -- Zoom controls (draw +/- buttons)
