@@ -232,6 +232,11 @@ end
 local function saveAllConfig()
     -- Wrap in pcall to catch errors
     local success, err = pcall(function()
+        -- Ensure ButtonSettings exists
+        if not iniData.ButtonSettings then 
+            iniData.ButtonSettings = {}
+        end
+        
         -- Save button position
         iniData.ButtonSettings.posX = btnX[0]
         iniData.ButtonSettings.posY = btnY[0]
@@ -240,36 +245,61 @@ local function saveAllConfig()
         
         -- Save context vehicle commands
         for i = 1, 4 do
-            if not iniData["CtxVeh"..i] then iniData["CtxVeh"..i] = {} end
-            iniData["CtxVeh"..i].name = readCharBuffer(ctxVehName[i], 32)
-            iniData["CtxVeh"..i].onCmd = readCharBuffer(ctxVehOn[i], 64)
-            iniData["CtxVeh"..i].offCmd = readCharBuffer(ctxVehOff[i], 64)
+            local key = "CtxVeh"..i
+            if not iniData[key] then iniData[key] = {} end
+            local name = readCharBuffer(ctxVehName[i], 32)
+            local onCmd = readCharBuffer(ctxVehOn[i], 64)
+            local offCmd = readCharBuffer(ctxVehOff[i], 64)
+            
+            -- Ensure we have string values, not nil
+            iniData[key].name = name ~= "" and name or "-"
+            iniData[key].onCmd = onCmd or ""
+            iniData[key].offCmd = offCmd or ""
+            iniData[key].icon = iniData[key].icon or "" -- Preserve existing icon
         end
         
         -- Save context foot commands
         for i = 1, 4 do
-            if not iniData["CtxFoot"..i] then iniData["CtxFoot"..i] = {} end
-            iniData["CtxFoot"..i].name = readCharBuffer(ctxFootName[i], 32)
-            iniData["CtxFoot"..i].onCmd = readCharBuffer(ctxFootOn[i], 64)
-            iniData["CtxFoot"..i].offCmd = readCharBuffer(ctxFootOff[i], 64)
+            local key = "CtxFoot"..i
+            if not iniData[key] then iniData[key] = {} end
+            local name = readCharBuffer(ctxFootName[i], 32)
+            local onCmd = readCharBuffer(ctxFootOn[i], 64)
+            local offCmd = readCharBuffer(ctxFootOff[i], 64)
+            
+            iniData[key].name = name ~= "" and name or "-"
+            iniData[key].onCmd = onCmd or ""
+            iniData[key].offCmd = offCmd or ""
+            iniData[key].icon = iniData[key].icon or ""
         end
         
-        -- Save animations (first 8 slots)
+        -- Save animations (first 8 slots only)
         for i = 1, 8 do
-            if not iniData["Anim"..i] then iniData["Anim"..i] = {} end
-            iniData["Anim"..i].category = readCharBuffer(animCat[i], 32)
-            iniData["Anim"..i].cmd = readCharBuffer(animCmd[i], 128)
-            iniData["Anim"..i].label = readCharBuffer(animLbl[i], 64)
+            local key = "Anim"..i
+            if not iniData[key] then iniData[key] = {} end
+            local category = readCharBuffer(animCat[i], 32)
+            local cmd = readCharBuffer(animCmd[i], 128)
+            local label = readCharBuffer(animLbl[i], 64)
+            
+            iniData[key].category = category or ""
+            iniData[key].cmd = cmd or ""
+            iniData[key].label = label or ""
         end
         
-        -- Save to file
-        if not inicfg.save(iniData, iniFileName) then
-            error("inicfg.save failed")
+        -- Try to save
+        local saveSuccess = inicfg.save(iniData, iniFileName)
+        if not saveSuccess then
+            error("inicfg.save returned false")
         end
         
-        -- Rebuild lists
-        rebuildAnimList()
-        rebuildVehList()
+        -- Rebuild lists (wrapped in pcall too)
+        local rebuildSuccess, rebuildErr = pcall(function()
+            rebuildAnimList()
+            rebuildVehList()
+        end)
+        
+        if not rebuildSuccess then
+            sampAddChatMessage("{FFAA00}[RadialMenu] Warning: rebuild lists failed: " .. tostring(rebuildErr), -1)
+        end
     end)
     
     if success then
@@ -279,6 +309,7 @@ local function saveAllConfig()
         local errMsg = tostring(err)
         showNotification("Save failed: " .. errMsg, notif_loaded and Notifications.TYPE.ERROR, 5)
         sampAddChatMessage("{FF0000}[RadialMenu] Save error: " .. errMsg, -1)
+        sampAddChatMessage("{FFAA00}[RadialMenu] Tip: Check moonloader.log for details", -1)
         return false
     end
 end
