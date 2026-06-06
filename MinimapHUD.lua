@@ -67,6 +67,7 @@ local fullMapZoom = 1.0
 local fullMapDragging = false
 local fullMapLastX = 0
 local fullMapLastY = 0
+local fullMapOpenTime = 0
 
 -- Pinch zoom state
 local fullMapPinching = false
@@ -213,6 +214,7 @@ local function drawMinimap(draw_list)
             fullMapOffsetY = 0
             fullMapZoom = 1.0
             fullMapDragging = false
+            fullMapOpenTime = os.clock()
         end
     end
 end
@@ -320,7 +322,8 @@ local function drawFullMap(draw_list)
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "X")
 
     -- Handle tap for zoom buttons and close (only if not dragging)
-    if imgui.IsMouseClicked(0) and not dragged then
+    local mapCooldown = (os.clock() - fullMapOpenTime) > 0.3
+    if imgui.IsMouseClicked(0) and not dragged and mapCooldown then
         -- Zoom In
         if mx >= zoomInPos.x and mx <= zoomInPos.x + btnSize and my >= zoomInPos.y and my <= zoomInPos.y + btnSize then
             fullMapZoom = clamp(fullMapZoom + 0.3, 0.5, 5.0)
@@ -339,7 +342,7 @@ local function drawFullMap(draw_list)
     end
     
     -- Tap outside map to close (only on mouse release, and only if not dragged)
-    if imgui.IsMouseReleased(0) and not dragged then
+    if imgui.IsMouseReleased(0) and not dragged and mapCooldown then
         if not (mx >= mapX and mx <= mapX + mapDisplaySize and my >= mapY and my <= mapY + mapDisplaySize) then
             fullMapMode = false
             return
