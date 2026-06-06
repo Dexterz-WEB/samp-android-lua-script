@@ -8,93 +8,158 @@ All notable changes to this project will be documented in this file.
 
 ### 🎉 MAJOR REDESIGN - PIE CHART RENDERING
 
+Complete visual and technical overhaul with modern circular pie menu rendering, smooth animations, icon support, and adaptive config UI. This version merges proven rendering from PieMenuDemo.lua and modern config window from ConfigWindowRedesign.lua while preserving all existing functionality.
+
 #### ✨ Added - New Rendering System
 - **Pie Chart / Circular Sector Rendering** (from PieMenuDemo.lua)
-  - Smooth circular sectors with gradient fills
-  - Angle-based sector detection (no more invisible buttons)
-  - 64-segment circles for smooth edges
-  - 20-segment arc fills per sector
-  - Animated sector highlighting on hover
-  - Sector divider lines with transparency
+  - True circular sectors rendered as filled arc segments (20 segments per sector)
+  - Angle-based sector detection using `math.atan2()` for precise touch/click detection
+  - 64-segment circles for smooth outer rings and backgrounds
+  - Animated sector highlighting on hover (opacity changes based on hover state)
+  - Sector divider lines with subtle transparency for visual separation
+  - Full-screen dark overlay (40% opacity) with smooth fade in/out
 
 - **Ease Animations** (optional ease.lua library)
-  - `outCubic` easing for menu opening
-  - `inCubic` easing for menu closing
-  - Smooth scale transitions (0.3s duration)
-  - Fallback to linear animation if ease library not found
+  - `outCubic` easing for menu opening (accelerating start, smooth end)
+  - `inCubic` easing for menu closing (smooth start, accelerating end)
+  - 300ms animation duration for all transitions
+  - Linear fallback if ease library not found (graceful degradation)
+  - Animation scale clamping (skip render if scale < 0.01 for performance)
 
 - **FontAwesome 6 Icons Support** (optional fAwesome6.lua)
-  - XMARK icon for close button in center
-  - Fallback to "X" text if library not found
-  - Ready for sector icon support in future updates
+  - XMARK icon (`faicons('XMARK')`) for center close button
+  - Clean fallback to "X" text if fAwesome6 library not found
+  - All icon rendering wrapped in pcall for safety
+  - Ready for future sector-specific icon expansion
 
 - **Modern Config Window Redesign** (from ConfigWindowRedesign.lua)
-  - Adaptive window sizing per tab (250-400px height)
-  - Clean modern styling with rounded corners
+  - Adaptive window height per tab:
+    - Tab 1 (MAIN): 250px - hamburger button settings
+    - Tab 2 (ANIM): 380px - 8 visible animation rows
+    - Tab 3 (VEH): 400px - IN-VEHICLE + ON-FOOT sections
+    - Tab 4 (PROF): 280px - profile management
+  - Clean modern styling with rounded corners (12px window, 6px frame)
   - Correct MonetLoader mimgui functions:
-    - `PushStyleVarFloat()` - for float style vars
-    - `PushStyleVarVec2()` - for Vec2 style vars
-    - `PushStyleColor()` - for colors (NO per-tab switching)
-  - Compact tab buttons (4 tabs fit cleanly)
-  - Improved spacing and visual hierarchy
+    - `PushStyleVarFloat()` - for single float style vars
+    - `PushStyleVarVec2()` - for ImVec2 style vars
+    - `PushStyleColor()` - applied ONCE before Begin, not per tab
+  - Compact tab buttons with active indicator ("> TAB_NAME <")
+  - Improved spacing (8px horizontal, 6px vertical)
+  - Dark theme (0.08, 0.08, 0.1) with subtle accent colors
+  - SAVE ALL button auto-closes window after saving
 
 #### 🔧 Changed - Core Rendering
-- **Replaced old radial menu rendering**
-  - Old: Square invisible button zones + DrawList decorations
-  - New: True circular pie chart with angle detection
-  - Better touch accuracy on Android
-  - More intuitive visual feedback
+- **Replaced old radial menu rendering completely**
+  - Old system: Square invisible button zones positioned on circle + DrawList decorations
+  - New system: True circular pie chart with mathematical angle detection
+  - Better touch accuracy on Android (no dead zones between sectors)
+  - More intuitive visual feedback (sectors light up on hover)
+  - Smoother animations (ease curves vs linear)
 
 - **Menu overlay system**
-  - Full-screen dark overlay (40% opacity * scale)
-  - Smooth fade in/out with animations
-  - Better visual separation from game
+  - Full-screen transparent overlay (0, 0) to (sw, sh)
+  - Dark background (0, 0, 0, 0.4 * scale) fades with menu animation
+  - Prevents game interaction while menu is open
+  - Smooth fade in/out synchronized with menu scale
 
 - **Hamburger button improvements**
-  - Pulse animation with sine wave
-  - Outer glow effect (animated radius)
-  - 3-line icon (white, clean design)
-  - Better visibility on all backgrounds
+  - Pulse animation using `math.sin(hamburgerPulse)` (continuous loop)
+  - Outer glow effect with animated radius (15% size variation)
+  - 3-line hamburger icon (80% width, 12% height lines, 25% spacing)
+  - Clean white color (0xFFFFFFFF) for maximum visibility
+  - Border and background with configurable opacity
+  - Optimized rendering (16 segments for glow, 32 for main circle)
+
+- **Center button (close/back)**
+  - FontAwesome XMARK icon or text fallback
+  - Hover effect (90% vs 60% opacity)
+  - Color indicates function: red for CLOSE, cyan for BACK
+  - 30px radius scaled with menu animation
 
 #### ⚡ Performance Optimizations
-- Cached commonly used values in rendering
-- Reduced draw calls per frame
-- Efficient sector detection algorithm
-- Animation scale clamping (skip render if scale < 0.01)
+- **Rendering optimizations**
+  - Cached commonly used calculations (centerX, centerY, halfSize values)
+  - Reduced redundant `imgui.CalcTextSize()` calls
+  - Efficient sector detection (single angle calculation per frame)
+  - Skip rendering when menuScale < 0.01
+  - Hamburger glow uses 16 segments instead of 64 (sufficient for blur effect)
+
+- **Animation efficiency**
+  - Single `os.clock()` call per frame
+  - Reuse menuScale across all menu levels
+  - Clamp values to [0, 1] to prevent overshoot calculations
+
+- **Draw call reduction**
+  - Combined quad fills for arc segments (20 quads per sector)
+  - Single AddCircleFilled for backgrounds
+  - Minimized AddText calls (one per label)
 
 #### 🐛 Fixed - MonetLoader Compatibility
 - **CRITICAL FIX: Correct style functions**
-  - Changed `PushStyleVar()` to `PushStyleVarFloat()` and `PushStyleVarVec2()`
-  - Prevents crashes on MonetLoader Android
-  - Removed per-tab color switching (crash issue)
-  - Applied same styling to all tabs safely
+  - Changed `imgui.PushStyleVar()` to `PushStyleVarFloat()` and `PushStyleVarVec2()`
+  - Prevents crashes on MonetLoader Android (PushStyleVar not supported)
+  - Removed per-tab `PushStyleColor()` switching (causes crash on rapid tab changes)
+  - Applied styling ONCE before window Begin, Pop after End
+  - All 5 color pushes and 4 var pushes properly balanced
 
 - **Animation timing fixes**
-  - Proper `os.clock()` usage for animations
-  - Smooth transitions between menu levels
-  - No animation glitches or stuttering
+  - Proper `os.clock()` usage instead of frame counting
+  - Smooth transitions between menu levels (each transition resets menuOpenTime)
+  - No animation glitches when rapidly opening/closing menus
+  - Scale calculation handles both opening and closing states correctly
 
-#### 📦 Dependencies (All Optional)
-- `mimgui` - Required (base library)
-- `inicfg` - Required (config storage)
-- `ease` - Optional (smooth animations, fallback to linear)
-- `fAwesome6` - Optional (icons, fallback to text)
+- **Config window stability**
+  - SAVE ALL button now auto-closes window (prevents state confusion)
+  - Tab switching no longer causes style stack imbalance
+  - Adaptive window size prevents content overflow
+  - All buffers properly sized (char[32], char[64], char[128])
 
-#### 🔄 Preserved Features
-- ✅ All existing logic from v1.2.0
-- ✅ Profile system (unlimited profiles, server auto-detect)
-- ✅ Context detection (in-vehicle vs on-foot)
-- ✅ ON/OFF toggle system with state memory
-- ✅ CtxVeh and CtxFoot commands
-- ✅ Animation & vehicle management (21 slots each)
-- ✅ Category-based organization
-- ✅ Pagination support
-- ✅ Auto-close on dialog active
+#### 📦 Dependencies (Safe Loading with pcall)
+- `mimgui` - Required (base UI library)
+- `inicfg` - Required (config file storage)
+- `ease` - Optional (smooth animations, fallback to linear if not found)
+- `fAwesome6` - Optional (icons, fallback to text if not found)
+- `notifications` - Optional (toast notifications, fallback to chat messages)
+
+All optional libraries wrapped in `pcall()` with feature flags (`ease_loaded`, `fa_loaded`, `notif_loaded`)
+
+#### 🔄 Preserved Features (100% Backward Compatible)
+- ✅ All existing logic from v1.2.0 maintained
+- ✅ Profile system (unlimited profiles, auto-save to separate .ini files)
+- ✅ Server auto-detection (maps IP to profile, auto-loads on connect)
+- ✅ Context detection (in-vehicle vs on-foot, different command sets)
+- ✅ ON/OFF toggle system with state memory (lock/unlock, open/close, on/off)
+- ✅ CtxVeh commands (4 slots for IN-VEHICLE context)
+- ✅ CtxFoot commands (4 slots for ON-FOOT context)
+- ✅ Animation management (21 slots, category-based, pagination)
+- ✅ Vehicle management (21 slots, category-based, pagination)
+- ✅ Category organization (4 anim categories, 4 vehicle categories)
+- ✅ Pagination support (4 items per page, NEXT/PREV navigation)
+- ✅ Auto-close on dialog active (prevents menu overlap with server dialogs)
+- ✅ Chat commands (`/rcmdf`, `/rprofile list/load/save/create/map/current`)
+- ✅ Config persistence (RadialMenuConfig.ini, RadialMenuProfiles.ini)
+
+#### 🎨 Visual Improvements
+- **Color-coded sectors** with configurable alpha (hover = 0.6, normal = 0.2)
+- **Smooth transitions** between all menu levels (main → context → sub-radial)
+- **Better label visibility** (0.9 opacity text on dark sectors)
+- **Title indicators** show current context ([MAIN], [QUICK VEH], [ANIM], etc.)
+- **Page indicators** for paginated menus ("Page 1/3")
+- **Disabled state visualization** (grey = 0x55FFFFFF, enabled = 0xFFFFFFFF)
+- **Hover feedback** (labels brighten, sectors lighten)
 
 #### 📝 Technical Notes
-- Tested and confirmed working on MonetLoader Android
-- PieMenuDemo.lua and ConfigWindowRedesign.lua remain in testing/ folder as reference
-- Compatible with all existing config files (RadialMenuConfig.ini, RadialMenuProfiles.ini)
+- **Tested on MonetLoader Android** - All rendering and animation confirmed working
+- **Reference files preserved** - PieMenuDemo.lua and ConfigWindowRedesign.lua remain in testing/ folder as documentation
+- **Config file compatibility** - All existing .ini files work without migration
+- **Safe library loading** - Script runs with or without optional libraries
+- **No breaking changes** - Drop-in replacement for v1.2.0
+
+#### 🔄 Migration Notes
+- **No action required** - Simply replace RadialMenu.lua with v2.0
+- **Optional libraries** - Install `ease.lua` and `fAwesome6.lua` for enhanced experience
+- **Existing configs** - All settings, profiles, and server mappings preserved
+- **Command changes** - None (all commands work identically)
 
 ---
 

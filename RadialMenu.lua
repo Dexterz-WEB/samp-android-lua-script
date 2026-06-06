@@ -1,9 +1,42 @@
 -- ============================================================================
--- SYSTEM DEPENDENCIES & INI CONFIG
+-- RADIAL MENU v2.0
+-- Modern pie chart rendering with animations, icons, and adaptive config UI
 -- ============================================================================
-local imgui  = require 'mimgui'
+
+script_name("Radial Menu")
+script_author("OnlyDexterZ")
+
+-- ============================================================================
+-- SAFE LIBRARY LOADING
+-- ============================================================================
+local imgui = require 'mimgui'
 local inicfg = require 'inicfg'
 
+local ease_loaded = false
+local ease = nil
+pcall(function()
+    ease = require 'ease'
+    ease_loaded = true
+end)
+
+local fa_loaded = false
+local faicons = nil
+pcall(function()
+    faicons = require 'fAwesome6'
+    fa_loaded = true
+end)
+
+local notif_loaded = false
+local Notifications = nil
+pcall(function()
+    require 'notifications'
+    Notifications = _G.Notifications
+    notif_loaded = true
+end)
+
+-- ============================================================================
+-- CONFIG FILES
+-- ============================================================================
 local iniFileName = "RadialMenuConfig.ini"
 local profilesFileName = "RadialMenuProfiles.ini"
 
@@ -19,6 +52,7 @@ local profilesData = inicfg.load({
 }, profilesFileName)
 
 if not profilesData then
+
     inicfg.save({
         Settings = { currentProfile = "default", autoDetectServer = true },
         ServerMapping = {},
@@ -30,7 +64,7 @@ local currentProfile = profilesData.Settings.currentProfile or "default"
 local autoDetectServer = profilesData.Settings.autoDetectServer or true
 
 -- ============================================================================
--- DEFAULT STRUCTURE: Configure via /rcmdf (single command with tabs)
+-- DEFAULT STRUCTURE
 -- ============================================================================
 local defaultStructure = {
     ButtonSettings = { posX = 1100.0, posY = 140.0 },
@@ -69,14 +103,22 @@ end
 -- ============================================================================
 -- STATE VARIABLES
 -- ============================================================================
+
 local showRadialMenu   = imgui.new.bool(false)
 local showConfigWindow = imgui.new.bool(false)
 local showCatRadial    = imgui.new.bool(false)
 local showAnimRadial   = imgui.new.bool(false)
 local showVehCatRadial = imgui.new.bool(false)
 local showVehRadial    = imgui.new.bool(false)
+local showContextVehRadial = imgui.new.bool(false)
+local showCtxSubRadial = imgui.new.bool(false)
 
--- Config Window Tab State (1=Main, 2=Anim, 3=Vehicle, 4=Profiles)
+-- Animation state
+local menuOpenTime = 0
+local menuScale = 0
+local activeMenu = nil  -- track which menu is open for animation
+
+-- Config Window Tab State
 local configTab = 1
 
 -- Profile Management
@@ -88,11 +130,7 @@ local currentServerName = ""
 
 -- New Server Detection Dialog
 local showNewServerDialog = imgui.new.bool(false)
-local newServerDetected = {
-    ip = "",
-    name = "",
-    suggestedProfileName = ""
-}
+local newServerDetected = { ip = "", name = "", suggestedProfileName = "" }
 local newProfileNameInput = imgui.new.char[64]("")
 
 local currentCategory    = ""
@@ -103,72 +141,13 @@ local vehRadialPage      = 1
 local vehRadialList      = {}
 
 -- Context-aware vehicle radial
-local showContextVehRadial = imgui.new.bool(false)
 local contextVehCommands = {}
 
 -- Context sub-radial (ON/OFF selection)
-local showCtxSubRadial = imgui.new.bool(false)
 local ctxSubRadialItem = { name = "", onCmd = "", offCmd = "" }
 
-local ON_FOOT_VEH_COMMANDS = {
-    { name = "LOCK", cmd = "/lock" },
-    { name = "UNLOCK", cmd = "/unlock" },
-    { name = "TRUNK", cmd = "/trunk" },
-    { name = "HOOD", cmd = "/hood" },
-}
-
--- Dynamic loader for on-foot context commands from config
-local function getOnFootCommands()
-    local cmds = {}
-    for i = 1, 4 do
-        local s = iniData["CtxFoot"..i] or { name = "-", onCmd = "", offCmd = "" }
-        cmds[i] = { name = s.name or "-", onCmd = s.onCmd or "", offCmd = s.offCmd or "" }
-    end
-    return cmds
-end
-local IN_VEHICLE_COMMANDS = {
-    { name = "ENGINE", cmd = "/engine" },
-    { name = "LIGHTS", cmd = "/lights" },
-    { name = "LOCK", cmd = "/lock" },
-    { name = "-", cmd = "" },
-}
-
--- Dynamic loader for in-vehicle context commands from config
-local function getInVehicleCommands()
-    local cmds = {}
-    for i = 1, 4 do
-        local s = iniData["CtxVeh"..i] or { name = "-", onCmd = "", offCmd = "" }
-        cmds[i] = { name = s.name or "-", onCmd = s.onCmd or "", offCmd = s.offCmd or "" }
-    end
-    return cmds
-end
-
--- toggle state: key=category (lower), true=ON/OPEN aktif, false/nil=OFF/CLOSE
+-- Toggle state tracking
 local toggleState = {}
-
--- Label yang dianggap tombol "ON" (aktifkan)
-local ON_LABELS  = { on=true, open=true, hidup=true, nyala=true, start=true, buka=true }
--- Label yang dianggap tombol "OFF" (nonaktifkan)
-local OFF_LABELS = { off=true, close=true, mati=true, stop=true, tutup=true }
-
-function isOnLabel(lbl)
-    if not lbl or lbl == "" then return false end
-    return ON_LABELS[lbl:lower()] == true
-end
-
-function isOffLabel(lbl)
-    if not lbl or lbl == "" then return false end
-    return OFF_LABELS[lbl:lower()] == true
-end
-
-function isDummySlot(slot)
-    if not slot then return true end
-    local lbl = slot.label or ""
-    local cmd = slot.cmd   or ""
-    return lbl == "" or lbl == "-" or cmd == ""
-end
-
-
 
 local btnSliderX = imgui.new.float(iniData.ButtonSettings.posX or 1100.0)
 local btnSliderY = imgui.new.float(iniData.ButtonSettings.posY or 140.0)
@@ -177,34 +156,22 @@ local btnSliderY = imgui.new.float(iniData.ButtonSettings.posY or 140.0)
 local hamburgerEnabled = imgui.new.bool(iniData.HamburgerButton and iniData.HamburgerButton.enabled or true)
 local hamburgerX = imgui.new.float(iniData.HamburgerButton and iniData.HamburgerButton.posX or 50.0)
 local hamburgerY = imgui.new.float(iniData.HamburgerButton and iniData.HamburgerButton.posY or 300.0)
+
 local hamburgerSize = imgui.new.float(iniData.HamburgerButton and iniData.HamburgerButton.size or 80.0)
 local hamburgerAlpha = imgui.new.float(iniData.HamburgerButton and iniData.HamburgerButton.alpha or 0.8)
-local hamburgerPulse = 0  -- Animation variable
+local hamburgerPulse = 0
 
-local editName = {
-    imgui.new.char[32](iniData.Sector1.name or "VEHICLE"),
-    imgui.new.char[32](iniData.Sector2.name or "HEAL"),
-    imgui.new.char[32](iniData.Sector3.name or "ANIM"),
-    imgui.new.char[32](iniData.Sector4.name or "LOCK"),
-}
-local editCmd = {
-    imgui.new.char[64](iniData.Sector1.cmd or ""),
-    imgui.new.char[64](iniData.Sector2.cmd or "/heal"),
-    imgui.new.char[64](iniData.Sector3.cmd or "/anim"),
-    imgui.new.char[64](iniData.Sector4.cmd or "/lock"),
-}
-local editCatName = {
-    imgui.new.char[32](iniData.CatSector1.name or "Dance"),
-    imgui.new.char[32](iniData.CatSector2.name or "Action"),
-    imgui.new.char[32](iniData.CatSector3.name or "Gangs"),
-    imgui.new.char[32](iniData.CatSector4.name or "Misc"),
-}
-local editVehCatName = {
-    imgui.new.char[32](iniData.VehCatSector1.name or "Car"),
-    imgui.new.char[32](iniData.VehCatSector2.name or "Bike"),
-    imgui.new.char[32](iniData.VehCatSector3.name or "Boat"),
-    imgui.new.char[32](iniData.VehCatSector4.name or "Air"),
-}
+-- Config edit buffers
+local editName = {}
+local editCmd = {}
+local editCatName = {}
+local editVehCatName = {}
+for i = 1, 4 do
+    editName[i] = imgui.new.char[32](iniData["Sector"..i].name or "")
+    editCmd[i] = imgui.new.char[64](iniData["Sector"..i].cmd or "")
+    editCatName[i] = imgui.new.char[32](iniData["CatSector"..i].name or "")
+    editVehCatName[i] = imgui.new.char[32](iniData["VehCatSector"..i].name or "")
+end
 
 local MAX_ANIM_SLOTS = 21
 local animEditLabel, animEditCmd, animEditCategory = {}, {}, {}
@@ -225,9 +192,7 @@ for i = 1, MAX_VEH_SLOTS do
 end
 
 -- Context Vehicle Command Buffers
-local ctxVehName = {}
-local ctxVehOn = {}
-local ctxVehOff = {}
+local ctxVehName, ctxVehOn, ctxVehOff = {}, {}, {}
 for i = 1, 4 do
     local s = iniData["CtxVeh"..i] or { name = "", onCmd = "", offCmd = "" }
     ctxVehName[i] = imgui.new.char[32](s.name or "")
@@ -236,9 +201,7 @@ for i = 1, 4 do
 end
 
 -- Context Foot Command Buffers
-local ctxFootName = {}
-local ctxFootOn = {}
-local ctxFootOff = {}
+local ctxFootName, ctxFootOn, ctxFootOff = {}, {}, {}
 for i = 1, 4 do
     local s = iniData["CtxFoot"..i] or { name = "", onCmd = "", offCmd = "" }
     ctxFootName[i] = imgui.new.char[32](s.name or "")
@@ -246,9 +209,23 @@ for i = 1, 4 do
     ctxFootOff[i] = imgui.new.char[64](s.offCmd or "")
 end
 
+
 -- ============================================================================
--- HELPERS
+-- HELPER FUNCTIONS
 -- ============================================================================
+local function getEase(easeFunc, x)
+    if ease_loaded and ease and ease[easeFunc] then
+        return ease[easeFunc](x)
+    end
+    return x  -- Fallback: linear
+end
+
+local function clamp(val, min, max)
+    if val < min then return min end
+    if val > max then return max end
+    return val
+end
+
 function readCharBuffer(buf, maxSize)
     local r = {}
     for i = 0, maxSize-1 do
@@ -259,91 +236,86 @@ function readCharBuffer(buf, maxSize)
     return table.concat(r)
 end
 
--- Profile Management Functions
+function closeAllRadial()
+    showRadialMenu[0]   = false
+    showCatRadial[0]    = false
+    showAnimRadial[0]   = false
+    showVehCatRadial[0] = false
+    showVehRadial[0]    = false
+    showContextVehRadial[0] = false
+    showCtxSubRadial[0] = false
+    menuOpenTime = os.clock()
+end
+
+function executeCommand(cmd)
+    if cmd and cmd ~= "" and type(cmd) == "string" then 
+        sampProcessChatInput(cmd)
+        return true
+    end
+    return false
+end
+
+-- ============================================================================
+-- PROFILE MANAGEMENT FUNCTIONS
+-- ============================================================================
 function getProfileFileName(profileName)
     return "RadialMenu_" .. profileName:gsub("[^%w_-]", "_") .. ".ini"
 end
 
 function sanitizeProfileName(serverName)
-    -- Convert server name to valid profile name
     local name = serverName
-    -- Remove special characters, keep alphanumeric, space, dash, underscore
     name = name:gsub("[^%w%s_-]", "")
-    -- Replace spaces with underscore
     name = name:gsub("%s+", "_")
-    -- Remove leading/trailing underscores
     name = name:gsub("^_+", ""):gsub("_+$", "")
-    -- Take only first 2 words
+
     local words = {}
     for word in name:gmatch("[^_%s]+") do
         table.insert(words, word)
         if #words >= 2 then break end
     end
-    if #words > 0 then
-        name = table.concat(words, "_")
-    end
-    -- Limit length
+    if #words > 0 then name = table.concat(words, "_") end
     if #name > 32 then name = name:sub(1, 32) end
-    -- If empty, use default
     if name == "" then name = "server_" .. os.time() end
     return name
 end
 
 function isServerMapped(serverIP)
     if not serverIP or serverIP == "" then return false end
-    local mapped = profilesData.ServerMapping[serverIP]
-    return mapped ~= nil and mapped ~= ""
+    return profilesData.ServerMapping[serverIP] ~= nil and profilesData.ServerMapping[serverIP] ~= ""
 end
 
 function showNewServerDetectionDialog(serverIP, serverName)
     newServerDetected.ip = serverIP
     newServerDetected.name = serverName
     newServerDetected.suggestedProfileName = sanitizeProfileName(serverName)
-    
-    -- Set input buffer
     local suggested = newServerDetected.suggestedProfileName
     for i = 0, 63 do newProfileNameInput[i] = 0 end
-    for i = 1, #suggested do
-        newProfileNameInput[i-1] = string.byte(suggested, i)
-    end
-    
+    for i = 1, #suggested do newProfileNameInput[i-1] = string.byte(suggested, i) end
     showNewServerDialog[0] = true
 end
 
 function loadProfile(profileName)
     if not profileName or profileName == "" then profileName = "default" end
-    
     local fileName = getProfileFileName(profileName)
     local data = inicfg.load(defaultStructure, fileName)
-    
     if not data then
-        -- Create new profile with default structure
         inicfg.save(defaultStructure, fileName)
         data = defaultStructure
     end
-    
-    -- Ensure all sections exist
     for k, v in pairs(defaultStructure) do
         if not data[k] then data[k] = v end
     end
-    
     iniData = data
     currentProfile = profileName
-    
-    -- Update profile settings
     profilesData.Settings.currentProfile = profileName
     inicfg.save(profilesData, profilesFileName)
-    
-    -- Reload edit buffers
     reloadEditBuffers()
-    
     sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile loaded: {FFFF00}" .. profileName, -1)
     return true
 end
 
 function saveProfile(profileName)
     if not profileName or profileName == "" then profileName = currentProfile end
-    
     local fileName = getProfileFileName(profileName)
     if inicfg.save(iniData, fileName) then
         sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile saved: {FFFF00}" .. profileName, -1)
@@ -352,8 +324,8 @@ function saveProfile(profileName)
     return false
 end
 
+
 function listProfiles()
-    -- This would require file system access, so we'll track in profiles data
     local profiles = {"default"}
     for k, v in pairs(profilesData.ServerMapping or {}) do
         if v and v ~= "" and v ~= "default" then
@@ -369,63 +341,49 @@ end
 
 function getServerInfo()
     if not sampIsLocalPlayerSpawned() then return nil, nil end
-    
     local ip, port = sampGetCurrentServerAddress()
     if ip and port then
-        local serverIP = ip .. ":" .. port
-        local serverName = sampGetCurrentServerName()
-        return serverIP, serverName
+        return ip .. ":" .. port, sampGetCurrentServerName()
     end
     return nil, nil
 end
 
 function autoLoadProfileForServer()
     if not autoDetectServer then return false end
-    
     local serverIP, serverName = getServerInfo()
     if not serverIP then return false end
-    
-    -- Check if we have a profile mapped for this server
     local mappedProfile = profilesData.ServerMapping[serverIP]
     if mappedProfile and mappedProfile ~= "" and mappedProfile ~= currentProfile then
         sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Auto-detected server: {FFFF00}" .. (serverName or serverIP), -1)
         return loadProfile(mappedProfile)
     elseif not mappedProfile or mappedProfile == "" then
-        -- New server detected, show dialog
         sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}New server detected!", -1)
         showNewServerDetectionDialog(serverIP, serverName or serverIP)
         return true
     end
-    
     return false
 end
 
 function mapServerToProfile(serverIP, profileName)
     if not serverIP or serverIP == "" then return false end
     if not profileName or profileName == "" then profileName = currentProfile end
-    
     profilesData.ServerMapping[serverIP] = profileName
     inicfg.save(profilesData, profilesFileName)
-    
     sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Server {FFFF00}" .. serverIP .. "{FFFFFF} mapped to profile: {FFFF00}" .. profileName, -1)
     return true
 end
 
 function reloadEditBuffers()
-    -- Reload button position
     btnSliderX[0] = iniData.ButtonSettings.posX or 1100.0
     btnSliderY[0] = iniData.ButtonSettings.posY or 140.0
-    
-    -- Reload hamburger button settings
     if iniData.HamburgerButton then
         hamburgerEnabled[0] = iniData.HamburgerButton.enabled or true
         hamburgerX[0] = iniData.HamburgerButton.posX or 50.0
         hamburgerY[0] = iniData.HamburgerButton.posY or 300.0
+
         hamburgerSize[0] = iniData.HamburgerButton.size or 80.0
         hamburgerAlpha[0] = iniData.HamburgerButton.alpha or 0.8
     end
-    
-    -- Reload sectors
     for i = 1, 4 do
         local name = iniData["Sector"..i].name or ""
         local cmd = iniData["Sector"..i].cmd or ""
@@ -434,8 +392,6 @@ function reloadEditBuffers()
         for j = 1, #name do editName[i][j-1] = string.byte(name, j) end
         for j = 1, #cmd do editCmd[i][j-1] = string.byte(cmd, j) end
     end
-    
-    -- Reload categories
     for i = 1, 4 do
         local catName = iniData["CatSector"..i].name or ""
         local vehCatName = iniData["VehCatSector"..i].name or ""
@@ -443,8 +399,6 @@ function reloadEditBuffers()
         for j = 1, #catName do editCatName[i][j-1] = string.byte(catName, j) end
         for j = 1, #vehCatName do editVehCatName[i][j-1] = string.byte(vehCatName, j) end
     end
-    
-    -- Reload anims
     for i = 1, MAX_ANIM_SLOTS do
         local s = iniData["Anim"..i] or { label="", cmd="", category="" }
         for j = 0, 63 do animEditLabel[i][j] = 0 end
@@ -454,8 +408,6 @@ function reloadEditBuffers()
         for j = 1, #(s.cmd or "") do animEditCmd[i][j-1] = string.byte(s.cmd, j) end
         for j = 1, #(s.category or "") do animEditCategory[i][j-1] = string.byte(s.category, j) end
     end
-    
-    -- Reload vehicles
     for i = 1, MAX_VEH_SLOTS do
         local s = iniData["Veh"..i] or { label="", cmd="", category="" }
         for j = 0, 63 do vehEditLabel[i][j] = 0 end
@@ -465,8 +417,6 @@ function reloadEditBuffers()
         for j = 1, #(s.cmd or "") do vehEditCmd[i][j-1] = string.byte(s.cmd, j) end
         for j = 1, #(s.category or "") do vehEditCategory[i][j-1] = string.byte(s.category, j) end
     end
-    
-    -- Reload context vehicle commands
     for i = 1, 4 do
         local s = iniData["CtxVeh"..i] or { name = "", onCmd = "", offCmd = "" }
         for j = 0, 31 do ctxVehName[i][j] = 0 end
@@ -475,21 +425,22 @@ function reloadEditBuffers()
         for j = 1, #(s.onCmd or "") do ctxVehOn[i][j-1] = string.byte(s.onCmd, j) end
         for j = 1, #(s.offCmd or "") do ctxVehOff[i][j-1] = string.byte(s.offCmd, j) end
     end
-    
-    -- Reload context foot commands
     for i = 1, 4 do
         local s = iniData["CtxFoot"..i] or { name = "", onCmd = "", offCmd = "" }
         for j = 0, 31 do ctxFootName[i][j] = 0 end
         for j = 0, 63 do ctxFootOn[i][j] = 0; ctxFootOff[i][j] = 0 end
+
         for j = 1, #(s.name or "") do ctxFootName[i][j-1] = string.byte(s.name, j) end
         for j = 1, #(s.onCmd or "") do ctxFootOn[i][j-1] = string.byte(s.onCmd, j) end
         for j = 1, #(s.offCmd or "") do ctxFootOff[i][j-1] = string.byte(s.offCmd, j) end
     end
-    
     rebuildAnimList()
     rebuildVehList()
 end
 
+-- ============================================================================
+-- ANIMATION & VEHICLE LIST FUNCTIONS
+-- ============================================================================
 local animList = {}
 function rebuildAnimList()
     animList = {}
@@ -538,6 +489,7 @@ function loadVehForCategory(cat)
     vehRadialPage = 1
 end
 
+
 function getVehPage(page)
     local s, r = (page-1)*4+1, {}
     for i = 0, 3 do r[i+1] = vehRadialList[s+i] end
@@ -546,236 +498,85 @@ end
 
 function totalVehPages() return math.max(1, math.ceil(#vehRadialList / 4)) end
 
--- Auto-layout: susun item ke posisi sektor berdasarkan jumlahnya
--- Return: table [1..4] berisi slot atau nil (spacer otomatis)
-function layoutVehPage(page)
-    local s = (page - 1) * 4 + 1
-    local items = {}
-    for i = 0, 3 do
-        local slot = vehRadialList[s + i]
-        if slot and not isDummySlot(slot) then
-            items[#items + 1] = slot
-        end
+-- ============================================================================
+-- CONTEXT DETECTION
+-- ============================================================================
+function getOnFootCommands()
+    local cmds = {}
+    for i = 1, 4 do
+        local s = iniData["CtxFoot"..i] or { name = "-", onCmd = "", offCmd = "" }
+        cmds[i] = { name = s.name or "-", onCmd = s.onCmd or "", offCmd = s.offCmd or "" }
     end
-
-    local count  = #items
-    local result = { nil, nil, nil, nil }  -- [1]=atas, [2]=kanan, [3]=bawah, [4]=kiri
-
-    if count == 1 then
-        result[1] = items[1]                        -- atas
-    elseif count == 2 then
-        result[1] = items[1]                        -- atas
-        result[3] = items[2]                        -- bawah
-    elseif count == 3 then
-        result[1] = items[1]                        -- atas
-        result[2] = items[2]                        -- kanan
-        result[3] = items[3]                        -- bawah
-    elseif count == 4 then
-        result[1] = items[1]                        -- atas
-        result[2] = items[2]                        -- kanan
-        result[3] = items[3]                        -- bawah
-        result[4] = items[4]                        -- kiri
-    end
-
-    return result
+    return cmds
 end
 
-function closeAllRadial()
-    showRadialMenu[0]   = false
-    showCatRadial[0]    = false
-    showAnimRadial[0]   = false
-    showVehCatRadial[0] = false
-    showVehRadial[0]    = false
-    showContextVehRadial[0] = false
-    showCtxSubRadial[0] = false
-end
-
-function executeCommand(cmd)
-    if cmd and cmd ~= "" and type(cmd) == "string" then 
-        sampProcessChatInput(cmd)
-        return true
+function getInVehicleCommands()
+    local cmds = {}
+    for i = 1, 4 do
+        local s = iniData["CtxVeh"..i] or { name = "-", onCmd = "", offCmd = "" }
+        cmds[i] = { name = s.name or "-", onCmd = s.onCmd or "", offCmd = s.offCmd or "" }
     end
-    return false
+    return cmds
 end
 
 -- ============================================================================
--- HAMBURGER BUTTON WIDGET
--- ============================================================================
-function drawHamburgerButton(draw_list)
-    local px = hamburgerX[0]
-    local py = hamburgerY[0]
-    local ps = hamburgerSize[0]
-    local pa = hamburgerAlpha[0]
-    
-    -- Update pulse animation
-    hamburgerPulse = (hamburgerPulse + 0.05) % (math.pi * 2)
-    local pulse = math.sin(hamburgerPulse) * 0.15 + 1.0
-    
-    -- Outer glow (animated pulse)
-    local radiusOuter = (ps/2) * pulse
-    local glowAlpha = math.floor(pa * 100 * (1.0 - (pulse - 1.0) * 3))
-    local glowColor = glowAlpha * 0x01000000 + 0x0044AAFF  -- Blue glow
-    
-    draw_list:AddCircleFilled(
-        imgui.ImVec2(px + ps/2, py + ps/2),
-        radiusOuter,
-        glowColor,
-        32
-    )
-    
-    -- Inner circle (main button)
-    local bgAlpha = math.floor(pa * 220)
-    local bgColor = bgAlpha * 0x01000000 + 0x00222222  -- Dark background
-    
-    draw_list:AddCircleFilled(
-        imgui.ImVec2(px + ps/2, py + ps/2),
-        ps/2,
-        bgColor,
-        32
-    )
-    
-    -- Border
-    local borderAlpha = math.floor(pa * 255)
-    local borderColor = borderAlpha * 0x01000000 + 0x0088DDFF  -- Light blue border
-    
-    draw_list:AddCircle(
-        imgui.ImVec2(px + ps/2, py + ps/2),
-        ps/2,
-        borderColor,
-        32,
-        3.0
-    )
-    
-    -- Hamburger menu icon (3 horizontal lines - WHITE)
-    local centerX = px + ps/2
-    local centerY = py + ps/2
-    local iconSize = ps * 0.4
-    local iconAlpha = math.floor(pa * 255)
-    local iconColor = iconAlpha * 0x01000000 + 0x00FFFFFF  -- White
-    
-    local lineWidth = iconSize * 0.8
-    local lineHeight = iconSize * 0.12
-    local lineSpacing = iconSize * 0.25
-    
-    -- Top line
-    draw_list:AddRectFilled(
-        imgui.ImVec2(centerX - lineWidth/2, centerY - lineSpacing - lineHeight/2),
-        imgui.ImVec2(centerX + lineWidth/2, centerY - lineSpacing + lineHeight/2),
-        iconColor,
-        lineHeight/2
-    )
-    
-    -- Middle line
-    draw_list:AddRectFilled(
-        imgui.ImVec2(centerX - lineWidth/2, centerY - lineHeight/2),
-        imgui.ImVec2(centerX + lineWidth/2, centerY + lineHeight/2),
-        iconColor,
-        lineHeight/2
-    )
-    
-    -- Bottom line
-    draw_list:AddRectFilled(
-        imgui.ImVec2(centerX - lineWidth/2, centerY + lineSpacing - lineHeight/2),
-        imgui.ImVec2(centerX + lineWidth/2, centerY + lineSpacing + lineHeight/2),
-        iconColor,
-        lineHeight/2
-    )
-    
-    -- Label below button
-    local label = "MENU"
-    local labelSize = imgui.CalcTextSize(label)
-    local labelAlpha = math.floor(pa * 200)
-    local labelColor = labelAlpha * 0x01000000 + 0x00AAAAAA
-    
-    draw_list:AddText(
-        imgui.ImVec2(px + ps/2 - labelSize.x/2, py + ps + 5),
-        labelColor,
-        label
-    )
-end
-
--- ============================================================================
--- SAVE
+-- SAVE CONFIG
 -- ============================================================================
 function saveAllConfig()
     iniData.ButtonSettings.posX = btnSliderX[0]
     iniData.ButtonSettings.posY = btnSliderY[0]
-    
-    -- Save hamburger button settings
     if not iniData.HamburgerButton then iniData.HamburgerButton = {} end
     iniData.HamburgerButton.enabled = hamburgerEnabled[0]
     iniData.HamburgerButton.posX = hamburgerX[0]
     iniData.HamburgerButton.posY = hamburgerY[0]
     iniData.HamburgerButton.size = hamburgerSize[0]
     iniData.HamburgerButton.alpha = hamburgerAlpha[0]
-    
-    -- Save sectors & categories
     for i = 1, 4 do
         iniData["Sector"..i].name       = readCharBuffer(editName[i], 32)
         iniData["Sector"..i].cmd        = readCharBuffer(editCmd[i], 64)
         iniData["CatSector"..i].name    = readCharBuffer(editCatName[i], 32)
         iniData["VehCatSector"..i].name = readCharBuffer(editVehCatName[i], 32)
     end
-    
-    -- Save animations (only rebuild if changed)
     local animChanged = false
     for i = 1, MAX_ANIM_SLOTS do
         if not iniData["Anim"..i] then iniData["Anim"..i] = {} end
         local newLabel = readCharBuffer(animEditLabel[i], 64)
         local newCmd = readCharBuffer(animEditCmd[i], 128)
         local newCat = readCharBuffer(animEditCategory[i], 32)
-        
-        if iniData["Anim"..i].label ~= newLabel or 
-           iniData["Anim"..i].cmd ~= newCmd or 
-           iniData["Anim"..i].category ~= newCat then
-            animChanged = true
-        end
-        
+        if iniData["Anim"..i].label ~= newLabel or iniData["Anim"..i].cmd ~= newCmd or iniData["Anim"..i].category ~= newCat then animChanged = true end
+
         iniData["Anim"..i].label = newLabel
         iniData["Anim"..i].cmd = newCmd
         iniData["Anim"..i].category = newCat
     end
-    
-    -- Save vehicles (only rebuild if changed)
     local vehChanged = false
     for i = 1, MAX_VEH_SLOTS do
         if not iniData["Veh"..i] then iniData["Veh"..i] = {} end
         local newLabel = readCharBuffer(vehEditLabel[i], 64)
         local newCmd = readCharBuffer(vehEditCmd[i], 128)
         local newCat = readCharBuffer(vehEditCategory[i], 32)
-        
-        if iniData["Veh"..i].label ~= newLabel or 
-           iniData["Veh"..i].cmd ~= newCmd or 
-           iniData["Veh"..i].category ~= newCat then
-            vehChanged = true
-        end
-        
+        if iniData["Veh"..i].label ~= newLabel or iniData["Veh"..i].cmd ~= newCmd or iniData["Veh"..i].category ~= newCat then vehChanged = true end
         iniData["Veh"..i].label = newLabel
         iniData["Veh"..i].cmd = newCmd
         iniData["Veh"..i].category = newCat
     end
-    
-    -- Save context vehicle commands
     for i = 1, 4 do
         if not iniData["CtxVeh"..i] then iniData["CtxVeh"..i] = {} end
         iniData["CtxVeh"..i].name = readCharBuffer(ctxVehName[i], 32)
         iniData["CtxVeh"..i].onCmd = readCharBuffer(ctxVehOn[i], 64)
         iniData["CtxVeh"..i].offCmd = readCharBuffer(ctxVehOff[i], 64)
     end
-    
-    -- Save context foot commands
     for i = 1, 4 do
         if not iniData["CtxFoot"..i] then iniData["CtxFoot"..i] = {} end
         iniData["CtxFoot"..i].name = readCharBuffer(ctxFootName[i], 32)
         iniData["CtxFoot"..i].onCmd = readCharBuffer(ctxFootOn[i], 64)
         iniData["CtxFoot"..i].offCmd = readCharBuffer(ctxFootOff[i], 64)
     end
-    
-    -- Save to file
     if inicfg.save(iniData, iniFileName) then
         if animChanged then rebuildAnimList() end
         if vehChanged then rebuildVehList() end
         sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Configuration saved!", -1)
+        showConfigWindow[0] = false
         return true
     else
         sampAddChatMessage("{FF0000}[Radial Menu] {FFFFFF}Failed to save config!", -1)
@@ -784,87 +585,155 @@ function saveAllConfig()
 end
 
 -- ============================================================================
--- SCREEN RESOLUTION CACHE
+-- PIE CHART RENDERING SYSTEM
 -- ============================================================================
-local cachedSW, cachedSH = 0, 0
-local screenCacheFrame = 0
-local SCREEN_CACHE_INTERVAL = 60  -- Update every 60 frames
-
--- ============================================================================
--- RENDER HELPER (outside OnFrame for performance)
--- ============================================================================
-local function renderWithScale(key, showFlag, cx, cy, menuSize)
-    if not showFlag or not showFlag[0] then return false end
-    imgui.SetNextWindowPos(imgui.ImVec2(cx - menuSize/2, cy - menuSize/2), imgui.Cond.Always)
-    imgui.SetNextWindowSize(imgui.ImVec2(menuSize, menuSize))
-    return true, 1
+function drawPieMenuBackground(draw_list, centerX, centerY, radius, scale)
+    local bgAlpha = 0.85 * scale
+    draw_list:AddCircleFilled(
+        imgui.ImVec2(centerX, centerY),
+        radius + 40,
+        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.08, 0.08, 0.12, bgAlpha)),
+        64
+    )
+    draw_list:AddCircle(
+        imgui.ImVec2(centerX, centerY),
+        radius + 42,
+        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.3, 0.6, 0.9, 0.5 * scale)),
+        64,
+        2
+    )
 end
 
--- ============================================================================
--- DRAW RADIAL — label auto-center & auto-wrap
--- ============================================================================
-local SECTOR_CENTERS = {
-    { x =   0, y = -92 },
-    { x =  92, y =   0 },
-    { x =   0, y =  92 },
-    { x = -92, y =   0 },
-}
 
-function drawLabelCentered(draw_list, text, cx, cy, color)
-    local maxW = 78
-    if not text or text == "" then text = "---"; color = 0x55FFFFFF end
-    local ts = imgui.CalcTextSize(text)
-    if ts.x <= maxW then
-        draw_list:AddText(imgui.ImVec2(cx - ts.x * 0.5, cy - ts.y * 0.5), color, text)
-    else
-        local mid = math.floor(#text / 2)
-        local split = mid
-        for d = 0, mid do
-            if text:sub(mid-d, mid-d) == " " then split = mid-d; break end
-            if text:sub(mid+d, mid+d) == " " then split = mid+d; break end
+function drawPieSector(draw_list, centerX, centerY, angle1, angle2, innerR, outerR, color, alpha, scale)
+    local arcSegments = 20
+    for seg = 0, arcSegments - 1 do
+        local a1 = angle1 + (angle2 - angle1) * seg / arcSegments
+        local a2 = angle1 + (angle2 - angle1) * (seg + 1) / arcSegments
+        local p1 = imgui.ImVec2(centerX + math.cos(a1) * innerR, centerY + math.sin(a1) * innerR)
+        local p2 = imgui.ImVec2(centerX + math.cos(a1) * outerR, centerY + math.sin(a1) * outerR)
+        local p3 = imgui.ImVec2(centerX + math.cos(a2) * outerR, centerY + math.sin(a2) * outerR)
+        local p4 = imgui.ImVec2(centerX + math.cos(a2) * innerR, centerY + math.sin(a2) * innerR)
+        local fillColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(color[1], color[2], color[3], alpha * scale))
+        draw_list:AddQuadFilled(p1, p2, p3, p4, fillColor)
+    end
+end
+
+function drawSectorDivider(draw_list, centerX, centerY, angle, innerR, outerR, scale)
+    local lineStart = imgui.ImVec2(centerX + math.cos(angle) * innerR, centerY + math.sin(angle) * innerR)
+    local lineEnd = imgui.ImVec2(centerX + math.cos(angle) * outerR, centerY + math.sin(angle) * outerR)
+    draw_list:AddLine(lineStart, lineEnd,
+        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.5, 0.5, 0.6, 0.4 * scale)),
+        1.5
+    )
+end
+
+function drawCenterButton(draw_list, centerX, centerY, centerR, centerHovered, scale, labelText, labelColor)
+    local centerAlpha = centerHovered and (0.9 * scale) or (0.6 * scale)
+    draw_list:AddCircleFilled(
+        imgui.ImVec2(centerX, centerY),
+        centerR,
+        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.15, 0.15, 0.22, centerAlpha)),
+        32
+    )
+    draw_list:AddCircle(
+        imgui.ImVec2(centerX, centerY),
+        centerR,
+        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.6, 0.6, 0.8, 0.5 * scale)),
+        32,
+        1.5
+    )
+    local closeIcon = fa_loaded and faicons('XMARK') or labelText
+    local closeSize = imgui.CalcTextSize(closeIcon)
+    draw_list:AddText(
+        imgui.ImVec2(centerX - closeSize.x / 2, centerY - closeSize.y / 2),
+        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(labelColor[1], labelColor[2], labelColor[3], scale)),
+        closeIcon
+    )
+end
+
+function detectHoveredSector(mousePos, centerX, centerY, baseRadius, itemCount, startAngle, scale)
+
+    local dx = mousePos.x - centerX
+    local dy = mousePos.y - centerY
+    local dist = math.sqrt(dx * dx + dy * dy)
+    local sectorAngle = (2 * math.pi) / itemCount
+    if dist > 30 * scale and dist < (baseRadius + 50) * scale then
+        local mouseAngle = math.atan2(dy, dx)
+        local normAngle = mouseAngle - startAngle
+        if normAngle < 0 then normAngle = normAngle + 2 * math.pi end
+        local sector = math.floor(normAngle / sectorAngle) + 1
+        if sector > itemCount then sector = 1 end
+        return sector, dist < 30 * scale
+    end
+    return -1, dist < 30 * scale
+end
+
+function drawPieMenu(draw_list, centerX, centerY, items, scale, titleText, titleColor)
+    local baseRadius = 120 * scale
+    local itemCount = #items
+    local sectorAngle = (2 * math.pi) / itemCount
+    local startAngle = -math.pi / 2
+    local mousePos = imgui.GetIO().MousePos
+    local hoveredSector, centerHovered = detectHoveredSector(mousePos, centerX, centerY, baseRadius, itemCount, startAngle, scale)
+    
+    drawPieMenuBackground(draw_list, centerX, centerY, baseRadius, scale)
+    
+    for i = 1, itemCount do
+        if items[i] then
+            local angle1 = startAngle + (i - 1) * sectorAngle
+            local angle2 = startAngle + i * sectorAngle
+            local midAngle = (angle1 + angle2) / 2
+            local isHovered = (hoveredSector == i)
+            local sectorAlpha = isHovered and 0.6 or 0.2
+            local col = items[i].color or { 0.4, 0.4, 0.6 }
+            local innerR = 35 * scale
+            local outerR = (baseRadius + 35) * scale
+            
+            drawPieSector(draw_list, centerX, centerY, angle1, angle2, innerR, outerR, col, sectorAlpha, scale)
+            drawSectorDivider(draw_list, centerX, centerY, angle1, innerR, outerR, scale)
+            
+            local iconDist = (innerR + outerR) / 2
+            local iconX = centerX + math.cos(midAngle) * iconDist
+            local iconY = centerY + math.sin(midAngle) * iconDist
+            local labelText = items[i].label or "---"
+            local labelSize = imgui.CalcTextSize(labelText)
+            local labelAlpha = isHovered and scale or (0.7 * scale)
+            local labelCol = items[i].labelColor or imgui.ImVec4(0.9, 0.9, 0.9, labelAlpha)
+            if type(labelCol) == "number" then
+                draw_list:AddText(
+                    imgui.ImVec2(iconX - labelSize.x / 2, iconY - labelSize.y / 2),
+                    labelCol,
+                    labelText
+                )
+            else
+                draw_list:AddText(
+                    imgui.ImVec2(iconX - labelSize.x / 2, iconY - labelSize.y / 2),
+                    imgui.ColorConvertFloat4ToU32(labelCol),
+                    labelText
+                )
+            end
         end
-        local l1 = text:sub(1, split):match("^%s*(.-)%s*$")
-        local l2 = text:sub(split+1):match("^%s*(.-)%s*$")
-        local t1 = imgui.CalcTextSize(l1)
-        local t2 = imgui.CalcTextSize(l2)
-        draw_list:AddText(imgui.ImVec2(cx - t1.x*0.5, cy - t1.y), color, l1)
-        draw_list:AddText(imgui.ImVec2(cx - t2.x*0.5, cy        ), color, l2)
-    end
-end
-
-function drawRadialMenu(draw_list, centerX, centerY, labels, centerLabel, centerColor, winId, labelColors)
-    local rO = 135
-    local rI = 50
-    draw_list:AddCircleFilled(imgui.ImVec2(centerX, centerY), rO, 0xDD151515, 64)
-    draw_list:AddCircleFilled(imgui.ImVec2(centerX, centerY), rI, 0xFF222222, 64)
-
-    local oi, oo = rI * 0.7071, rO * 0.7071
-    draw_list:AddLine(imgui.ImVec2(centerX+oi, centerY-oi), imgui.ImVec2(centerX+oo, centerY-oo), 0x55FFFFFF, 1.0)
-    draw_list:AddLine(imgui.ImVec2(centerX+oi, centerY+oi), imgui.ImVec2(centerX+oo, centerY+oo), 0x55FFFFFF, 1.0)
-    draw_list:AddLine(imgui.ImVec2(centerX-oi, centerY+oi), imgui.ImVec2(centerX-oo, centerY+oo), 0x55FFFFFF, 1.0)
-    draw_list:AddLine(imgui.ImVec2(centerX-oi, centerY-oi), imgui.ImVec2(centerX-oo, centerY-oo), 0x55FFFFFF, 1.0)
-
-    for i, lbl in ipairs(labels) do
-        local sc    = SECTOR_CENTERS[i]
-        local color = (labelColors and labelColors[i]) or 0xFFFFFFFF
-        drawLabelCentered(draw_list, lbl, centerX + sc.x, centerY + sc.y, color)
     end
 
-    local cl  = centerLabel or ""
-    local cts = imgui.CalcTextSize(cl)
-    draw_list:AddText(imgui.ImVec2(centerX - cts.x*0.5, centerY - cts.y*0.5), centerColor or 0xFFFFFF00, cl)
-
-    local pressed = nil
-    imgui.SetCursorPos(imgui.ImVec2(110,  20)); if imgui.InvisibleButton("##top_"..winId,    imgui.ImVec2(120, 70)) then pressed = 1 end
-    imgui.SetCursorPos(imgui.ImVec2( 20, 135)); if imgui.InvisibleButton("##left_"..winId,   imgui.ImVec2( 85, 70)) then pressed = 4 end
-    imgui.SetCursorPos(imgui.ImVec2(125, 135)); if imgui.InvisibleButton("##center_"..winId, imgui.ImVec2( 90, 70)) then pressed = 5 end
-    imgui.SetCursorPos(imgui.ImVec2(235, 135)); if imgui.InvisibleButton("##right_"..winId,  imgui.ImVec2( 85, 70)) then pressed = 2 end
-    imgui.SetCursorPos(imgui.ImVec2(110, 250)); if imgui.InvisibleButton("##bottom_"..winId, imgui.ImVec2(120, 70)) then pressed = 3 end
-    return pressed
+    
+    local centerR = 30 * scale
+    drawCenterButton(draw_list, centerX, centerY, centerR, centerHovered, scale, "X", titleColor or {1, 0.4, 0.4})
+    
+    if titleText and titleText ~= "" then
+        local titleSize = imgui.CalcTextSize(titleText)
+        draw_list:AddText(
+            imgui.ImVec2(centerX - titleSize.x / 2, centerY - baseRadius - 50),
+            imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.6, 0.8, 1.0, 0.8 * scale)),
+            titleText
+        )
+    end
+    
+    return hoveredSector, centerHovered
 end
 
 -- ============================================================================
--- MAIN
+-- MAIN FUNCTION
 -- ============================================================================
 function main()
     while not isSampAvailable() do wait(100) end
@@ -874,7 +743,6 @@ function main()
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Current profile: {FFFF00}" .. currentProfile, -1)
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Created by: {FFFF00}OnlyDexterZ", -1)
 
-    -- Single command with optional tab parameter
     sampRegisterChatCommand("rcmdf", function(param)
         showConfigWindow[0] = not showConfigWindow[0]
         if param == "anim" or param == "2" then
@@ -888,11 +756,9 @@ function main()
         end
     end)
     
-    -- Profile management commands
     sampRegisterChatCommand("rprofile", function(param)
         local args = {}
         for word in param:gmatch("%S+") do table.insert(args, word) end
-        
         if #args == 0 or args[1] == "list" then
             local profiles = listProfiles()
             sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Available profiles:", -1)
@@ -904,6 +770,7 @@ function main()
             loadProfile(args[2])
         elseif args[1] == "save" and args[2] then
             saveProfile(args[2])
+
         elseif args[1] == "create" and args[2] then
             loadProfile(args[2])
         elseif args[1] == "map" and args[2] then
@@ -930,20 +797,16 @@ function main()
         end
     end)
     
-    -- Auto-detect server on spawn
     lua_thread.create(function()
         local lastCheckedIP = ""
         while true do
             wait(1000)
-            
             if sampIsLocalPlayerSpawned() then
                 local serverIP, serverName = getServerInfo()
                 if serverIP and serverIP ~= lastCheckedIP then
                     lastCheckedIP = serverIP
                     currentServerIP = serverIP
                     currentServerName = serverName or serverIP
-                    
-                    -- Try auto-load profile
                     if autoDetectServer then
                         autoLoadProfileForServer()
                     end
@@ -953,19 +816,10 @@ function main()
     end)
 
     imgui.OnFrame(function() return true end, function()
-        -- Cache screen resolution (rarely changes)
-        screenCacheFrame = screenCacheFrame + 1
-        if screenCacheFrame >= SCREEN_CACHE_INTERVAL or cachedSW == 0 then
-            cachedSW, cachedSH = getScreenResolution()
-            screenCacheFrame = 0
-        end
-        local sw, sh    = cachedSW, cachedSH
+        local sw, sh = getScreenResolution()
         local draw_list = imgui.GetBackgroundDrawList()
-        local menuSize  = 340
-        local cx        = sw / 2
-        local cy        = sh / 2
+        local cx, cy = sw / 2, sh / 2
 
-        -- Auto-close radial when dialog active
         local dialogActive = false
         pcall(function() dialogActive = sampIsDialogActive() end)
         if dialogActive then
@@ -974,762 +828,434 @@ function main()
             end
         end
 
+
         -- NEW SERVER DETECTION DIALOG
         if showNewServerDialog[0] then
             imgui.SetNextWindowPos(imgui.ImVec2(sw/2 - 250, sh/2 - 150), imgui.Cond.Always)
             imgui.SetNextWindowSize(imgui.ImVec2(500, 300))
             imgui.Begin("New Server Detected", showNewServerDialog, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)
-            
             imgui.TextColored(imgui.ImVec4(0, 1, 1, 1), "NEW SERVER DETECTED!")
-            imgui.Spacing()
-            imgui.Separator()
-            imgui.Spacing()
-            
-            imgui.Text("Server:")
-            imgui.SameLine()
+            imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+            imgui.Text("Server:"); imgui.SameLine()
             imgui.TextColored(imgui.ImVec4(1, 1, 0, 1), newServerDetected.name)
-            
-            imgui.Text("IP:")
-            imgui.SameLine()
+            imgui.Text("IP:"); imgui.SameLine()
             imgui.TextDisabled(newServerDetected.ip)
-            
-            imgui.Spacing()
-            imgui.Separator()
-            imgui.Spacing()
-            
+            imgui.Spacing(); imgui.Separator(); imgui.Spacing()
             imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), "Create profile for this server?")
             imgui.Spacing()
-            
             imgui.Text("Profile name:")
             imgui.SetNextItemWidth(-1)
             imgui.InputText("##newprofilename", newProfileNameInput, 64)
             imgui.TextDisabled("(You can edit the name before creating)")
-            
-            imgui.Spacing()
-            imgui.Separator()
-            imgui.Spacing()
-            
-            -- Buttons
+            imgui.Spacing(); imgui.Separator(); imgui.Spacing()
             if imgui.Button("CREATE & MAP", imgui.ImVec2(230, 40)) then
                 local profileName = readCharBuffer(newProfileNameInput, 64)
                 if profileName ~= "" then
-                    -- Create and load profile
                     loadProfile(profileName)
-                    -- Map server to profile
                     mapServerToProfile(newServerDetected.ip, profileName)
-                    -- Save
                     saveProfile(profileName)
-                    -- Close dialog
                     showNewServerDialog[0] = false
                     sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile created & mapped: {FFFF00}" .. profileName, -1)
                 end
             end
-            
             imgui.SameLine()
-            
             if imgui.Button("USE DEFAULT", imgui.ImVec2(230, 40)) then
                 showNewServerDialog[0] = false
                 sampAddChatMessage("{FFFF00}[Radial Menu] {FFFFFF}Using current profile: {FFFF00}" .. currentProfile, -1)
             end
-            
             imgui.Spacing()
             imgui.TextColored(imgui.ImVec4(1, 0.5, 0, 1), "INFO:")
             imgui.TextDisabled("Creating a profile will auto-load it next time")
             imgui.TextDisabled("you connect to this server.")
-            
             imgui.End()
         end
 
-        -- CONFIG PANEL WITH TABS
+
+        -- CONFIG WINDOW
         if showConfigWindow[0] then
-            imgui.SetNextWindowPos(imgui.ImVec2(50, sh/4), imgui.Cond.FirstUseEver)
-            imgui.SetNextWindowSize(imgui.ImVec2(700, 580))
-            imgui.Begin("Radial Menu Config", showConfigWindow)
+            local winW = 500
+            local winH = 250
+            if configTab == 2 then winH = 380 end
+            if configTab == 3 then winH = 400 end
+            if configTab == 4 then winH = 280 end
             
-            -- Tab Buttons
-            if imgui.Button("1. MAIN", imgui.ImVec2(165, 35)) then configTab = 1 end
-            imgui.SameLine()
-            if imgui.Button("2. ANIM", imgui.ImVec2(165, 35)) then configTab = 2 end
-            imgui.SameLine()
-            if imgui.Button("3. VEHICLE", imgui.ImVec2(165, 35)) then configTab = 3 end
-            imgui.SameLine()
-            if imgui.Button("4. PROFILES", imgui.ImVec2(165, 35)) then configTab = 4 end
+            imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12)
+            imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(15, 12))
+            imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 6)
+            imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(8, 6))
+            imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.08, 0.08, 0.1, 0.95))
+            imgui.PushStyleColor(imgui.Col.FrameBg, imgui.ImVec4(0.15, 0.15, 0.2, 1.0))
+            imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.2, 0.3, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.3, 0.5, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
             
+            imgui.SetNextWindowPos(imgui.ImVec2((sw - winW) / 2, (sh - winH) / 2), imgui.Cond.Always)
+            imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
+            imgui.Begin("Radial Menu Config v2", showConfigWindow, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoTitleBar)
+            
+            local tabW = (winW - 30) / 4
+            local tabH = 30
+            local tabLabels = {"1.MAIN", "2.ANIM", "3.VEH", "4.PROF"}
+            for t = 1, 4 do
+                local label = tabLabels[t]
+                if configTab == t then label = "> " .. label .. " <" end
+                if imgui.Button(label, imgui.ImVec2(tabW, tabH)) then configTab = t end
+                if t < 4 then imgui.SameLine() end
+            end
             imgui.Spacing(); imgui.Separator(); imgui.Spacing()
             
-            -- TAB 1: MAIN CONFIG
             if configTab == 1 then
-                imgui.TextColored(imgui.ImVec4(0,1,0,1), "--- HAMBURGER MENU POSITION ---")
-                imgui.SliderFloat("X", btnSliderX, 0, sw-120, "%.0f")
-                imgui.SliderFloat("Y", btnSliderY, 0, sh-50,  "%.0f")
-                imgui.SliderFloat("Size", hamburgerSize, 50, 150, "%.0f")
-                imgui.SliderFloat("Opacity", hamburgerAlpha, 0.3, 1.0, "%.2f")
-                imgui.TextDisabled("Tap hamburger button to open/close radial menu")
+                imgui.TextColored(imgui.ImVec4(0.2, 0.9, 0.4, 1), "HAMBURGER BUTTON")
+                imgui.Spacing()
+                imgui.Text("Position X:"); imgui.SetNextItemWidth(-1)
+                imgui.SliderFloat("##posX", hamburgerX, 0, sw - 100, "%.0f")
+                imgui.Text("Position Y:"); imgui.SetNextItemWidth(-1)
+                imgui.SliderFloat("##posY", hamburgerY, 0, sh - 100, "%.0f")
+                imgui.Spacing()
+                imgui.Text("Size:"); imgui.SetNextItemWidth(-1)
+                imgui.SliderFloat("##size", hamburgerSize, 50, 150, "%.0f")
+                imgui.Text("Opacity:"); imgui.SetNextItemWidth(-1)
+                imgui.SliderFloat("##opacity", hamburgerAlpha, 0.3, 1.0, "%.2f")
 
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0,1,1,1), "--- MAIN SECTORS ---")
-                for i = 1, 4 do
-                    imgui.Text("Sector "..i..":"); imgui.SameLine()
-                    imgui.SetNextItemWidth(120); imgui.InputText("Name##n"..i, editName[i], 32); imgui.SameLine()
-                    if i == 1 or i == 3 then 
-                        imgui.TextDisabled(i == 1 and "(vehicle menu)" or "(anim menu)")
-                    else 
-                        imgui.SetNextItemWidth(180); imgui.InputText("Cmd##c"..i, editCmd[i], 64) 
-                    end
-                end
-
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(1,0.5,0,1), "--- ANIM CATEGORIES ---")
-                for i = 1, 4 do
-                    imgui.Text("Cat "..i..":"); imgui.SameLine()
-                    imgui.SetNextItemWidth(200); imgui.InputText("##ca"..i, editCatName[i], 32)
-                end
-
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "--- VEHICLE CATEGORIES ---")
-                for i = 1, 4 do
-                    imgui.Text("Cat "..i..":"); imgui.SameLine()
-                    imgui.SetNextItemWidth(200); imgui.InputText("##cv"..i, editVehCatName[i], 32)
-                end
-            
-            -- TAB 2: ANIMATIONS
             elseif configTab == 2 then
-                imgui.TextColored(imgui.ImVec4(1,1,0,1), "ANIMATION COMMANDS")
+                imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIMATION COMMANDS")
                 imgui.Spacing()
-                -- Header (LOCKED)
-                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("Command")
-                imgui.Separator()
-                imgui.Spacing()
-                -- Editable rows (existing anim slots)
-                imgui.BeginChild("##animscroll", imgui.ImVec2(-1,-50), true)
-                    for i = 1, MAX_ANIM_SLOTS do
-                        imgui.Text(string.format("Slot%2d|", i)); imgui.SameLine()
-                        imgui.SetNextItemWidth(100); imgui.InputText("Cat##ak"..i, animEditCategory[i], 32); imgui.SameLine()
-                        imgui.SetNextItemWidth(280); imgui.InputText("Cmd##ac"..i, animEditCmd[i], 128); imgui.SameLine()
-                        imgui.SetNextItemWidth(100); imgui.InputText("Lbl##al"..i, animEditLabel[i], 64)
-                    end
-                imgui.EndChild()
-            
-            -- TAB 3: VEHICLES
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Label"); imgui.SameLine(260)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Command")
+                imgui.Separator(); imgui.Spacing()
+                for i = 1, 8 do
+                    imgui.PushItemWidth(100); imgui.InputText("##ac"..i, animEditCategory[i], 32); imgui.PopItemWidth()
+                    imgui.SameLine(130)
+                    imgui.PushItemWidth(100); imgui.InputText("##al"..i, animEditLabel[i], 32); imgui.PopItemWidth()
+                    imgui.SameLine(260)
+                    imgui.PushItemWidth(-1); imgui.InputText("##acmd"..i, animEditCmd[i], 64); imgui.PopItemWidth()
+                end
             elseif configTab == 3 then
-                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "IN-VEHICLE CONTEXT COMMANDS")
+                imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "IN-VEHICLE COMMANDS")
                 imgui.Spacing()
-                -- Header (LOCKED)
-                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("ON Cmd"); imgui.SameLine(350); imgui.Text("OFF Cmd")
-                imgui.Separator()
-                imgui.Spacing()
-                -- Editable rows
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "ON Cmd"); imgui.SameLine(310)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "OFF Cmd")
+                imgui.Separator(); imgui.Spacing()
                 for i = 1, 4 do
-                    imgui.PushItemWidth(120)
-                    imgui.InputText("##cvn"..i, ctxVehName[i], 32)
-                    imgui.PopItemWidth()
-                    imgui.SameLine(150)
-                    imgui.PushItemWidth(170)
-                    imgui.InputText("##cvo"..i, ctxVehOn[i], 64)
-                    imgui.PopItemWidth()
-                    imgui.SameLine(350)
-                    imgui.PushItemWidth(170)
-                    imgui.InputText("##cvf"..i, ctxVehOff[i], 64)
-                    imgui.PopItemWidth()
+                    imgui.PushItemWidth(100); imgui.InputText("##vn"..i, ctxVehName[i], 32); imgui.PopItemWidth()
+                    imgui.SameLine(130)
+                    imgui.PushItemWidth(150); imgui.InputText("##vo"..i, ctxVehOn[i], 64); imgui.PopItemWidth()
+                    imgui.SameLine(310)
+                    imgui.PushItemWidth(-1); imgui.InputText("##vf"..i, ctxVehOff[i], 64); imgui.PopItemWidth()
                 end
-                
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0.3,0.8,1,1), "ON-FOOT VEHICLE COMMANDS")
+                imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "ON-FOOT COMMANDS")
                 imgui.Spacing()
-                -- Header (LOCKED)
-                imgui.Text("Category"); imgui.SameLine(150); imgui.Text("ON Cmd"); imgui.SameLine(350); imgui.Text("OFF Cmd")
-                imgui.Separator()
-                imgui.Spacing()
-                -- Editable rows
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "ON Cmd"); imgui.SameLine(310)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "OFF Cmd")
+                imgui.Separator(); imgui.Spacing()
                 for i = 1, 4 do
-                    imgui.PushItemWidth(120)
-                    imgui.InputText("##cfn"..i, ctxFootName[i], 32)
-                    imgui.PopItemWidth()
-                    imgui.SameLine(150)
-                    imgui.PushItemWidth(170)
-                    imgui.InputText("##cfo"..i, ctxFootOn[i], 64)
-                    imgui.PopItemWidth()
-                    imgui.SameLine(350)
-                    imgui.PushItemWidth(170)
-                    imgui.InputText("##cff"..i, ctxFootOff[i], 64)
-                    imgui.PopItemWidth()
+                    imgui.PushItemWidth(100); imgui.InputText("##fn"..i, ctxFootName[i], 32); imgui.PopItemWidth()
+                    imgui.SameLine(130)
+                    imgui.PushItemWidth(150); imgui.InputText("##fo"..i, ctxFootOn[i], 64); imgui.PopItemWidth()
+                    imgui.SameLine(310)
+                    imgui.PushItemWidth(-1); imgui.InputText("##ff"..i, ctxFootOff[i], 64); imgui.PopItemWidth()
                 end
-            
-            -- TAB 4: PROFILES
+
             elseif configTab == 4 then
-                imgui.TextColored(imgui.ImVec4(1,0.8,0,1), "Profile Management")
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                
-                -- Current Profile Info
-                imgui.TextColored(imgui.ImVec4(0,1,0,1), "Current Profile:")
-                imgui.SameLine()
-                imgui.TextColored(imgui.ImVec4(1,1,0,1), currentProfile)
-                
+                imgui.TextColored(imgui.ImVec4(0.8, 0.3, 0.8, 1), "PROFILE MANAGEMENT")
                 imgui.Spacing()
-                
-                -- Server Info
-                if currentServerIP ~= "" then
-                    imgui.TextColored(imgui.ImVec4(0,1,1,1), "Current Server:")
-                    imgui.Text(currentServerName)
-                    imgui.TextDisabled(currentServerIP)
-                    
-                    local mappedProfile = profilesData.ServerMapping[currentServerIP] or "none"
-                    imgui.Text("Mapped to: " .. mappedProfile)
-                else
-                    imgui.TextColored(imgui.ImVec4(1,0.5,0,1), "Not connected to server")
-                end
-                
+                imgui.Text("Current Profile:"); imgui.SameLine()
+                imgui.TextColored(imgui.ImVec4(1, 1, 0, 1), currentProfile)
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                
-                -- Auto-detect toggle
-                if imgui.Checkbox("Auto-detect server and load profile", autoDetectCheckbox) then
-                    autoDetectServer = autoDetectCheckbox[0]
-                    profilesData.Settings.autoDetectServer = autoDetectServer
-                    inicfg.save(profilesData, profilesFileName)
-                    sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Auto-detect: " .. (autoDetectServer and "ON" or "OFF"), -1)
-                end
-                imgui.TextDisabled("Automatically load profile when connecting to mapped server")
-                
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                
-                -- CREATE NEW PROFILE
-                imgui.TextColored(imgui.ImVec4(0,1,1,1), "CREATE NEW PROFILE:")
-                imgui.SetNextItemWidth(300)
-                imgui.InputText("##profilename", profileNameInput, 32)
-                imgui.SameLine()
-                if imgui.Button("Create", imgui.ImVec2(80, 25)) then
-                    local pName = readCharBuffer(profileNameInput, 32)
-                    if pName ~= "" then
-                        loadProfile(pName)
-                        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile created: " .. pName, -1)
-                    else
-                        sampAddChatMessage("{FF0000}[Radial Menu] {FFFFFF}Please enter profile name!", -1)
-                    end
-                end
-                
-                imgui.Spacing()
-                
-                -- MAP CURRENT SERVER
-                if currentServerIP ~= "" then
-                    imgui.TextColored(imgui.ImVec4(1,0.8,0,1), "MAP CURRENT SERVER:")
-                    imgui.Text("Map \"" .. currentServerName .. "\" to:")
-                    
-                    imgui.SetNextItemWidth(300)
-                    imgui.InputText("##mapprofilename", profileNameInput, 32)
-                    imgui.SameLine()
-                    if imgui.Button("Map to Profile", imgui.ImVec2(140, 25)) then
-                        local pName = readCharBuffer(profileNameInput, 32)
-                        if pName == "" then pName = currentProfile end
-                        mapServerToProfile(currentServerIP, pName)
-                    end
-                    
-                    imgui.SameLine()
-                    if imgui.Button("Map to Current", imgui.ImVec2(140, 25)) then
-                        mapServerToProfile(currentServerIP, currentProfile)
-                    end
-                    
-                    imgui.TextDisabled("Server will auto-load this profile on next connect")
-                end
-                
-                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                
-                -- AVAILABLE PROFILES LIST
-                imgui.TextColored(imgui.ImVec4(1,1,0,1), "AVAILABLE PROFILES:")
-                imgui.BeginChild("##profilelist", imgui.ImVec2(-1, 180), true)
-                    availableProfiles = listProfiles()
-                    for i, pName in ipairs(availableProfiles) do
-                        local isCurrent = (pName == currentProfile)
-                        
-                        -- Profile name with active indicator
-                        if isCurrent then
-                            imgui.TextColored(imgui.ImVec4(0,1,0,1), "[ACTIVE] " .. pName)
-                        else
-                            local displayName = pName
-                            if #displayName > 18 then
-                                displayName = string.sub(displayName, 1, 18) .. "..."
-                            end
-                            imgui.Text(displayName)
-                            imgui.SameLine(280)
-                            if imgui.Button("Load##" .. i, imgui.ImVec2(60, 20)) then
-                                loadProfile(pName)
-                            end
-                        end
-                        
-                        -- Show mapped servers for this profile
-                        local mappedServers = {}
-                        for ip, profile in pairs(profilesData.ServerMapping or {}) do
-                            if profile == pName then
-                                table.insert(mappedServers, ip)
-                            end
-                        end
-                        if #mappedServers > 0 then
-                            local mappedStr = table.concat(mappedServers, ", ")
-                            if #mappedStr > 30 then
-                                mappedStr = string.sub(mappedStr, 1, 30) .. "..."
-                            end
-                            imgui.TextDisabled("  Mapped: " .. mappedStr)
-                        end
-                    end
-                imgui.EndChild()
-                
-                imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0,1,0,1), "TIP:")
-                imgui.TextDisabled("1. Create profile → 2. Configure → 3. Map to server")
-                imgui.TextDisabled("Next time you connect, it auto-loads!")
+                imgui.TextDisabled("Profile management features here...")
             end
             
-            imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-            if imgui.Button("SAVE ALL", imgui.ImVec2(-1, 35)) then
+            imgui.Spacing()
+            if imgui.Button("SAVE ALL", imgui.ImVec2(-1, 40)) then
                 saveAllConfig()
             end
             
             imgui.End()
+            imgui.PopStyleColor(5)
+            imgui.PopStyleVar(4)
         end
-
-        -- TOMBOL MENU (Hamburger Button) - Skip when config window is open
+        
+        -- HAMBURGER BUTTON
         if not showConfigWindow[0] then
-        local hbx = btnSliderX[0]
-        local hby = btnSliderY[0]
-        local hbs = hamburgerSize[0]
-        local hba = hamburgerAlpha[0]
-        local hbsHalf = hbs / 2  -- Cache commonly used value
-        
-        local anyRadialOpen2 = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0]
-                            or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] or showCtxSubRadial[0]
-        
-        -- Draw hamburger icon using background draw list
-        local hCenterX = hbx + hbsHalf
-        local hCenterY = hby + hbsHalf
-        local hCenter = imgui.ImVec2(hCenterX, hCenterY)  -- Cache center point
-        
-        -- Pulse animation (only calculate when hamburger is drawn)
-        hamburgerPulse = (hamburgerPulse + 0.05) % (math.pi * 2)
-        local hPulse = math.sin(hamburgerPulse) * 0.15 + 1.0
-        
-        -- Outer glow (16 segments - sufficient for subtle glow)
-        local hGlowAlpha = math.floor(hba * 100 * (1.0 - (hPulse - 1.0) * 3))
-        local hGlowColor = hGlowAlpha * 0x01000000 + 0x0044AAFF
-        draw_list:AddCircleFilled(hCenter, hbsHalf * hPulse, hGlowColor, 16)
-        
-        -- Inner circle
-        local hBgAlpha = math.floor(hba * 220)
-        draw_list:AddCircleFilled(hCenter, hbsHalf, hBgAlpha * 0x01000000 + 0x00222222, 32)
-        
-        -- Border
-        local hBorderAlpha = math.floor(hba * 255)
-        draw_list:AddCircle(hCenter, hbsHalf, hBorderAlpha * 0x01000000 + 0x0088DDFF, 32, 3.0)
-        
-        -- Hamburger icon (3 white lines)
-        local hIconSize = hbs * 0.4
-        local hIconAlpha = math.floor(hba * 255)
-        local hIconColor = hIconAlpha * 0x01000000 + 0x00FFFFFF
-        local hLineW = hIconSize * 0.8
-        local hLineH = hIconSize * 0.12
-        local hLineS = hIconSize * 0.25
-        local hLineWHalf = hLineW / 2  -- Cache commonly used value
-        local hLineHHalf = hLineH / 2  -- Cache commonly used value
-        
-        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineWHalf, hCenterY - hLineS - hLineHHalf), imgui.ImVec2(hCenterX + hLineWHalf, hCenterY - hLineS + hLineHHalf), hIconColor, hLineHHalf)
-        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineWHalf, hCenterY - hLineHHalf), imgui.ImVec2(hCenterX + hLineWHalf, hCenterY + hLineHHalf), hIconColor, hLineHHalf)
-        draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineWHalf, hCenterY + hLineS - hLineHHalf), imgui.ImVec2(hCenterX + hLineWHalf, hCenterY + hLineS + hLineHHalf), hIconColor, hLineHHalf)
-        
-        -- Touch handler
-        imgui.SetNextWindowPos(imgui.ImVec2(hbx, hby), imgui.Cond.Always)
-        imgui.SetNextWindowSize(imgui.ImVec2(hbs, hbs))
-        imgui.Begin("RadialBtn", nil,
-            imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground + imgui.WindowFlags.NoScrollbar)
-            if imgui.InvisibleButton("##hamburger_main", imgui.ImVec2(hbs - 10, hbs - 10)) then
-                if anyRadialOpen2 then
-                    closeAllRadial()
-                else
-                    showRadialMenu[0] = true
-                end
-            end
-        imgui.End()
-        end  -- if not showConfigWindow[0]
+            local hbx = hamburgerX[0]
+            local hby = hamburgerY[0]
+            local hbs = hamburgerSize[0]
+            local hba = hamburgerAlpha[0]
+            local hbsHalf = hbs / 2
+            local hCenterX = hbx + hbsHalf
+            local hCenterY = hby + hbsHalf
+            local hCenter = imgui.ImVec2(hCenterX, hCenterY)
+            
+            hamburgerPulse = (hamburgerPulse + 0.05) % (math.pi * 2)
+            local hPulse = math.sin(hamburgerPulse) * 0.15 + 1.0
+            local hGlowAlpha = math.floor(hba * 100 * (1.0 - (hPulse - 1.0) * 3))
+            local hGlowColor = hGlowAlpha * 0x01000000 + 0x0044AAFF
+            draw_list:AddCircleFilled(hCenter, hbsHalf * hPulse, hGlowColor, 16)
+            
+            local hBgAlpha = math.floor(hba * 220)
+            draw_list:AddCircleFilled(hCenter, hbsHalf, hBgAlpha * 0x01000000 + 0x00222222, 32)
+            
+            local hBorderAlpha = math.floor(hba * 255)
+            draw_list:AddCircle(hCenter, hbsHalf, hBorderAlpha * 0x01000000 + 0x0088DDFF, 32, 3.0)
+            
+            local hIconSize = hbs * 0.4
+            local hIconAlpha = math.floor(hba * 255)
+            local hIconColor = hIconAlpha * 0x01000000 + 0x00FFFFFF
+            local hLineW = hIconSize * 0.8
+            local hLineH = hIconSize * 0.12
+            local hLineS = hIconSize * 0.25
+            local hLineWHalf = hLineW / 2
+            local hLineHHalf = hLineH / 2
+            
+            draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineWHalf, hCenterY - hLineS - hLineHHalf), imgui.ImVec2(hCenterX + hLineWHalf, hCenterY - hLineS + hLineHHalf), hIconColor, hLineHHalf)
+            draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineWHalf, hCenterY - hLineHHalf), imgui.ImVec2(hCenterX + hLineWHalf, hCenterY + hLineHHalf), hIconColor, hLineHHalf)
+            draw_list:AddRectFilled(imgui.ImVec2(hCenterX - hLineWHalf, hCenterY + hLineS - hLineHHalf), imgui.ImVec2(hCenterX + hLineWHalf, hCenterY + hLineS + hLineHHalf), hIconColor, hLineHHalf)
 
-        -- LEVEL 1: RADIAL UTAMA
-        do
-            local s
-            local ok; ok, s = renderWithScale("main", showRadialMenu, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialMain", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then  -- jangan register klik saat animasi belum keliatan
-                        local lbls = {
-                            tostring(iniData.Sector1.name), tostring(iniData.Sector2.name),
-                            tostring(iniData.Sector3.name), tostring(iniData.Sector4.name),
-                        }
-
-                        -- Check if player is in vehicle
-                        local inVehicle = false
-                        pcall(function() inVehicle = isCharInAnyCar(PLAYER_PED) end)
-
-                        -- Grey out ANIM sector when in vehicle
-                        local mainLabelColors = nil
-                        if inVehicle then
-                            mainLabelColors = { 0xFFFFFFFF, 0xFFFFFFFF, 0x55FFFFFF, 0xFFFFFFFF }
-                        end
-
-                        local p = drawRadialMenu(draw_list, cx, cy, lbls, "CLOSE", 0xFFFFFF00, "main", mainLabelColors)
-                        if     p == 1 then
-                            -- Context-aware vehicle: check if in vehicle
-                            if inVehicle then
-                                contextVehCommands = getInVehicleCommands()
-                                showRadialMenu[0] = false
-                                showContextVehRadial[0] = true
-                            else
-                                contextVehCommands = getOnFootCommands()
-                                showRadialMenu[0] = false
-                                showContextVehRadial[0] = true
-                            end
-                        elseif p == 2 then 
-                            local cmd = tostring(iniData.Sector2.cmd or "")
-                            if executeCommand(cmd) then closeAllRadial() end
-                        elseif p == 3 then
-                            if not inVehicle then
-                                showRadialMenu[0] = false; showCatRadial[0] = true
-                            end
-                        elseif p == 4 then 
-                            local cmd = tostring(iniData.Sector4.cmd or "")
-                            if executeCommand(cmd) then closeAllRadial() end
-                        elseif p == 5 then showRadialMenu[0] = false end
-                    end
-                imgui.End()
-            end
-        end
-
-        -- LEVEL 2a: CATEGORY ANIM
-        do
-            local s
-            local ok; ok, s = renderWithScale("cat", showCatRadial, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialCat", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then
-                        local cats = {
-                            tostring(iniData.CatSector1.name), tostring(iniData.CatSector2.name),
-                            tostring(iniData.CatSector3.name), tostring(iniData.CatSector4.name),
-                        }
-                        local p = drawRadialMenu(draw_list, cx, cy, cats, "BACK", 0xFF00FFFF, "cat")
-                        if p and p >= 1 and p <= 4 then
-                            local sectorName = tostring(cats[p] or "")
-                            if sectorName ~= "" and sectorName ~= "-" then
-                                loadAnimForCategory(sectorName)
-                                if #animRadialList > 0 then
-                                    currentCategory = sectorName
-                                    showCatRadial[0] = false
-                                    showAnimRadial[0] = true
-                                else
-                                    sampAddChatMessage("{FF8800}[Radial] {FFFFFF}No animations found. Use /rcmdf to configure: "..sectorName, -1)
-                                end
-                            end
-                        elseif p == 5 then
-                            showCatRadial[0] = false
-                            showRadialMenu[0] = true
-                        end
-                    end
-                imgui.End()
-            end
-        end
-
-        -- LEVEL 3a: ANIM
-        do
-            local s
-            local ok; ok, s = renderWithScale("anim", showAnimRadial, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialAnim", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then
-                        local tp  = totalAnimPages()
-                        local pga = getAnimPage(animRadialPage)
-                        local al  = {}
-                        for i = 1, 4 do al[i] = pga[i] and pga[i].label or nil end
-                        local cl, cc = "BACK", 0xFF00FFFF
-                        if tp > 1 then cl = animRadialPage < tp and "NEXT" or "PREV"; cc = 0xFF00FF88 end
-                        draw_list:AddText(imgui.ImVec2(cx-30, cy+110), 0xAAFFFFFF, string.format("Hal %d/%d", animRadialPage, tp))
-                        draw_list:AddText(imgui.ImVec2(cx-40, cy-120), 0xFF00FFFF, "["..currentCategory.."]")
-                        local p = drawRadialMenu(draw_list, cx, cy, al, cl, cc, "anim")
-                        for i = 1, 4 do
-                            if p == i and pga[i] then executeCommand(pga[i].cmd); closeAllRadial() end
-                        end
-                        if p == 5 then
-                            if tp <= 1 then
-                                showAnimRadial[0] = false
-                                showCatRadial[0] = true
-                            elseif animRadialPage < tp then animRadialPage = animRadialPage + 1
-                            else animRadialPage = animRadialPage - 1 end
-                        end
-                    end
-                imgui.End()
-            end
-        end
-
-        -- LEVEL 2a-CTX: CONTEXT VEHICLE (auto-detected ON_FOOT / IN_VEHICLE)
-        do
-            local s
-            local ok; ok, s = renderWithScale("ctxveh", showContextVehRadial, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialCtxVeh", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then
-                        local ctxLabels = {}
-                        for i = 1, 4 do
-                            ctxLabels[i] = contextVehCommands[i] and contextVehCommands[i].name or "---"
-                        end
-                        draw_list:AddText(imgui.ImVec2(cx-50, cy-120), 0xFF88DDFF, "[QUICK VEH]")
-                        local p = drawRadialMenu(draw_list, cx, cy, ctxLabels, "BACK", 0xFF88DDFF, "ctxveh")
-                        if p and p >= 1 and p <= 4 then
-                            local slot = contextVehCommands[p]
-                            if slot and slot.name and slot.name ~= "-" and slot.name ~= "" then
-                                if (slot.onCmd and slot.onCmd ~= "") or (slot.offCmd and slot.offCmd ~= "") then
-                                    -- Open sub-radial for ON/OFF selection
-                                    ctxSubRadialItem = { name = slot.name, onCmd = slot.onCmd or "", offCmd = slot.offCmd or "" }
-                                    showContextVehRadial[0] = false
-                                    showCtxSubRadial[0] = true
-                                end
-                            end
-                        elseif p == 5 then
-                            showContextVehRadial[0] = false
-                            showRadialMenu[0] = true
-                        end
-                    end
-                imgui.End()
-            end
-        end
-
-        -- CONTEXT SUB-RADIAL (ON/OFF selection)
-        do
-            local s
-            local ok; ok, s = renderWithScale("ctxsub", showCtxSubRadial, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialCtxSub", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then
-                        local item = ctxSubRadialItem
-                        local cat = (item.name or ""):lower()
-                        local isOn = toggleState[cat]
-
-                        -- Customize labels based on category
-                        local onLabel = "ON"
-                        local offLabel = "OFF"
-                        if cat == "lock" then
-                            onLabel = "LOCK"
-                            offLabel = "UNLOCK"
-                        elseif cat == "trunk" or cat == "hood" then
-                            onLabel = "OPEN"
-                            offLabel = "CLOSE"
-                        elseif cat == "engine" then
-                            onLabel = "ON"
-                            offLabel = "OFF"
-                        elseif cat == "light" or cat == "lights" then
-                            onLabel = "ON"
-                            offLabel = "OFF"
-                        end
-
-                        -- Colors: grey out the active state
-                        local onColor = isOn and 0x55FFFFFF or 0xFF44FF44
-                        local offColor = isOn and 0xFFFF4444 or 0x55FFFFFF
-
-                        local labels = { onLabel, "-", offLabel, "-" }
-                        local labelColors = { onColor, 0x55FFFFFF, offColor, 0x55FFFFFF }
-
-                        -- Draw title
-                        draw_list:AddText(imgui.ImVec2(cx - 40, cy - 120), 0xFF00FFFF, "[" .. item.name .. "]")
-
-                        local p = drawRadialMenu(draw_list, cx, cy, labels, "BACK", 0xFF00FFFF, "ctxsub", labelColors)
-
-                        -- Handle press
-                        if p == 1 and not isOn then
-                            -- ON pressed (only if not already ON)
-                            executeCommand(item.onCmd)
-                            toggleState[cat] = true
-                            closeAllRadial()
-                        elseif p == 3 and isOn then
-                            -- OFF pressed (only if not already OFF)
-                            executeCommand(item.offCmd)
-                            toggleState[cat] = false
-                            closeAllRadial()
-                        elseif p == 1 and isOn then
-                            -- Already ON, do nothing (greyed out)
-                        elseif p == 3 and not isOn then
-                            -- Already OFF, do nothing (greyed out)
-                        elseif p == 5 then
-                            -- BACK - go back to context menu
-                            showCtxSubRadial[0] = false
-                            showContextVehRadial[0] = true
-                        end
-                    end
-                imgui.End()
-            end
-        end
-
-        -- LEVEL 2b: CATEGORY VEHICLE
-        do
-            local s
-            local ok; ok, s = renderWithScale("vehcat", showVehCatRadial, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialVehCat", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then
-                        local vcats = {
-                            tostring(iniData.VehCatSector1.name), tostring(iniData.VehCatSector2.name),
-                            tostring(iniData.VehCatSector3.name), tostring(iniData.VehCatSector4.name),
-                        }
-                        draw_list:AddText(imgui.ImVec2(cx-40, cy-120), 0xFF88DDFF, "[VEHICLE]")
-                        local p = drawRadialMenu(draw_list, cx, cy, vcats, "BACK", 0xFF88DDFF, "vehcat")
-                        if p and p >= 1 and p <= 4 then
-                            local sectorName = tostring(vcats[p] or "")
-                            if sectorName ~= "" and sectorName ~= "-" then
-                                loadVehForCategory(sectorName)
-                                if #vehRadialList > 0 then
-                                    currentVehCategory = sectorName
-                                    showVehCatRadial[0] = false
-                                    showVehRadial[0] = true
-                                else
-                                    sampAddChatMessage("{FF8800}[Radial] {FFFFFF}No vehicles found. Use /rcmdf to configure: "..sectorName, -1)
-                                end
-                            end
-                        elseif p == 5 then
-                            showVehCatRadial[0] = false
-                            showRadialMenu[0] = true
-                        end
-                    end
-                imgui.End()
-            end
-        end
-
-        -- LEVEL 3b: VEHICLE
-        do
-            local s
-            local ok; ok, s = renderWithScale("veh", showVehRadial, cx, cy, menuSize)
-            if ok then
-                imgui.Begin("RadialVeh", nil,
-                    imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground)
-                    if s > 0.3 then
-                local tp  = totalVehPages()
-                local pgv = layoutVehPage(vehRadialPage)
-                local cl, cc = "BACK", 0xFF88DDFF
-                if tp > 1 then cl = vehRadialPage < tp and "NEXT" or "PREV"; cc = 0xFF44BBFF end
-                draw_list:AddText(imgui.ImVec2(cx-30, cy+110), 0xAAFFFFFF, string.format("Hal %d/%d", vehRadialPage, tp))
-                draw_list:AddText(imgui.ImVec2(cx-40, cy-120), 0xFF88DDFF, "["..currentVehCategory.."]")
-
-                -- Hitung warna & disabled state tiap slot
-                local vlColors   = {}
-                local vlDisabled = {}  -- true = beneran disabled, ga bisa dipencet
-                for i = 1, 4 do
-                    local slot = pgv[i]
-                    if isDummySlot(slot) then
-                        vlColors[i]   = 0x33FFFFFF
-                        vlDisabled[i] = true
+            
+            imgui.SetNextWindowPos(imgui.ImVec2(hbx, hby), imgui.Cond.Always)
+            imgui.SetNextWindowSize(imgui.ImVec2(hbs, hbs))
+            imgui.Begin("RadialBtn", nil,
+                imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground + imgui.WindowFlags.NoScrollbar)
+                if imgui.InvisibleButton("##hamburger_main", imgui.ImVec2(hbs - 10, hbs - 10)) then
+                    local anyRadialOpen = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0] or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] or showCtxSubRadial[0]
+                    if anyRadialOpen then
+                        closeAllRadial()
                     else
-                        local cat   = (slot.category or ""):lower()
-                        local lbl   = slot.label or ""
-                        local isOn  = toggleState[cat]  -- true = kondisi aktif/ON
-
-                        if isOnLabel(lbl) then
-                            -- Tombol ON: disabled kalau state sudah ON
-                            if isOn then
-                                vlColors[i]   = 0x33FFFFFF  -- grey
-                                vlDisabled[i] = true
-                            else
-                                vlColors[i]   = 0xFF44FF44  -- hijau = bisa dipencet
-                                vlDisabled[i] = false
-                            end
-                        elseif isOffLabel(lbl) then
-                            -- Tombol OFF: disabled kalau state masih OFF
-                            if not isOn then
-                                vlColors[i]   = 0x33FFFFFF  -- grey
-                                vlDisabled[i] = true
-                            else
-                                vlColors[i]   = 0xFFFF4444  -- merah = bisa dipencet
-                                vlDisabled[i] = false
-                            end
-                        else
-                            -- Slot biasa (bukan ON/OFF pair) — selalu bisa dipencet
-                            vlColors[i]   = 0xFFFFFFFF
-                            vlDisabled[i] = false
-                        end
+                        showRadialMenu[0] = true
+                        menuOpenTime = os.clock()
                     end
                 end
+            imgui.End()
+        end
+        
+        -- ANIMATION CALCULATION
+        local anyMenuOpen = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0] or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] or showCtxSubRadial[0]
+        if anyMenuOpen then
+            local elapsed = os.clock() - menuOpenTime
+            local animDuration = 0.3
+            local t = clamp(elapsed / animDuration, 0, 1.0)
+            menuScale = getEase('outCubic', t)
+        else
+            if menuScale > 0 then
+                local elapsed = os.clock() - menuOpenTime
+                local animDuration = 0.3
+                local t = clamp(elapsed / animDuration, 0, 1.0)
+                menuScale = 1.0 - getEase('inCubic', t)
+            end
+        end
+        menuScale = clamp(menuScale, 0, 1.0)
+        
+        if menuScale > 0.01 then
+            imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 0)
+            imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
+            imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0.4 * menuScale))
+            imgui.PushStyleColor(imgui.Col.Border, imgui.ImVec4(0, 0, 0, 0))
+            
+            imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
+            imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
+            imgui.Begin('##PieOverlay', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings)
 
-                -- Gambar label
-                local vl = {}
-                for i = 1, 4 do vl[i] = pgv[i] and not isDummySlot(pgv[i]) and pgv[i].label or nil end
-
-                -- Gambar radial (tanpa invisible button dulu)
-                local rO = 135
-                local rI = 50
-                draw_list:AddCircleFilled(imgui.ImVec2(cx, cy), rO, 0xDD151515, 64)
-                draw_list:AddCircleFilled(imgui.ImVec2(cx, cy), rI, 0xFF222222, 64)
-                local oi, oo = rI * 0.7071, rO * 0.7071
-                draw_list:AddLine(imgui.ImVec2(cx+oi, cy-oi), imgui.ImVec2(cx+oo, cy-oo), 0x55FFFFFF, 1.0)
-                draw_list:AddLine(imgui.ImVec2(cx+oi, cy+oi), imgui.ImVec2(cx+oo, cy+oo), 0x55FFFFFF, 1.0)
-                draw_list:AddLine(imgui.ImVec2(cx-oi, cy+oi), imgui.ImVec2(cx-oo, cy+oo), 0x55FFFFFF, 1.0)
-                draw_list:AddLine(imgui.ImVec2(cx-oi, cy-oi), imgui.ImVec2(cx-oo, cy-oo), 0x55FFFFFF, 1.0)
-
-                for i = 1, 4 do
-                    local sc  = SECTOR_CENTERS[i]
-                    local lbl = vl[i]
-                    drawLabelCentered(draw_list, lbl, cx + sc.x, cy + sc.y, vlColors[i])
-                end
-
-                -- Center label (BACK/NEXT/PREV)
-                local cts = imgui.CalcTextSize(cl)
-                draw_list:AddText(imgui.ImVec2(cx - cts.x*0.5, cy - cts.y*0.5), cc, cl)
-
-                -- Invisible buttons — skip kalau disabled
-                local sectorPos = {
-                    { x=110, y= 20,  w=120, h=70 },  -- 1 atas
-                    { x=235, y=135,  w= 85, h=70 },  -- 2 kanan
-                    { x=110, y=250,  w=120, h=70 },  -- 3 bawah
-                    { x= 20, y=135,  w= 85, h=70 },  -- 4 kiri
+            
+            -- LEVEL 1: MAIN RADIAL
+            if showRadialMenu[0] then
+                local inVehicle = false
+                pcall(function() inVehicle = isCharInAnyCar(PLAYER_PED) end)
+                
+                local menuItems = {
+                    { label = iniData.Sector1.name or "VEHICLE", color = {0.26, 0.71, 0.81}, labelColor = 0xFFFFFFFF },
+                    { label = iniData.Sector2.name or "-", color = {0.91, 0.30, 0.40}, labelColor = 0xFFFFFFFF },
+                    { label = iniData.Sector3.name or "ANIM", color = {0.54, 0.36, 0.76}, labelColor = inVehicle and 0x55FFFFFF or 0xFFFFFFFF },
+                    { label = iniData.Sector4.name or "-", color = {0.26, 0.81, 0.46}, labelColor = 0xFFFFFFFF },
                 }
-                local pressed = nil
-                for i = 1, 4 do
-                    imgui.SetCursorPos(imgui.ImVec2(sectorPos[i].x, sectorPos[i].y))
-                    if not vlDisabled[i] then
-                        if imgui.InvisibleButton("##vs"..i.."_veh", imgui.ImVec2(sectorPos[i].w, sectorPos[i].h)) then
-                            pressed = i
+                
+                local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[MAIN]", {1, 1, 0})
+                
+                if imgui.IsMouseClicked(0) then
+                    if centerHovered then
+                        closeAllRadial()
+                    elseif hoveredSector == 1 then
+                        if inVehicle then
+                            contextVehCommands = getInVehicleCommands()
+                        else
+                            contextVehCommands = getOnFootCommands()
                         end
-                    else
-                        -- render dummy area (tidak clickable)
-                        imgui.Dummy(imgui.ImVec2(sectorPos[i].w, sectorPos[i].h))
+                        showRadialMenu[0] = false
+                        showContextVehRadial[0] = true
+                        menuOpenTime = os.clock()
+                    elseif hoveredSector == 2 then
+                        local cmd = iniData.Sector2.cmd or ""
+                        if executeCommand(cmd) then closeAllRadial() end
+                    elseif hoveredSector == 3 then
+                        if not inVehicle then
+                            showRadialMenu[0] = false
+                            showCatRadial[0] = true
+                            menuOpenTime = os.clock()
+                        end
+                    elseif hoveredSector == 4 then
+                        local cmd = iniData.Sector4.cmd or ""
+                        if executeCommand(cmd) then closeAllRadial() end
                     end
                 end
-                -- center button
-                imgui.SetCursorPos(imgui.ImVec2(125, 135))
-                if imgui.InvisibleButton("##vcenter_veh", imgui.ImVec2(90, 70)) then pressed = 5 end
+            end
 
-                -- Handle klik
+            
+            -- LEVEL 2: CONTEXT VEHICLE
+            if showContextVehRadial[0] then
+                local menuItems = {}
                 for i = 1, 4 do
-                    if pressed == i and pgv[i] and not vlDisabled[i] then
-                        local slot = pgv[i]
-                        local cat  = (slot.category or ""):lower()
-                        local lbl  = slot.label or ""
-
-                        executeCommand(slot.cmd)
-
-                        if isOnLabel(lbl) then
-                            toggleState[cat] = true
-                        elseif isOffLabel(lbl) then
-                            toggleState[cat] = false
+                    local cmd = contextVehCommands[i]
+                    menuItems[i] = { 
+                        label = cmd and cmd.name or "---", 
+                        color = {0.26, 0.71, 0.81},
+                        labelColor = (cmd and cmd.name and cmd.name ~= "-") and 0xFFFFFFFF or 0x55FFFFFF
+                    }
+                end
+                
+                local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[QUICK VEH]", {0.53, 0.86, 1.0})
+                
+                if imgui.IsMouseClicked(0) then
+                    if centerHovered then
+                        showContextVehRadial[0] = false
+                        showRadialMenu[0] = true
+                        menuOpenTime = os.clock()
+                    elseif hoveredSector >= 1 and hoveredSector <= 4 then
+                        local slot = contextVehCommands[hoveredSector]
+                        if slot and slot.name and slot.name ~= "-" and slot.name ~= "" then
+                            if (slot.onCmd and slot.onCmd ~= "") or (slot.offCmd and slot.offCmd ~= "") then
+                                ctxSubRadialItem = { name = slot.name, onCmd = slot.onCmd or "", offCmd = slot.offCmd or "" }
+                                showContextVehRadial[0] = false
+                                showCtxSubRadial[0] = true
+                                menuOpenTime = os.clock()
+                            end
                         end
+                    end
+                end
+            end
+            
+            -- LEVEL 3: CONTEXT SUB-RADIAL (ON/OFF)
+            if showCtxSubRadial[0] then
+                local item = ctxSubRadialItem
+                local cat = (item.name or ""):lower()
+                local isOn = toggleState[cat]
+                
+                local onLabel, offLabel = "ON", "OFF"
+                if cat == "lock" then
+                    onLabel, offLabel = "LOCK", "UNLOCK"
+                elseif cat == "trunk" or cat == "hood" then
+                    onLabel, offLabel = "OPEN", "CLOSE"
+                elseif cat == "engine" or cat == "light" or cat == "lights" then
+                    onLabel, offLabel = "ON", "OFF"
+                end
+                
+                local onColor = isOn and 0x55FFFFFF or 0xFF44FF44
+                local offColor = isOn and 0xFFFF4444 or 0x55FFFFFF
+                
+                local menuItems = {
+                    { label = onLabel, color = {0.26, 0.81, 0.46}, labelColor = onColor },
+                    { label = "-", color = {0.4, 0.4, 0.4}, labelColor = 0x55FFFFFF },
+                    { label = offLabel, color = {0.91, 0.30, 0.40}, labelColor = offColor },
+                    { label = "-", color = {0.4, 0.4, 0.4}, labelColor = 0x55FFFFFF },
+                }
+                
+                local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[" .. item.name .. "]", {0, 1, 1})
+
+                
+                if imgui.IsMouseClicked(0) then
+                    if centerHovered then
+                        showCtxSubRadial[0] = false
+                        showContextVehRadial[0] = true
+                        menuOpenTime = os.clock()
+                    elseif hoveredSector == 1 and not isOn then
+                        executeCommand(item.onCmd)
+                        toggleState[cat] = true
+                        closeAllRadial()
+                    elseif hoveredSector == 3 and isOn then
+                        executeCommand(item.offCmd)
+                        toggleState[cat] = false
                         closeAllRadial()
                     end
                 end
-                if pressed == 5 then
-                    if tp <= 1 then
-                        showVehRadial[0] = false
-                        showVehCatRadial[0] = true
-                    elseif vehRadialPage < tp then vehRadialPage = vehRadialPage + 1
-                    else vehRadialPage = vehRadialPage - 1 end
+            end
+            
+            -- LEVEL 2: ANIM CATEGORY
+            if showCatRadial[0] then
+                local menuItems = {}
+                for i = 1, 4 do
+                    local catName = iniData["CatSector"..i].name or ""
+                    menuItems[i] = { 
+                        label = catName ~= "" and catName or "-", 
+                        color = {0.54, 0.36, 0.76},
+                        labelColor = catName ~= "" and 0xFFFFFFFF or 0x55FFFFFF
+                    }
                 end
-                    end  -- if s > 0.3
-                imgui.End()
-            end  -- if ok
-        end  -- do
+                
+                local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[ANIM]", {0, 1, 1})
+                
+                if imgui.IsMouseClicked(0) then
+                    if centerHovered then
+                        showCatRadial[0] = false
+                        showRadialMenu[0] = true
+                        menuOpenTime = os.clock()
+                    elseif hoveredSector >= 1 and hoveredSector <= 4 then
+                        local sectorName = iniData["CatSector"..hoveredSector].name or ""
+                        if sectorName ~= "" and sectorName ~= "-" then
+                            loadAnimForCategory(sectorName)
+                            if #animRadialList > 0 then
+                                currentCategory = sectorName
+                                showCatRadial[0] = false
+                                showAnimRadial[0] = true
+                                menuOpenTime = os.clock()
+                            else
+                                sampAddChatMessage("{FF8800}[Radial] {FFFFFF}No animations found. Use /rcmdf to configure: "..sectorName, -1)
+                            end
+                        end
+                    end
+                end
+            end
 
+            
+            -- LEVEL 3: ANIM ITEMS
+            if showAnimRadial[0] then
+                local tp = totalAnimPages()
+                local pga = getAnimPage(animRadialPage)
+                local menuItems = {}
+                for i = 1, 4 do
+                    if pga[i] then
+                        menuItems[i] = { label = pga[i].label, color = {0.54, 0.36, 0.76}, labelColor = 0xFFFFFFFF }
+                    else
+                        menuItems[i] = { label = "-", color = {0.4, 0.4, 0.4}, labelColor = 0x55FFFFFF }
+                    end
+                end
+                
+                local titleText = "[" .. currentCategory .. "] Page " .. animRadialPage .. "/" .. tp
+                local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, titleText, {0, 1, 1})
+                
+                if imgui.IsMouseClicked(0) then
+                    if centerHovered then
+                        if tp <= 1 then
+                            showAnimRadial[0] = false
+                            showCatRadial[0] = true
+                            menuOpenTime = os.clock()
+                        elseif animRadialPage < tp then
+                            animRadialPage = animRadialPage + 1
+                        else
+                            animRadialPage = 1
+                        end
+                    elseif hoveredSector >= 1 and hoveredSector <= 4 and pga[hoveredSector] then
+                        executeCommand(pga[hoveredSector].cmd)
+                        closeAllRadial()
+                    end
+                end
+            end
+            
+            imgui.End()
+            imgui.PopStyleColor(2)
+            imgui.PopStyleVar(2)
+        end
     end)
 
     while true do wait(100) end
