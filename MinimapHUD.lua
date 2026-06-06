@@ -276,7 +276,7 @@ local function drawFullMap(draw_list)
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
     end
 
-    -- Drag: map starts centered on player, user can drag to explore
+    -- Handle drag (touch hold and move)
     if imgui.IsMouseDown(0) then
         if not fullMapDragging then
             fullMapDragging = true
@@ -293,12 +293,6 @@ local function drawFullMap(draw_list)
     else
         fullMapDragging = false
     end
-
-    -- Clamp so map stays on screen
-    local maxOffsetX = math.max(0, (mapDisplaySize - sw) / 2 + sw / 4)
-    local maxOffsetY = math.max(0, (mapDisplaySize - sh) / 2 + sh / 4)
-    fullMapOffsetX = clamp(fullMapOffsetX, -maxOffsetX, maxOffsetX)
-    fullMapOffsetY = clamp(fullMapOffsetY, -maxOffsetY, maxOffsetY)
 
     -- Zoom controls (draw +/- buttons)
     local btnSize = 50
