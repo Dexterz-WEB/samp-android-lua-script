@@ -958,7 +958,7 @@ function main()
 
 
             elseif configTab == 2 then
-                imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIMATION SLOTS (21 items)")
+                imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIMATION COMMANDS")
                 imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Label"); imgui.SameLine(260)
@@ -966,8 +966,6 @@ function main()
                 imgui.Separator(); imgui.Spacing()
                 imgui.BeginChild("##animscroll", imgui.ImVec2(-1, -50), true)
                 for i = 1, MAX_ANIM_SLOTS do
-                    imgui.Text(string.format("%2d|", i))
-                    imgui.SameLine(40)
                     imgui.PushItemWidth(100); imgui.InputText("##animcat"..i, animEditCategory[i], 32); imgui.PopItemWidth()
                     imgui.SameLine(130)
                     imgui.PushItemWidth(100); imgui.InputText("##animlbl"..i, animEditLabel[i], 64); imgui.PopItemWidth()
