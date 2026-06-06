@@ -260,7 +260,6 @@ function closeAllRadial()
     showVehRadial[0]    = false
     showContextVehRadial[0] = false
     showCtxSubRadial[0] = false
-    menuOpenTime = os.clock()
 end
 
 function executeCommand(cmd)
@@ -326,6 +325,7 @@ function loadProfile(profileName)
     profilesData.Settings.currentProfile = profileName
     inicfg.save(profilesData, profilesFileName)
     reloadEditBuffers()
+    profileListDirty = true
     sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile loaded: {FFFF00}" .. profileName, -1)
     return true
 end
@@ -590,6 +590,8 @@ function saveAllConfig()
     if inicfg.save(iniData, iniFileName) then
         if animChanged then rebuildAnimList() end
         if vehChanged then rebuildVehList() end
+        contextCmdsDirty = true
+        profileListDirty = true
         sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Configuration saved!", -1)
         showConfigWindow[0] = false
         return true
@@ -608,29 +610,34 @@ function drawPieMenuBackground(draw_list, centerX, centerY, radius, scale)
         imgui.ImVec2(centerX, centerY),
         radius + 40,
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.08, 0.08, 0.12, bgAlpha)),
-        64
+        32  -- Reduced from 64
     )
     draw_list:AddCircle(
         imgui.ImVec2(centerX, centerY),
         radius + 42,
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.3, 0.6, 0.9, 0.5 * scale)),
-        64,
+        32,  -- Reduced from 64
         2
     )
 end
 
 
 function drawPieSector(draw_list, centerX, centerY, angle1, angle2, innerR, outerR, color, alpha, scale)
-    local arcSegments = 20
+    local arcSegments = 10  -- Reduced from 20 for mobile performance
+    local fillColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(color[1], color[2], color[3], alpha * scale))
+    local step = (angle2 - angle1) / arcSegments
     for seg = 0, arcSegments - 1 do
-        local a1 = angle1 + (angle2 - angle1) * seg / arcSegments
-        local a2 = angle1 + (angle2 - angle1) * (seg + 1) / arcSegments
-        local p1 = imgui.ImVec2(centerX + math.cos(a1) * innerR, centerY + math.sin(a1) * innerR)
-        local p2 = imgui.ImVec2(centerX + math.cos(a1) * outerR, centerY + math.sin(a1) * outerR)
-        local p3 = imgui.ImVec2(centerX + math.cos(a2) * outerR, centerY + math.sin(a2) * outerR)
-        local p4 = imgui.ImVec2(centerX + math.cos(a2) * innerR, centerY + math.sin(a2) * innerR)
-        local fillColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(color[1], color[2], color[3], alpha * scale))
-        draw_list:AddQuadFilled(p1, p2, p3, p4, fillColor)
+        local a1 = angle1 + step * seg
+        local a2 = a1 + step
+        local cos_a1, sin_a1 = math.cos(a1), math.sin(a1)
+        local cos_a2, sin_a2 = math.cos(a2), math.sin(a2)
+        draw_list:AddQuadFilled(
+            imgui.ImVec2(centerX + cos_a1 * innerR, centerY + sin_a1 * innerR),
+            imgui.ImVec2(centerX + cos_a1 * outerR, centerY + sin_a1 * outerR),
+            imgui.ImVec2(centerX + cos_a2 * outerR, centerY + sin_a2 * outerR),
+            imgui.ImVec2(centerX + cos_a2 * innerR, centerY + sin_a2 * innerR),
+            fillColor
+        )
     end
 end
 
@@ -649,13 +656,13 @@ function drawCenterButton(draw_list, centerX, centerY, centerR, centerHovered, s
         imgui.ImVec2(centerX, centerY),
         centerR,
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.15, 0.15, 0.22, centerAlpha)),
-        32
+        24
     )
     draw_list:AddCircle(
         imgui.ImVec2(centerX, centerY),
         centerR,
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.6, 0.6, 0.8, 0.5 * scale)),
-        32,
+        24,
         1.5
     )
     local closeIcon = fa_loaded and faicons('XMARK') or labelText
@@ -851,10 +858,28 @@ function main()
         end
     end)
 
+    -- Performance cache variables
+    local cachedSW, cachedSH = 0, 0
+    local screenCacheFrame = 0
+    local cachedProfileList = nil
+    local profileListDirty = true
+    local cachedInVehCmds = nil
+    local cachedOnFootCmds = nil
+    local contextCmdsDirty = true
+    
     imgui.OnFrame(function() return true end, function()
-        local sw, sh = getScreenResolution()
+        -- Cache screen resolution (update every 60 frames)
+        screenCacheFrame = screenCacheFrame + 1
+        if screenCacheFrame >= 60 or cachedSW == 0 then
+            cachedSW, cachedSH = getScreenResolution()
+            screenCacheFrame = 0
+        end
+        local sw, sh = cachedSW, cachedSH
         local draw_list = imgui.GetBackgroundDrawList()
         local cx, cy = sw / 2, sh / 2
+        
+        -- Cache current time for this frame
+        local frameTime = os.clock()
 
         local dialogActive = false
         pcall(function() dialogActive = sampIsDialogActive() end)
@@ -1078,7 +1103,11 @@ function main()
                 
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), "LOAD PROFILE:")
-                availableProfiles = listProfiles()
+                if profileListDirty then
+                    cachedProfileList = listProfiles()
+                    profileListDirty = false
+                end
+                availableProfiles = cachedProfileList
                 imgui.SetNextItemWidth(300)
                 if imgui.BeginCombo("##loadprofile", currentProfile) then
                     for _, pName in ipairs(availableProfiles) do
@@ -1125,10 +1154,10 @@ function main()
             draw_list:AddCircleFilled(hCenter, hbsHalf * hPulse, hGlowColor, 16)
             
             local hBgAlpha = math.floor(hba * 220)
-            draw_list:AddCircleFilled(hCenter, hbsHalf, hBgAlpha * 0x01000000 + 0x00222222, 32)
+            draw_list:AddCircleFilled(hCenter, hbsHalf, hBgAlpha * 0x01000000 + 0x00222222, 24)
             
             local hBorderAlpha = math.floor(hba * 255)
-            draw_list:AddCircle(hCenter, hbsHalf, hBorderAlpha * 0x01000000 + 0x0088DDFF, 32, 3.0)
+            draw_list:AddCircle(hCenter, hbsHalf, hBorderAlpha * 0x01000000 + 0x0088DDFF, 24, 3.0)
             
             local hIconSize = hbs * 0.4
             local hIconAlpha = math.floor(hba * 255)
@@ -1154,7 +1183,7 @@ function main()
                         closeAllRadial()
                     else
                         showRadialMenu[0] = true
-                        menuOpenTime = os.clock()
+                        menuOpenTime = frameTime
                     end
                 end
             imgui.End()
@@ -1163,13 +1192,13 @@ function main()
         -- ANIMATION CALCULATION
         local anyMenuOpen = showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0] or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] or showCtxSubRadial[0]
         if anyMenuOpen then
-            local elapsed = os.clock() - menuOpenTime
+            local elapsed = frameTime - menuOpenTime
             local animDuration = 0.3
             local t = clamp(elapsed / animDuration, 0, 1.0)
             menuScale = getEase('outCubic', t)
         else
             if menuScale > 0 then
-                local elapsed = os.clock() - menuOpenTime
+                local elapsed = frameTime - menuOpenTime
                 local animDuration = 0.3
                 local t = clamp(elapsed / animDuration, 0, 1.0)
                 menuScale = 1.0 - getEase('inCubic', t)
@@ -1202,7 +1231,7 @@ function main()
                 
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[MAIN]", {1, 1, 0})
                 
-                local currentTime = os.clock()
+                local currentTime = frameTime
                 if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
                     lastClickTime = currentTime
                     if centerHovered then
@@ -1215,7 +1244,7 @@ function main()
                         end
                         showRadialMenu[0] = false
                         showContextVehRadial[0] = true
-                        menuOpenTime = os.clock()
+                        menuOpenTime = frameTime
                     elseif hoveredSector == 2 then
                         local cmd = iniData.Sector2.cmd or ""
                         if executeCommand(cmd) then closeAllRadial() end
@@ -1223,7 +1252,7 @@ function main()
                         if not inVehicle then
                             showRadialMenu[0] = false
                             showCatRadial[0] = true
-                            menuOpenTime = os.clock()
+                            menuOpenTime = frameTime
                         end
                     elseif hoveredSector == 4 then
                         local cmd = iniData.Sector4.cmd or ""
@@ -1247,13 +1276,13 @@ function main()
                 
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[QUICK VEH]", {0.53, 0.86, 1.0})
                 
-                local currentTime = os.clock()
+                local currentTime = frameTime
                 if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
                     lastClickTime = currentTime
                     if centerHovered then
                         showContextVehRadial[0] = false
                         showRadialMenu[0] = true
-                        menuOpenTime = os.clock()
+                        menuOpenTime = frameTime
                     elseif hoveredSector >= 1 and hoveredSector <= 4 then
                         local slot = contextVehCommands[hoveredSector]
                         if slot and slot.name and slot.name ~= "-" and slot.name ~= "" then
@@ -1261,7 +1290,7 @@ function main()
                                 ctxSubRadialItem = { name = slot.name, onCmd = slot.onCmd or "", offCmd = slot.offCmd or "" }
                                 showContextVehRadial[0] = false
                                 showCtxSubRadial[0] = true
-                                menuOpenTime = os.clock()
+                                menuOpenTime = frameTime
                             end
                         end
                     end
@@ -1295,13 +1324,13 @@ function main()
                 
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[" .. item.name .. "]", {0, 1, 1})
 
-                local currentTime = os.clock()
+                local currentTime = frameTime
                 if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
                     lastClickTime = currentTime
                     if centerHovered then
                         showCtxSubRadial[0] = false
                         showContextVehRadial[0] = true
-                        menuOpenTime = os.clock()
+                        menuOpenTime = frameTime
                     elseif hoveredSector == 1 and not isOn then
                         executeCommand(item.onCmd)
                         toggleState[cat] = true
@@ -1328,13 +1357,13 @@ function main()
                 
                 local hoveredSector, centerHovered = drawPieMenu(draw_list, cx, cy, menuItems, menuScale, "[ANIM]", {0, 1, 1})
                 
-                local currentTime = os.clock()
+                local currentTime = frameTime
                 if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
                     lastClickTime = currentTime
                     if centerHovered then
                         showCatRadial[0] = false
                         showRadialMenu[0] = true
-                        menuOpenTime = os.clock()
+                        menuOpenTime = frameTime
                     elseif hoveredSector >= 1 and hoveredSector <= 4 then
                         local sectorName = iniData["CatSector"..hoveredSector].name or ""
                         if sectorName ~= "" and sectorName ~= "-" then
@@ -1343,7 +1372,7 @@ function main()
                                 currentCategory = sectorName
                                 showCatRadial[0] = false
                                 showAnimRadial[0] = true
-                                menuOpenTime = os.clock()
+                                menuOpenTime = frameTime
                             else
                                 sampAddChatMessage("{FF8800}[Radial] {FFFFFF}No animations found. Use /rcmdf to configure: "..sectorName, -1)
                             end
@@ -1387,13 +1416,13 @@ function main()
                         imgui.ImVec2(prevX, prevY),
                         btnSize / 2,
                         math.floor(prevBgAlpha) * 0x01000000 + 0x00222222,
-                        32
+                        20
                     )
                     draw_list:AddCircle(
                         imgui.ImVec2(prevX, prevY),
                         btnSize / 2,
                         math.floor(prevIconAlpha) * 0x01000000 + 0x0088DDFF,
-                        32,
+                        20,
                         2.5
                     )
                     
@@ -1420,13 +1449,13 @@ function main()
                         imgui.ImVec2(nextX, nextY),
                         btnSize / 2,
                         math.floor(nextBgAlpha) * 0x01000000 + 0x00222222,
-                        32
+                        20
                     )
                     draw_list:AddCircle(
                         imgui.ImVec2(nextX, nextY),
                         btnSize / 2,
                         math.floor(nextIconAlpha) * 0x01000000 + 0x0088DDFF,
-                        32,
+                        20,
                         2.5
                     )
                     
@@ -1450,7 +1479,7 @@ function main()
                     )
                 end
                 
-                local currentTime = os.clock()
+                local currentTime = frameTime
                 if imgui.IsMouseClicked(0) and (currentTime - lastClickTime) > CLICK_COOLDOWN then
                     lastClickTime = currentTime
                     if centerHovered then
