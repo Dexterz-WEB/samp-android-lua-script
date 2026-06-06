@@ -148,31 +148,69 @@ hkRadar = hook.new("void(__cdecl*)(void*)", function(thiz)
     -- Recalculate only if moved > 30m
     local pdx, pdy = sc.x - gpsLastCalcX, sc.y - gpsLastCalcY
     if math.sqrt(pdx*pdx + pdy*pdy) > gpsRecalcDist or #gpsCachedPath == 0 then
-        local dc = ffi.new("CVector", {x = bx, y = by, z = bz})
-        gpsOutCount[0] = 0
-        gpsOutDist[0] = 0.0
-
-        gtasa._ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb(
-            ffi.cast("void*", gps_gtp()),
-            0, sc, gpsNullNode, dc,
-            gpsResultNodes, gpsOutCount, GPS_MAX_NODES,
-            gpsOutDist, 999999.0, nil, 999999.0,
-            false, gpsNullNode, false, false
-        )
-
-        gpsNodeCount = gpsOutCount[0]
-        gpsDistance = gpsOutDist[0]
-        gpsLastCalcX = sc.x
-        gpsLastCalcY = sc.y
-
-        -- Cache path world coords
+        -- Chain pathfinding: split long routes into segments
+        local totalDist = math.sqrt((sc.x - bx)^2 + (sc.y - by)^2)
+        local SEGMENT_LENGTH = 1200.0
+        
         gpsCachedPath = {}
-        for i = 0, gpsNodeCount - 1 do
-            local nx, ny, nz = gps_GetNodeCoors(gpsResultNodes[i].areaId, gpsResultNodes[i].nodeId)
-            if nx then
-                gpsCachedPath[#gpsCachedPath + 1] = {x = nx, y = ny}
+        gpsDistance = 0
+        gpsNodeCount = 0
+        
+        local numSegments = math.max(1, math.ceil(totalDist / SEGMENT_LENGTH))
+        local dirX = (bx - sc.x) / math.max(totalDist, 1)
+        local dirY = (by - sc.y) / math.max(totalDist, 1)
+        
+        for seg = 1, numSegments do
+            local startX, startY, startZ
+            if seg == 1 then
+                startX, startY, startZ = sc.x, sc.y, sc.z
+            else
+                local lastPt = gpsCachedPath[#gpsCachedPath]
+                if lastPt then
+                    startX = lastPt.x
+                    startY = lastPt.y
+                    startZ = gtasa._ZN6CWorld19FindGroundZForCoordEff(startX, startY)
+                else
+                    break
+                end
+            end
+            
+            local endX, endY, endZ
+            if seg == numSegments then
+                endX, endY, endZ = bx, by, bz
+            else
+                local midDist = seg * SEGMENT_LENGTH
+                endX = sc.x + dirX * midDist
+                endY = sc.y + dirY * midDist
+                endZ = gtasa._ZN6CWorld19FindGroundZForCoordEff(endX, endY)
+            end
+            
+            local startVec = ffi.new("CVector", {x = startX, y = startY, z = startZ})
+            local endVec = ffi.new("CVector", {x = endX, y = endY, z = endZ})
+            gpsOutCount[0] = 0
+            gpsOutDist[0] = 0.0
+            
+            gtasa._ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb(
+                ffi.cast("void*", gps_gtp()),
+                0, startVec, gpsNullNode, endVec,
+                gpsResultNodes, gpsOutCount, GPS_MAX_NODES,
+                gpsOutDist, 999999.0, nil, 999999.0,
+                false, gpsNullNode, false, false
+            )
+            
+            gpsDistance = gpsDistance + gpsOutDist[0]
+            gpsNodeCount = gpsNodeCount + gpsOutCount[0]
+            
+            for i = 0, gpsOutCount[0] - 1 do
+                local nx, ny, nz = gps_GetNodeCoors(gpsResultNodes[i].areaId, gpsResultNodes[i].nodeId)
+                if nx then
+                    gpsCachedPath[#gpsCachedPath + 1] = {x = nx, y = ny}
+                end
             end
         end
+        
+        gpsLastCalcX = sc.x
+        gpsLastCalcY = sc.y
     end
 
     if gpsNodeCount > 0 then
