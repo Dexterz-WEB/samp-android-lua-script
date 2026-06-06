@@ -51,10 +51,12 @@ end
 imgui.OnFrame(function() return showWindow[0] end, function()
     local sw, sh = getScreenResolution()
 
-    -- Smaller window (not full screen - fits nicely on Android)
-    imgui.SetNextWindowPos(imgui.ImVec2(30, sh / 4), imgui.Cond.FirstUseEver)
-    imgui.SetNextWindowSize(imgui.ImVec2(sw - 60, sh / 2))
-    imgui.Begin("Radial Menu Config v2", showWindow)
+    -- Compact window (centered, not too big)
+    local winW = 550
+    local winH = 350
+    imgui.SetNextWindowPos(imgui.ImVec2((sw - winW) / 2, (sh - winH) / 2), imgui.Cond.FirstUseEver)
+    imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
+    imgui.Begin("Radial Menu Config v2", showWindow, imgui.WindowFlags.NoResize)
 
     -- ========================================================================
     -- TAB BAR (simple buttons - no PushStyleColor to avoid crash)
@@ -73,9 +75,8 @@ imgui.OnFrame(function() return showWindow[0] end, function()
     imgui.Spacing(); imgui.Separator(); imgui.Spacing()
 
     -- ========================================================================
-    -- TAB CONTENT (scrollable child)
+    -- TAB CONTENT (no scroll - compact fit)
     -- ========================================================================
-    imgui.BeginChild("##tabcontent", imgui.ImVec2(-1, -50), true, imgui.WindowFlags.NoScrollbar)
 
     -- ====================================================================
     -- TAB 1: MAIN
@@ -161,10 +162,8 @@ imgui.OnFrame(function() return showWindow[0] end, function()
         imgui.TextDisabled("Profile management features here...")
     end
 
-    imgui.EndChild()
-
     -- ========================================================================
-    -- BOTTOM: Save button (always visible)
+    -- BOTTOM: Save button
     -- ========================================================================
     imgui.Spacing()
     if imgui.Button("SAVE ALL", imgui.ImVec2(-1, 40)) then
