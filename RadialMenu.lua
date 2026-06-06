@@ -1101,9 +1101,9 @@ function main()
         if showConfigWindow[0] then
             -- Adaptive window size per tab
             local winW = 500
-            local winH = 250
+            local winH = 520  -- Tab 1 sekarang lebih panjang
             if configTab == 2 then winH = 380 end
-            if configTab == 3 then winH = 400 end
+            if configTab == 3 then winH = 580 end
             if configTab == 4 then winH = 280 end
             
             -- CORRECT MonetLoader styling functions
@@ -1148,6 +1148,39 @@ function main()
                 imgui.SliderFloat("##size", hamburgerSize, 50, 150, "%.0f")
                 imgui.Text("Opacity:"); imgui.SetNextItemWidth(-1)
                 imgui.SliderFloat("##opacity", hamburgerAlpha, 0.3, 1.0, "%.2f")
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "MAIN SECTORS")
+                imgui.Spacing()
+                imgui.TextDisabled("Sector 1 (VEHICLE) - Leave cmd empty to use category menu")
+                imgui.TextDisabled("Sector 3 (ANIM) - Leave cmd empty to use category menu")
+                imgui.Spacing()
+                for i = 1, 4 do
+                    imgui.Text("S"..i..":"); imgui.SameLine()
+                    imgui.PushItemWidth(100); imgui.InputText("##sn"..i, editName[i], 32); imgui.PopItemWidth()
+                    if i == 1 or i == 3 then
+                        imgui.SameLine(); imgui.TextDisabled("(menu)")
+                    else
+                        imgui.SameLine()
+                        imgui.PushItemWidth(-1); imgui.InputText("##sc"..i, editCmd[i], 64); imgui.PopItemWidth()
+                    end
+                end
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIM CATEGORIES")
+                imgui.Spacing()
+                for i = 1, 4 do
+                    imgui.Text("Cat"..i..":"); imgui.SameLine()
+                    imgui.PushItemWidth(-1); imgui.InputText("##acat"..i, editCatName[i], 32); imgui.PopItemWidth()
+                end
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "VEHICLE CATEGORIES")
+                imgui.Spacing()
+                for i = 1, 4 do
+                    imgui.Text("Cat"..i..":"); imgui.SameLine()
+                    imgui.PushItemWidth(-1); imgui.InputText("##vcat"..i, editVehCatName[i], 32); imgui.PopItemWidth()
+                end
 
             -- TAB 2: ANIM
             elseif configTab == 2 then
@@ -1168,7 +1201,26 @@ function main()
 
             -- TAB 3: VEHICLE
             elseif configTab == 3 then
-                imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "IN-VEHICLE COMMANDS")
+                imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "VEHICLE SPAWN COMMANDS")
+                imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Label"); imgui.SameLine(260)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Command")
+                imgui.Separator(); imgui.Spacing()
+                
+                imgui.BeginChild("##vehscroll", imgui.ImVec2(-1, 150), true)
+                for i = 1, 10 do
+                    imgui.PushItemWidth(100); imgui.InputText("##vc"..i, vehEditCategory[i], 32); imgui.PopItemWidth()
+                    imgui.SameLine(130)
+                    imgui.PushItemWidth(100); imgui.InputText("##vl"..i, vehEditLabel[i], 64); imgui.PopItemWidth()
+                    imgui.SameLine(260)
+                    imgui.PushItemWidth(-1); imgui.InputText("##vcmd"..i, vehEditCmd[i], 128); imgui.PopItemWidth()
+                end
+                imgui.EndChild()
+
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                
+                imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "CONTEXT: IN-VEHICLE")
                 imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "ON Cmd"); imgui.SameLine(310)
@@ -1184,7 +1236,7 @@ function main()
 
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
 
-                imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "ON-FOOT COMMANDS")
+                imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "CONTEXT: ON-FOOT")
                 imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "ON Cmd"); imgui.SameLine(310)
@@ -1320,15 +1372,25 @@ function main()
                 -- Close
                 closeAllRadial()
             elseif selected == 1 then
-                -- VEHICLE sector - context aware
-                if inVehicle then
-                    contextVehCommands = getInVehicleCommands()
+                -- VEHICLE sector - check if it's configured for context-aware or category menu
+                local sector1Cmd = menuItems[1].cmd
+                
+                -- If sector has no command, open vehicle category menu
+                if not sector1Cmd or sector1Cmd == "" then
+                    showRadialMenu[0] = false
+                    showVehCatRadial[0] = true
+                    menuOpenTime = os.clock()
                 else
-                    contextVehCommands = getOnFootCommands()
+                    -- If sector has command, use context-aware mode (old behavior)
+                    if inVehicle then
+                        contextVehCommands = getInVehicleCommands()
+                    else
+                        contextVehCommands = getOnFootCommands()
+                    end
+                    showRadialMenu[0] = false
+                    showContextVehRadial[0] = true
+                    menuOpenTime = os.clock()
                 end
-                showRadialMenu[0] = false
-                showContextVehRadial[0] = true
-                menuOpenTime = os.clock()
             elseif selected == 2 then
                 -- Sector 2 - direct command
                 local cmd = menuItems[2].cmd
@@ -1439,6 +1501,93 @@ function main()
             imgui.PopStyleVar(2)
         end
 
+
+        -- ====================================================================
+        -- LEVEL 2b: VEHICLE CATEGORY SELECTION
+        -- ====================================================================
+        if showVehCatRadial[0] and menuScale > 0.01 then
+            imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 0)
+            imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
+            imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0.4 * menuScale))
+            imgui.PushStyleColor(imgui.Col.Border, imgui.ImVec4(0, 0, 0, 0))
+
+            imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
+            imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
+            imgui.Begin('##PieOverlayVehCat', nil, imgui.WindowFlags.NoTitleBar
+                + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove
+                + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings)
+
+            local vehCatItems = {}
+            for i = 1, 4 do
+                local cat = iniData["VehCatSector"..i]
+                vehCatItems[i] = {
+                    label = cat.name or "---",
+                    color = { 0.26, 0.71, 0.81, 1.0 }
+                }
+            end
+
+            local selected = drawPieMenu(draw_list, cx, cy, vehCatItems, menuScale, nil)
+            
+            if selected == -1 then
+                showVehCatRadial[0] = false
+                showRadialMenu[0] = true
+                menuOpenTime = os.clock()
+            elseif selected >= 1 and selected <= 4 then
+                currentVehCategory = vehCatItems[selected].label
+                loadVehForCategory(currentVehCategory)
+                showVehCatRadial[0] = false
+                showVehRadial[0] = true
+                menuOpenTime = os.clock()
+            end
+
+            imgui.End()
+            imgui.PopStyleColor(2)
+            imgui.PopStyleVar(2)
+        end
+
+        -- ====================================================================
+        -- LEVEL 3: VEHICLE ITEMS
+        -- ====================================================================
+        if showVehRadial[0] and menuScale > 0.01 then
+            imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 0)
+            imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
+            imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0.4 * menuScale))
+            imgui.PushStyleColor(imgui.Col.Border, imgui.ImVec4(0, 0, 0, 0))
+
+            imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
+            imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
+            imgui.Begin('##PieOverlayVeh', nil, imgui.WindowFlags.NoTitleBar
+                + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove
+                + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings)
+
+            local pageItems = getVehPage(vehRadialPage)
+            local vehItems = {}
+            for i = 1, 4 do
+                if pageItems[i] then
+                    vehItems[i] = {
+                        label = pageItems[i].label,
+                        cmd = pageItems[i].cmd,
+                        color = { 0.26, 0.71, 0.81, 1.0 }
+                    }
+                end
+            end
+
+            local selected = drawPieMenu(draw_list, cx, cy, vehItems, menuScale, nil)
+            
+            if selected == -1 then
+                showVehRadial[0] = false
+                showVehCatRadial[0] = true
+                menuOpenTime = os.clock()
+            elseif selected >= 1 and selected <= 4 and vehItems[selected] then
+                if executeCommand(vehItems[selected].cmd) then
+                    closeAllRadial()
+                end
+            end
+
+            imgui.End()
+            imgui.PopStyleColor(2)
+            imgui.PopStyleVar(2)
+        end
 
         -- ====================================================================
         -- CONTEXT VEHICLE RADIAL (IN-VEHICLE or ON-FOOT)
