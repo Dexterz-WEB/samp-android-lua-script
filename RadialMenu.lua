@@ -677,7 +677,7 @@ function drawPieMenu(draw_list, centerX, centerY, items, scale, titleText, title
     local baseRadius = 120 * scale
     local itemCount = #items
     local sectorAngle = (2 * math.pi) / itemCount
-    local startAngle = -math.pi / 2
+    local startAngle = -math.pi * 3/4
     local mousePos = imgui.GetIO().MousePos
     local hoveredSector, centerHovered = detectHoveredSector(mousePos, centerX, centerY, baseRadius, itemCount, startAngle, scale)
     
