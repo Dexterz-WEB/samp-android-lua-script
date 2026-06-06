@@ -534,6 +534,22 @@ local function drawFullMap(draw_list)
     local colorU32 = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 0.95))
     draw_list:AddImage(mapTexture, pMin, pMax, imgui.ImVec2(0, 0), imgui.ImVec2(1, 1), colorU32)
 
+    -- Draw GPS line on full map
+    if gpsActive and #gpsCachedPath >= 2 then
+        local lineColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.7, 0.8))
+        for i = 1, #gpsCachedPath - 1 do
+            local n0 = gpsCachedPath[i]
+            local n1 = gpsCachedPath[i + 1]
+            local uv0x, uv0y = worldToUV(n0.x, n0.y)
+            local uv1x, uv1y = worldToUV(n1.x, n1.y)
+            local sx0 = mapX + uv0x * mapDisplaySize
+            local sy0 = mapY + uv0y * mapDisplaySize
+            local sx1 = mapX + uv1x * mapDisplaySize
+            local sy1 = mapY + uv1y * mapDisplaySize
+            draw_list:AddLine(imgui.ImVec2(sx0, sy0), imgui.ImVec2(sx1, sy1), lineColor, 3.0)
+        end
+    end
+
     -- Draw player arrow on full map
     if arrowTexture then
         local playerMapX = mapX + playerUVX * mapDisplaySize
