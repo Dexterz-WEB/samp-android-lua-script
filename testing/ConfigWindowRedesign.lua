@@ -51,10 +51,10 @@ end
 imgui.OnFrame(function() return showWindow[0] end, function()
     local sw, sh = getScreenResolution()
 
-    -- Full screen window (better for mobile)
-    imgui.SetNextWindowPos(imgui.ImVec2(20, 20), imgui.Cond.FirstUseEver)
-    imgui.SetNextWindowSize(imgui.ImVec2(sw - 40, sh - 40), imgui.Cond.FirstUseEver)
-    imgui.Begin("Radial Menu Config v2", showWindow, imgui.WindowFlags.NoResize)
+    -- Smaller window (not full screen - fits nicely on Android)
+    imgui.SetNextWindowPos(imgui.ImVec2(30, sh / 4), imgui.Cond.FirstUseEver)
+    imgui.SetNextWindowSize(imgui.ImVec2(sw - 60, sh / 2))
+    imgui.Begin("Radial Menu Config v2", showWindow)
 
     -- ========================================================================
     -- TAB BAR (big colored buttons - touch friendly)
