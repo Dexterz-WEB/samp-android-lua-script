@@ -958,52 +958,8 @@ local function renderWithScale(key, showFlag, cx, cy, menuSize)
 end
 
 -- ============================================================================
--- PIE CHART / ARC RENDERING HELPERS
--- ============================================================================
--- Draw a filled arc segment (pie slice)
-local function drawFilledArc(draw_list, centerX, centerY, innerRadius, outerRadius, startAngle, endAngle, color, segments)
-    segments = segments or 20
-    
-    for seg = 0, segments - 1 do
-        local a1 = startAngle + (endAngle - startAngle) * seg / segments
-        local a2 = startAngle + (endAngle - startAngle) * (seg + 1) / segments
-        
-        -- Calculate 4 points for the quad
-        local p1 = imgui.ImVec2(centerX + math.cos(a1) * innerRadius, centerY + math.sin(a1) * innerRadius)
-        local p2 = imgui.ImVec2(centerX + math.cos(a1) * outerRadius, centerY + math.sin(a1) * outerRadius)
-        local p3 = imgui.ImVec2(centerX + math.cos(a2) * outerRadius, centerY + math.sin(a2) * outerRadius)
-        local p4 = imgui.ImVec2(centerX + math.cos(a2) * innerRadius, centerY + math.sin(a2) * innerRadius)
-        
-        draw_list:AddQuadFilled(p1, p2, p3, p4, color)
-    end
-end
-
--- Draw sector highlight with hover effect
-local function drawSectorHighlight(draw_list, centerX, centerY, sectorIndex, isHovered, color)
-    if not isHovered then return end
-    
-    local rI = 50
-    local rO = 135
-    local sectorAngle = math.pi / 2  -- 90 degrees per sector
-    local startAngle = -math.pi / 2 + (sectorIndex - 1) * sectorAngle  -- Start from top
-    local endAngle = startAngle + sectorAngle
-    
-    -- Highlight color with transparency
-    local highlightAlpha = 0x44  -- ~27% opacity
-    local highlightColor = highlightAlpha * 0x01000000 + (color or 0x00FFFFFF)
-    
-    drawFilledArc(draw_list, centerX, centerY, rI, rO, startAngle, endAngle, highlightColor, 20)
-end
-
--- ============================================================================
 -- DRAW RADIAL — label auto-center & auto-wrap
 -- ============================================================================
-local SECTOR_CENTERS = {
-    { x =   0, y = -92 },
-    { x =  92, y =   0 },
-    { x =   0, y =  92 },
-    { x = -92, y =   0 },
-}
 
 function drawLabelCentered(draw_list, text, cx, cy, color)
     local maxW = 78
@@ -1055,73 +1011,118 @@ end
 function drawRadialMenu(draw_list, centerX, centerY, labels, centerLabel, centerColor, winId, labelColors, icons, hoveredSector)
     local rO = 135
     local rI = 50
+    local itemCount = 4
+    local sectorAngle = (2 * math.pi) / itemCount
+    local startAngle = -math.pi / 2  -- Start from top
     
     -- Outer glow effect (subtle)
-    draw_list:AddCircleFilled(imgui.ImVec2(centerX, centerY), rO + 3, 0x33224466, 32)
+    local glowAlpha = 0.3
+    draw_list:AddCircleFilled(imgui.ImVec2(centerX, centerY), rO + 5, 
+        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.13, 0.27, 0.40, glowAlpha)), 32)
     
-    -- Draw sector highlights before main circles (if hovered sector is provided)
-    if hoveredSector and hoveredSector >= 1 and hoveredSector <= 4 then
-        local sectorColors = {
-            0x4488DDFF,  -- Top - Blue
-            0x44FF8844,  -- Right - Orange
-            0x44FF4488,  -- Bottom - Pink
-            0x4444FF88,  -- Left - Green
-        }
-        drawSectorHighlight(draw_list, centerX, centerY, hoveredSector, true, sectorColors[hoveredSector])
+    -- Background circle
+    draw_list:AddCircleFilled(imgui.ImVec2(centerX, centerY), rO, 0xDD151515, 64)
+    
+    -- Detect which sector is hovered using angle-based detection
+    local mousePos = imgui.GetIO().MousePos
+    local dx = mousePos.x - centerX
+    local dy = mousePos.y - centerY
+    local dist = math.sqrt(dx * dx + dy * dy)
+    local mouseAngle = math.atan2(dy, dx)
+    
+    -- Calculate hovered sector by angle
+    local detectedHover = nil
+    if dist > rI and dist < rO + 10 then
+        local normAngle = mouseAngle - startAngle
+        if normAngle < 0 then normAngle = normAngle + 2 * math.pi end
+        detectedHover = math.floor(normAngle / sectorAngle) + 1
+        if detectedHover > itemCount then detectedHover = 1 end
     end
     
-    -- Main circles
-    draw_list:AddCircleFilled(imgui.ImVec2(centerX, centerY), rO, 0xDD151515, 64)
+    -- Draw pie chart sectors with hover effects
+    for i = 1, itemCount do
+        local angle1 = startAngle + (i - 1) * sectorAngle
+        local angle2 = startAngle + i * sectorAngle
+        
+        -- Sector highlight on hover
+        local isHovered = (detectedHover == i)
+        local sectorAlpha = isHovered and 0.4 or 0.15
+        
+        -- Sector colors (Blue, Orange, Pink, Green)
+        local sectorColors = {
+            imgui.ImVec4(0.33, 0.67, 0.87, sectorAlpha),  -- Blue
+            imgui.ImVec4(1.0, 0.53, 0.27, sectorAlpha),   -- Orange  
+            imgui.ImVec4(1.0, 0.27, 0.53, sectorAlpha),   -- Pink
+            imgui.ImVec4(0.27, 1.0, 0.53, sectorAlpha),   -- Green
+        }
+        
+        local col = sectorColors[i]
+        
+        -- Draw filled arc segment (approximate with triangles)
+        local arcSegments = 20
+        for seg = 0, arcSegments - 1 do
+            local a1 = angle1 + (angle2 - angle1) * seg / arcSegments
+            local a2 = angle1 + (angle2 - angle1) * (seg + 1) / arcSegments
+            local p1 = imgui.ImVec2(centerX + math.cos(a1) * rI, centerY + math.sin(a1) * rI)
+            local p2 = imgui.ImVec2(centerX + math.cos(a1) * rO, centerY + math.sin(a1) * rO)
+            local p3 = imgui.ImVec2(centerX + math.cos(a2) * rO, centerY + math.sin(a2) * rO)
+            local p4 = imgui.ImVec2(centerX + math.cos(a2) * rI, centerY + math.sin(a2) * rI)
+            local fillColor = imgui.ColorConvertFloat4ToU32(col)
+            draw_list:AddQuadFilled(p1, p2, p3, p4, fillColor)
+        end
+        
+        -- Draw sector divider lines
+        local lineStart = imgui.ImVec2(centerX + math.cos(angle1) * rI, centerY + math.sin(angle1) * rI)
+        local lineEnd = imgui.ImVec2(centerX + math.cos(angle1) * rO, centerY + math.sin(angle1) * rO)
+        draw_list:AddLine(lineStart, lineEnd, 0x66888888, 1.5)
+    end
+    
+    -- Inner circle for center
     draw_list:AddCircleFilled(imgui.ImVec2(centerX, centerY), rI, 0xFF222222, 64)
     
     -- Outer border (subtle highlight)
-    draw_list:AddCircle(imgui.ImVec2(centerX, centerY), rO, 0x66FFFFFF, 64, 1.5)
-
-    local oi, oo = rI * 0.7071, rO * 0.7071
-    draw_list:AddLine(imgui.ImVec2(centerX+oi, centerY-oi), imgui.ImVec2(centerX+oo, centerY-oo), 0x55FFFFFF, 1.0)
-    draw_list:AddLine(imgui.ImVec2(centerX+oi, centerY+oi), imgui.ImVec2(centerX+oo, centerY+oo), 0x55FFFFFF, 1.0)
-    draw_list:AddLine(imgui.ImVec2(centerX-oi, centerY+oi), imgui.ImVec2(centerX-oo, centerY+oo), 0x55FFFFFF, 1.0)
-    draw_list:AddLine(imgui.ImVec2(centerX-oi, centerY-oi), imgui.ImVec2(centerX-oo, centerY-oo), 0x55FFFFFF, 1.0)
-
-    for i, lbl in ipairs(labels) do
-        local sc    = SECTOR_CENTERS[i]
+    draw_list:AddCircle(imgui.ImVec2(centerX, centerY), rO, 0x88AACCFF, 64, 2.0)
+    draw_list:AddCircle(imgui.ImVec2(centerX, centerY), rI, 0x66888888, 64, 1.5)
+    
+    -- Draw labels and icons
+    for i = 1, itemCount do
+        local midAngle = startAngle + (i - 0.5) * sectorAngle
+        local labelDist = (rI + rO) / 2
+        local labelX = centerX + math.cos(midAngle) * labelDist
+        local labelY = centerY + math.sin(midAngle) * labelDist
+        
+        local lbl = labels[i] or "---"
         local color = (labelColors and labelColors[i]) or 0xFFFFFFFF
+        
+        -- Brighten label on hover
+        if detectedHover == i then
+            color = 0xFFFFFFFF  -- Full white on hover
+        end
         
         -- Use icon-aware drawing if icons are provided
         if icons and icons[i] and icons[i] ~= "" then
-            drawLabelWithIcon(draw_list, icons[i], lbl, centerX + sc.x, centerY + sc.y, color, color)
+            drawLabelWithIcon(draw_list, icons[i], lbl, labelX, labelY, color, color)
         else
-            drawLabelCentered(draw_list, lbl, centerX + sc.x, centerY + sc.y, color)
+            drawLabelCentered(draw_list, lbl, labelX, labelY, color)
         end
     end
-
-    local cl  = centerLabel or ""
+    
+    -- Center label
+    local cl = centerLabel or ""
     local cts = imgui.CalcTextSize(cl)
     draw_list:AddText(imgui.ImVec2(centerX - cts.x*0.5, centerY - cts.y*0.5), centerColor or 0xFFFFFF00, cl)
-
-    -- Track hover state for each button
+    
+    -- Handle clicks using angle detection (no invisible buttons needed)
     local pressed = nil
-    local hovered = nil
+    local hovered = detectedHover
     
-    imgui.SetCursorPos(imgui.ImVec2(110,  20))
-    if imgui.InvisibleButton("##top_"..winId, imgui.ImVec2(120, 70)) then pressed = 1 end
-    if imgui.IsItemHovered() then hovered = 1 end
-    
-    imgui.SetCursorPos(imgui.ImVec2( 20, 135))
-    if imgui.InvisibleButton("##left_"..winId, imgui.ImVec2( 85, 70)) then pressed = 4 end
-    if imgui.IsItemHovered() then hovered = 4 end
-    
-    imgui.SetCursorPos(imgui.ImVec2(125, 135))
-    if imgui.InvisibleButton("##center_"..winId, imgui.ImVec2( 90, 70)) then pressed = 5 end
-    if imgui.IsItemHovered() then hovered = 5 end
-    
-    imgui.SetCursorPos(imgui.ImVec2(235, 135))
-    if imgui.InvisibleButton("##right_"..winId, imgui.ImVec2( 85, 70)) then pressed = 2 end
-    if imgui.IsItemHovered() then hovered = 2 end
-    
-    imgui.SetCursorPos(imgui.ImVec2(110, 250))
-    if imgui.InvisibleButton("##bottom_"..winId, imgui.ImVec2(120, 70)) then pressed = 3 end
-    if imgui.IsItemHovered() then hovered = 3 end
+    if imgui.IsMouseClicked(0) then
+        if dist > rI and dist < rO + 10 and detectedHover then
+            pressed = detectedHover
+        elseif dist <= rI then
+            pressed = 5  -- Center button
+        end
+    end
     
     return pressed, hovered
 end
@@ -1991,49 +1992,88 @@ function main()
                 local vl = {}
                 for i = 1, 4 do vl[i] = pgv[i] and not isDummySlot(pgv[i]) and pgv[i].label or nil end
 
-                -- Gambar radial (tanpa invisible button dulu)
+                -- Gambar radial dengan angle-based detection
                 local rO = 135
                 local rI = 50
+                local itemCount = 4
+                local sectorAngle = (2 * math.pi) / itemCount
+                local startAngle = -math.pi / 2
+                
+                -- Background circles
                 draw_list:AddCircleFilled(imgui.ImVec2(cx, cy), rO, 0xDD151515, 64)
                 draw_list:AddCircleFilled(imgui.ImVec2(cx, cy), rI, 0xFF222222, 64)
-                local oi, oo = rI * 0.7071, rO * 0.7071
-                draw_list:AddLine(imgui.ImVec2(cx+oi, cy-oi), imgui.ImVec2(cx+oo, cy-oo), 0x55FFFFFF, 1.0)
-                draw_list:AddLine(imgui.ImVec2(cx+oi, cy+oi), imgui.ImVec2(cx+oo, cy+oo), 0x55FFFFFF, 1.0)
-                draw_list:AddLine(imgui.ImVec2(cx-oi, cy+oi), imgui.ImVec2(cx-oo, cy+oo), 0x55FFFFFF, 1.0)
-                draw_list:AddLine(imgui.ImVec2(cx-oi, cy-oi), imgui.ImVec2(cx-oo, cy-oo), 0x55FFFFFF, 1.0)
-
+                
+                -- Detect hover using angle
+                local mousePos = imgui.GetIO().MousePos
+                local dx = mousePos.x - cx
+                local dy = mousePos.y - cy
+                local dist = math.sqrt(dx * dx + dy * dy)
+                local mouseAngle = math.atan2(dy, dx)
+                local detectedHover = nil
+                
+                if dist > rI and dist < rO + 10 then
+                    local normAngle = mouseAngle - startAngle
+                    if normAngle < 0 then normAngle = normAngle + 2 * math.pi end
+                    detectedHover = math.floor(normAngle / sectorAngle) + 1
+                    if detectedHover > itemCount then detectedHover = 1 end
+                end
+                
+                -- Draw pie sectors
                 for i = 1, 4 do
-                    local sc  = SECTOR_CENTERS[i]
+                    local angle1 = startAngle + (i - 1) * sectorAngle
+                    local angle2 = startAngle + i * sectorAngle
+                    local isHovered = (detectedHover == i) and not vlDisabled[i]
+                    local sectorAlpha = isHovered and 0.4 or 0.15
+                    
+                    local sectorColors = {
+                        imgui.ImVec4(0.33, 0.67, 0.87, sectorAlpha),
+                        imgui.ImVec4(1.0, 0.53, 0.27, sectorAlpha),
+                        imgui.ImVec4(1.0, 0.27, 0.53, sectorAlpha),
+                        imgui.ImVec4(0.27, 1.0, 0.53, sectorAlpha),
+                    }
+                    
+                    local col = sectorColors[i]
+                    local arcSegments = 20
+                    for seg = 0, arcSegments - 1 do
+                        local a1 = angle1 + (angle2 - angle1) * seg / arcSegments
+                        local a2 = angle1 + (angle2 - angle1) * (seg + 1) / arcSegments
+                        local p1 = imgui.ImVec2(cx + math.cos(a1) * rI, cy + math.sin(a1) * rI)
+                        local p2 = imgui.ImVec2(cx + math.cos(a1) * rO, cy + math.sin(a1) * rO)
+                        local p3 = imgui.ImVec2(cx + math.cos(a2) * rO, cy + math.sin(a2) * rO)
+                        local p4 = imgui.ImVec2(cx + math.cos(a2) * rI, cy + math.sin(a2) * rI)
+                        local fillColor = imgui.ColorConvertFloat4ToU32(col)
+                        draw_list:AddQuadFilled(p1, p2, p3, p4, fillColor)
+                    end
+                    
+                    -- Divider lines
+                    local lineStart = imgui.ImVec2(cx + math.cos(angle1) * rI, cy + math.sin(angle1) * rI)
+                    local lineEnd = imgui.ImVec2(cx + math.cos(angle1) * rO, cy + math.sin(angle1) * rO)
+                    draw_list:AddLine(lineStart, lineEnd, 0x66888888, 1.5)
+                end
+                
+                -- Draw labels
+                for i = 1, 4 do
+                    local midAngle = startAngle + (i - 0.5) * sectorAngle
+                    local labelDist = (rI + rO) / 2
+                    local labelX = cx + math.cos(midAngle) * labelDist
+                    local labelY = cy + math.sin(midAngle) * labelDist
                     local lbl = vl[i]
-                    drawLabelCentered(draw_list, lbl, cx + sc.x, cy + sc.y, vlColors[i])
+                    drawLabelCentered(draw_list, lbl, labelX, labelY, vlColors[i])
                 end
 
-                -- Center label (BACK/NEXT/PREV)
+                -- Center label
                 local cts = imgui.CalcTextSize(cl)
                 draw_list:AddText(imgui.ImVec2(cx - cts.x*0.5, cy - cts.y*0.5), cc, cl)
 
-                -- Invisible buttons — skip kalau disabled
-                local sectorPos = {
-                    { x=110, y= 20,  w=120, h=70 },  -- 1 atas
-                    { x=235, y=135,  w= 85, h=70 },  -- 2 kanan
-                    { x=110, y=250,  w=120, h=70 },  -- 3 bawah
-                    { x= 20, y=135,  w= 85, h=70 },  -- 4 kiri
-                }
+                -- Handle clicks using angle detection
                 local pressed = nil
-                for i = 1, 4 do
-                    imgui.SetCursorPos(imgui.ImVec2(sectorPos[i].x, sectorPos[i].y))
-                    if not vlDisabled[i] then
-                        if imgui.InvisibleButton("##vs"..i.."_veh", imgui.ImVec2(sectorPos[i].w, sectorPos[i].h)) then
-                            pressed = i
-                        end
-                    else
-                        -- render dummy area (tidak clickable)
-                        imgui.Dummy(imgui.ImVec2(sectorPos[i].w, sectorPos[i].h))
+                if imgui.IsMouseClicked(0) then
+                    if dist > rI and dist < rO + 10 and detectedHover and not vlDisabled[detectedHover] then
+                        pressed = detectedHover
+                    elseif dist <= rI then
+                        pressed = 5  -- Center
                     end
                 end
-                -- center button
-                imgui.SetCursorPos(imgui.ImVec2(125, 135))
-                if imgui.InvisibleButton("##vcenter_veh", imgui.ImVec2(90, 70)) then pressed = 5 end
 
                 -- Handle klik
                 for i = 1, 4 do

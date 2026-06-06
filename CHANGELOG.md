@@ -4,6 +4,116 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v1.4.0] - 2026-06-06
+
+### 🎨 Major Update - Pie Chart Rendering & Angle-Based Interaction
+
+#### ✨ Added
+- **Pie Chart / Arc Rendering System**
+  - Filled arc segments for visual sector highlighting
+  - Smooth quad-based triangulation (20 segments per arc)
+  - Color-coded sectors: Blue, Orange, Pink, Green
+  - Dynamic sector opacity on hover (40% hovered, 15% normal)
+  - Real-time sector rendering with gradient effects
+  - Outer glow effect for modern appearance
+
+- **Angle-Based Hover Detection**
+  - Advanced mouse angle calculation using `math.atan2()`
+  - Precise sector detection by angle range
+  - Distance-based interaction (inner radius to outer radius)
+  - Normalized angle calculation for accurate sector mapping
+  - Eliminates need for invisible buttons (performance improvement)
+  - Works consistently across all radial menus
+
+- **Modern Visual Styling**
+  - Gradient outer glow with adjustable opacity
+  - Smooth sector divider lines
+  - Enhanced border highlights (2px outer, 1.5px inner)
+  - Label brightness increases on hover
+  - Sector color feedback for better UX
+  - Professional pie chart appearance
+
+#### 🔧 Changed
+- **Rendering Engine Complete Overhaul**
+  - Replaced rectangle-based invisible buttons with angle detection
+  - `drawRadialMenu()` now uses mathematical angle calculation
+  - Vehicle radial menu updated to use pie chart rendering
+  - All menus now share consistent interaction model
+  - Center button detection using distance calculation
+
+- **MonetLoader Android Compatibility**
+  - Uses correct styling functions for MonetLoader:
+    - `imgui.ColorConvertFloat4ToU32()` for color conversion
+    - `imgui.ImVec4()` for RGBA color specification
+    - `draw_list:AddQuadFilled()` for arc segments
+  - All styling verified working on MonetLoader Android
+  - No deprecated function calls
+
+- **Code Optimization**
+  - Removed unused `drawFilledArc()` helper function
+  - Removed unused `drawSectorHighlight()` helper function
+  - Removed `SECTOR_CENTERS` constant array
+  - Integrated arc rendering directly in main draw function
+  - Cleaner, more maintainable codebase
+
+#### ⚡ Performance Improvements
+- Eliminated multiple invisible button checks per frame
+- Single angle calculation replaces 5 button hit tests
+- Reduced ImGui widget overhead
+- More efficient hover state tracking
+- Optimized drawing with fewer function calls
+
+#### 🎨 Visual Enhancements
+- **Sector Colors** (from PieMenuDemo.lua pattern):
+  - Top sector: Cyan Blue (#54ACDE / 0.33, 0.67, 0.87)
+  - Right sector: Warm Orange (#FF8745 / 1.0, 0.53, 0.27)
+  - Bottom sector: Hot Pink (#FF4587 / 1.0, 0.27, 0.53)
+  - Left sector: Fresh Green (#45FF87 / 0.27, 1.0, 0.53)
+
+- **Hover Effects**:
+  - Sector fill: 40% opacity on hover, 15% normal
+  - Label: Full white (#FFFFFF) on hover
+  - Smooth visual feedback
+  - No lag or delay in detection
+
+#### 🐛 Fixes
+- Fixed interaction precision issues with rectangular hit boxes
+- Corrected hover detection for diagonal mouse movements
+- Resolved edge cases where buttons wouldn't register clicks
+- Fixed styling compatibility issues with MonetLoader Android
+
+#### 📝 Technical Details
+- **Angle Calculation Algorithm**:
+  ```lua
+  local mouseAngle = math.atan2(dy, dx)
+  local normAngle = mouseAngle - startAngle
+  if normAngle < 0 then normAngle = normAngle + 2 * math.pi end
+  local sectorIndex = math.floor(normAngle / sectorAngle) + 1
+  ```
+
+- **Arc Rendering**:
+  - 20 arc segments per sector for smooth curves
+  - Quad-based rendering: `p1, p2, p3, p4` vertices
+  - Inner radius: 50px, Outer radius: 135px
+  - Start angle: -π/2 (top), Sector angle: π/2 (90° each)
+
+- **Interaction Zones**:
+  - Sector click: distance > innerRadius AND distance < outerRadius + 10px
+  - Center click: distance <= innerRadius
+  - Hover detection includes 10px tolerance for easier interaction
+
+#### 🔄 Migration Notes
+- **Breaking Changes**: None - all existing config and profiles work unchanged
+- **Feature Compatibility**: All existing features preserved:
+  - Context detection (in vehicle / on foot)
+  - ON/OFF toggle state system
+  - Profile system with auto-detect
+  - Category-based menus
+  - Animation and vehicle radials
+  - Config window and all settings
+
+---
+
 ## [v1.3.0] - 2026-06-06
 
 ### 🎨 Major Update - Modern UI & Visual Enhancements
