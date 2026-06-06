@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v2.0.2] - 2026-06-06
+
+### ✨ Restored Full Config Window Functionality
+
+#### Added Missing Features
+- **Tab 1 (MAIN)** - Restored complete settings:
+  - Hamburger button (position X/Y, size, opacity)
+  - Main Sectors (4 items with names and commands)
+  - Anim Categories (4 category names)
+  - Vehicle Categories (4 category names)
+  - Window height: 350px
+
+- **Tab 2 (ANIM)** - All 21 animation slots with scrollable area:
+  - Slot number indicator (1-21)
+  - Category, Label, Command columns
+  - Scrollable child window (BeginChild/EndChild)
+  - Window height: 450px
+
+- **Tab 3 (VEH)** - Complete vehicle management:
+  - IN-VEHICLE commands (4 slots: Category, ON Cmd, OFF Cmd)
+  - ON-FOOT commands (4 slots: Category, ON Cmd, OFF Cmd)
+  - **Vehicle Slots (21 items)** - Missing in v2.0.0/v2.0.1
+  - Slot number indicator (1-21)
+  - Category, Label, Command columns
+  - Scrollable child window for vehicle slots
+  - Window height: 500px
+
+- **Tab 4 (PROF)** - Profile management UI:
+  - Current profile display
+  - Server info (name, IP, mapped profile)
+  - Auto-detect server toggle checkbox
+  - Create new profile section with input + button
+  - Window height: 350px
+
+#### Technical Details
+- All 21 animation slots now editable (was 8 in v2.0.0)
+- All 21 vehicle slots now editable (was 0 in v2.0.0)
+- Proper buffer sizes: Category (32), Label (64), Command (128)
+- Scrollable areas for long lists (imgui.BeginChild/EndChild)
+- Adaptive window heights per tab for optimal UX
+
+#### What Was Missing in v2.0.0/v2.0.1
+- ❌ Main Sectors editing (only hamburger button)
+- ❌ Anim/Vehicle Category names editing
+- ❌ Only 8 anim slots (should be 21)
+- ❌ No vehicle slots editing at all
+- ❌ Profile management was placeholder
+
+#### Now Fully Restored
+- ✅ All 4 tabs fully functional
+- ✅ 21 animation slots with scroll
+- ✅ 21 vehicle slots with scroll
+- ✅ All category names editable
+- ✅ Profile management working
+- ✅ Same functionality as v1.2.0 + new pie chart rendering
+
+---
+
 ## [v2.0.1] - 2026-06-06
 
 ### 🐛 Bug Fixes

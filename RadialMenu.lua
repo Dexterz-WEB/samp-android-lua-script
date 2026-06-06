@@ -878,10 +878,10 @@ function main()
         -- CONFIG WINDOW
         if showConfigWindow[0] then
             local winW = 500
-            local winH = 250
-            if configTab == 2 then winH = 380 end
-            if configTab == 3 then winH = 400 end
-            if configTab == 4 then winH = 280 end
+            local winH = 350
+            if configTab == 2 then winH = 450 end
+            if configTab == 3 then winH = 500 end
+            if configTab == 4 then winH = 350 end
             
             imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12)
             imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(15, 12))
@@ -920,6 +920,35 @@ function main()
                 imgui.SliderFloat("##size", hamburgerSize, 50, 150, "%.0f")
                 imgui.Text("Opacity:"); imgui.SetNextItemWidth(-1)
                 imgui.SliderFloat("##opacity", hamburgerAlpha, 0.3, 1.0, "%.2f")
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.9, 0.5, 0.2, 1), "MAIN SECTORS")
+                imgui.Spacing()
+                for i = 1, 4 do
+                    imgui.Text("Sector "..i..":"); imgui.SameLine()
+                    imgui.SetNextItemWidth(120); imgui.InputText("Name##n"..i, editName[i], 32); imgui.SameLine()
+                    if i == 1 or i == 3 then 
+                        imgui.TextDisabled(i == 1 and "(vehicle menu)" or "(anim menu)")
+                    else 
+                        imgui.SetNextItemWidth(-1); imgui.InputText("Cmd##c"..i, editCmd[i], 64) 
+                    end
+                end
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIM CATEGORIES")
+                imgui.Spacing()
+                for i = 1, 4 do
+                    imgui.Text("Cat "..i..":"); imgui.SameLine()
+                    imgui.SetNextItemWidth(-1); imgui.InputText("##ca"..i, editCatName[i], 32)
+                end
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "VEHICLE CATEGORIES")
+                imgui.Spacing()
+                for i = 1, 4 do
+                    imgui.Text("Cat "..i..":"); imgui.SameLine()
+                    imgui.SetNextItemWidth(-1); imgui.InputText("##cv"..i, editVehCatName[i], 32)
+                end
 
             elseif configTab == 2 then
                 imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIMATION COMMANDS")
@@ -928,13 +957,16 @@ function main()
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Label"); imgui.SameLine(260)
                 imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Command")
                 imgui.Separator(); imgui.Spacing()
-                for i = 1, 8 do
+                imgui.BeginChild("##animscroll", imgui.ImVec2(-1, -50), true)
+                for i = 1, MAX_ANIM_SLOTS do
+                    imgui.Text(string.format("%2d|", i)); imgui.SameLine()
                     imgui.PushItemWidth(100); imgui.InputText("##ac"..i, animEditCategory[i], 32); imgui.PopItemWidth()
                     imgui.SameLine(130)
-                    imgui.PushItemWidth(100); imgui.InputText("##al"..i, animEditLabel[i], 32); imgui.PopItemWidth()
+                    imgui.PushItemWidth(100); imgui.InputText("##al"..i, animEditLabel[i], 64); imgui.PopItemWidth()
                     imgui.SameLine(260)
-                    imgui.PushItemWidth(-1); imgui.InputText("##acmd"..i, animEditCmd[i], 64); imgui.PopItemWidth()
+                    imgui.PushItemWidth(-1); imgui.InputText("##acmd"..i, animEditCmd[i], 128); imgui.PopItemWidth()
                 end
+                imgui.EndChild()
             elseif configTab == 3 then
                 imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "IN-VEHICLE COMMANDS")
                 imgui.Spacing()
@@ -963,6 +995,23 @@ function main()
                     imgui.SameLine(310)
                     imgui.PushItemWidth(-1); imgui.InputText("##ff"..i, ctxFootOff[i], 64); imgui.PopItemWidth()
                 end
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.4, 1), "VEHICLE SLOTS (21 items)")
+                imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Label"); imgui.SameLine(260)
+                imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Command")
+                imgui.Separator(); imgui.Spacing()
+                imgui.BeginChild("##vehscroll", imgui.ImVec2(-1, -50), true)
+                for i = 1, MAX_VEH_SLOTS do
+                    imgui.Text(string.format("%2d|", i)); imgui.SameLine()
+                    imgui.PushItemWidth(100); imgui.InputText("##vc"..i, vehEditCategory[i], 32); imgui.PopItemWidth()
+                    imgui.SameLine(130)
+                    imgui.PushItemWidth(100); imgui.InputText("##vl"..i, vehEditLabel[i], 64); imgui.PopItemWidth()
+                    imgui.SameLine(260)
+                    imgui.PushItemWidth(-1); imgui.InputText("##vcmd"..i, vehEditCmd[i], 128); imgui.PopItemWidth()
+                end
+                imgui.EndChild()
 
             elseif configTab == 4 then
                 imgui.TextColored(imgui.ImVec4(0.8, 0.3, 0.8, 1), "PROFILE MANAGEMENT")
@@ -970,7 +1019,38 @@ function main()
                 imgui.Text("Current Profile:"); imgui.SameLine()
                 imgui.TextColored(imgui.ImVec4(1, 1, 0, 1), currentProfile)
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextDisabled("Profile management features here...")
+                
+                if currentServerIP ~= "" then
+                    imgui.TextColored(imgui.ImVec4(0, 1, 1, 1), "Current Server:")
+                    imgui.Text(currentServerName)
+                    imgui.TextDisabled(currentServerIP)
+                    local mappedProfile = profilesData.ServerMapping[currentServerIP] or "none"
+                    imgui.Text("Mapped to: " .. mappedProfile)
+                else
+                    imgui.TextColored(imgui.ImVec4(1, 0.5, 0, 1), "Not connected to server")
+                end
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                
+                if imgui.Checkbox("Auto-detect server and load profile", autoDetectCheckbox) then
+                    autoDetectServer = autoDetectCheckbox[0]
+                    profilesData.Settings.autoDetectServer = autoDetectServer
+                    inicfg.save(profilesData, profilesFileName)
+                end
+                imgui.TextDisabled("Automatically load profile when connecting")
+                
+                imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+                imgui.TextColored(imgui.ImVec4(0, 1, 1, 1), "CREATE NEW PROFILE:")
+                imgui.SetNextItemWidth(300)
+                imgui.InputText("##profilename", profileNameInput, 32)
+                imgui.SameLine()
+                if imgui.Button("Create", imgui.ImVec2(80, 25)) then
+                    local pName = readCharBuffer(profileNameInput, 32)
+                    if pName ~= "" then
+                        loadProfile(pName)
+                        sampAddChatMessage("{00FF00}[Radial Menu] {FFFFFF}Profile created: " .. pName, -1)
+                    end
+                end
             end
             
             imgui.Spacing()
