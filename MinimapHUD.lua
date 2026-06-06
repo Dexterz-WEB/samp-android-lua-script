@@ -232,12 +232,10 @@ local function drawFullMap(draw_list)
     pcall(function() sw, sh = getScreenResolution() end)
     if sw == 0 or sh == 0 then sw, sh = 1280, 720 end
 
-    -- Fullscreen window to block GTA SA camera/touch input AND handle drag
+    -- Fullscreen window to block GTA SA camera/touch input
     imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
     imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
     imgui.Begin('##FullMapOverlay', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings + imgui.WindowFlags.NoBackground)
-    imgui.InvisibleButton("##fullmap_drag", imgui.ImVec2(sw, sh))
-    local isDragging = imgui.IsItemActive()
     imgui.End()
 
     local io = imgui.GetIO()
@@ -282,7 +280,7 @@ local function drawFullMap(draw_list)
     end
 
     -- Handle drag (touch hold and move)
-    if isDragging then
+    if imgui.IsMouseDown(0) then
         if not fullMapDragging then
             fullMapDragging = true
             fullMapLastX = mx
