@@ -529,7 +529,7 @@ local function drawMinimap(draw_list)
 end
 
 -- ============================================================================
--- FULL MAP RENDERING
+-- FULL MAP RENDERING (ImGui Window-based for reliable Android touch)
 -- ============================================================================
 local function drawFullMap(draw_list)
     if not mapTexture then return end
@@ -538,179 +538,124 @@ local function drawFullMap(draw_list)
     pcall(function() sw, sh = getScreenResolution() end)
     if sw == 0 or sh == 0 then sw, sh = 1280, 720 end
 
-    -- Lock player control to prevent camera movement during full map
-    pcall(function() lockPlayerControl(true) end)
-
-    local io = imgui.GetIO()
-    local mx = io.MousePos.x
-    local my = io.MousePos.y
-
-    -- Background overlay
-    draw_list:AddRectFilled(
-        imgui.ImVec2(0, 0),
-        imgui.ImVec2(sw, sh),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0, 0, 0, 0.7))
-    )
-
-    -- Get player UV position for centering zoom on player
+    -- Get player data
     getPlayerData()
     local playerUVX, playerUVY = worldToUV(cachedPlayerX, cachedPlayerY)
 
-    -- Calculate map display area (zoom centered on player position)
+    -- Calculate map display
     local baseSize = math.min(sw, sh) * 0.9
     local mapDisplaySize = baseSize * fullMapZoom
-
-    -- Center map so that player is at screen center, then apply drag offset
     local playerScreenX = sw / 2
     local playerScreenY = sh / 2
     local mapX = playerScreenX - (playerUVX * mapDisplaySize) + fullMapOffsetX
     local mapY = playerScreenY - (playerUVY * mapDisplaySize) + fullMapOffsetY
 
+    -- Fullscreen ImGui window (blocks GTA camera + handles all input)
+    imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
+    imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0.7))
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
+    imgui.Begin('##FullMapWindow', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoScrollWithMouse + imgui.WindowFlags.NoSavedSettings)
+
+    -- Get window draw list (draws inside the window, more reliable on Android)
+    local wdl = imgui.GetWindowDrawList()
+
     -- Draw the full map
-    local pMin = imgui.ImVec2(mapX, mapY)
-    local pMax = imgui.ImVec2(mapX + mapDisplaySize, mapY + mapDisplaySize)
-    local colorU32 = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 0.95))
-    draw_list:AddImage(mapTexture, pMin, pMax, imgui.ImVec2(0, 0), imgui.ImVec2(1, 1), colorU32)
+    wdl:AddImage(mapTexture, imgui.ImVec2(mapX, mapY), imgui.ImVec2(mapX + mapDisplaySize, mapY + mapDisplaySize), imgui.ImVec2(0, 0), imgui.ImVec2(1, 1), imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 0.95)))
 
     -- Draw GPS line on full map
-    drawGPSLineOnFullMap(draw_list, mapX, mapY, mapDisplaySize)
+    if gpsShown and #cachedPathWorldCoords >= 2 then
+        local lineColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.7, 0.8))
+        for i = 1, #cachedPathWorldCoords - 1 do
+            local n0 = cachedPathWorldCoords[i]
+            local n1 = cachedPathWorldCoords[i + 1]
+            local uv0x, uv0y = worldToUV(n0.x, n0.y)
+            local uv1x, uv1y = worldToUV(n1.x, n1.y)
+            wdl:AddLine(
+                imgui.ImVec2(mapX + uv0x * mapDisplaySize, mapY + uv0y * mapDisplaySize),
+                imgui.ImVec2(mapX + uv1x * mapDisplaySize, mapY + uv1y * mapDisplaySize),
+                lineColor, 3.0
+            )
+        end
+    end
 
-    -- Draw waypoint pin on full map
+    -- Draw waypoint pin
     if waypointActive then
         local wpUVX, wpUVY = worldToUV(waypointX, waypointY)
-        local wpScreenX = mapX + wpUVX * mapDisplaySize
-        local wpScreenY = mapY + wpUVY * mapDisplaySize
-
-        -- Pin shape (triangle + circle)
+        local wpSX = mapX + wpUVX * mapDisplaySize
+        local wpSY = mapY + wpUVY * mapDisplaySize
         local pinColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 0.2, 0.2, 1.0))
         local pinOutline = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 1.0, 1.0, 1.0))
-
-        -- Pin circle (top)
-        draw_list:AddCircleFilled(imgui.ImVec2(wpScreenX, wpScreenY - 20), 10, pinColor, 16)
-        draw_list:AddCircle(imgui.ImVec2(wpScreenX, wpScreenY - 20), 10, pinOutline, 16, 2)
-
-        -- Pin triangle (bottom point)
-        draw_list:AddTriangleFilled(
-            imgui.ImVec2(wpScreenX - 7, wpScreenY - 14),
-            imgui.ImVec2(wpScreenX + 7, wpScreenY - 14),
-            imgui.ImVec2(wpScreenX, wpScreenY),
-            pinColor
-        )
-
-        -- Inner white dot
-        draw_list:AddCircleFilled(imgui.ImVec2(wpScreenX, wpScreenY - 20), 4, pinOutline, 12)
-
-        -- Distance text
+        wdl:AddCircleFilled(imgui.ImVec2(wpSX, wpSY - 20), 10, pinColor, 16)
+        wdl:AddCircle(imgui.ImVec2(wpSX, wpSY - 20), 10, pinOutline, 16, 2)
+        wdl:AddTriangleFilled(imgui.ImVec2(wpSX - 7, wpSY - 14), imgui.ImVec2(wpSX + 7, wpSY - 14), imgui.ImVec2(wpSX, wpSY), pinColor)
+        wdl:AddCircleFilled(imgui.ImVec2(wpSX, wpSY - 20), 4, pinOutline, 12)
         local dist = getDistanceTo(waypointX, waypointY)
         local distText = string.format("%.0fm", dist)
         local distSize = imgui.CalcTextSize(distText)
-        draw_list:AddText(
-            imgui.ImVec2(wpScreenX - distSize.x / 2, wpScreenY + 5),
-            imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)),
-            distText
-        )
-
-        -- Auto clear if < 10m
+        wdl:AddText(imgui.ImVec2(wpSX - distSize.x / 2, wpSY + 5), imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), distText)
         if dist < 10.0 then
             waypointActive = false
             removeGPSWaypoint()
         end
     end
 
-    -- Draw player arrow on full map
+    -- Draw player arrow
     if arrowTexture then
-        local playerMapX = mapX + playerUVX * mapDisplaySize
-        local playerMapY = mapY + playerUVY * mapDisplaySize
+        local pMapX = mapX + playerUVX * mapDisplaySize
+        local pMapY = mapY + playerUVY * mapDisplaySize
         local headingRad = -math.rad(cachedHeading)
-        local arrowSz = 28
-        local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1))
-        drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
+        drawRotatedImage(wdl, arrowTexture, pMapX, pMapY, 28, headingRad, imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)))
     end
 
-    -- Handle drag (touch hold and move)
-    if imgui.IsMouseDown(0) then
-        if not fullMapDragging then
-            fullMapDragging = true
-            fullMapLastX = mx
-            fullMapLastY = my
-        else
-            local dx = mx - fullMapLastX
-            local dy = my - fullMapLastY
-            fullMapOffsetX = fullMapOffsetX + dx
-            fullMapOffsetY = fullMapOffsetY + dy
-            fullMapLastX = mx
-            fullMapLastY = my
-        end
-    else
-        fullMapDragging = false
+    -- Zoom buttons (ImGui buttons - reliable on Android)
+    local btnW = 60
+    local btnH = 50
+    imgui.SetCursorPos(imgui.ImVec2(sw - btnW - 20, sh / 2 - btnH - 5))
+    if imgui.Button("+", imgui.ImVec2(btnW, btnH)) then
+        fullMapZoom = clamp(fullMapZoom + 0.3, 0.5, 5.0)
+    end
+    imgui.SetCursorPos(imgui.ImVec2(sw - btnW - 20, sh / 2 + 5))
+    if imgui.Button("-", imgui.ImVec2(btnW, btnH)) then
+        fullMapZoom = clamp(fullMapZoom - 0.3, 0.5, 5.0)
     end
 
-    -- Clamp drag so map edge stays visible on screen
+    -- Close button
+    imgui.SetCursorPos(imgui.ImVec2(sw - btnW - 20, 20))
+    if imgui.Button("X", imgui.ImVec2(btnW, btnH)) then
+        fullMapMode = false
+    end
+
+    -- Handle drag via ImGui IO mouse delta
+    local io = imgui.GetIO()
+    local mx = io.MousePos.x
+    local my = io.MousePos.y
+    
+    if imgui.IsWindowHovered() and imgui.IsMouseDragging(0, 5.0) then
+        local delta = imgui.GetMouseDragDelta(0)
+        fullMapOffsetX = fullMapOffsetX + delta.x
+        fullMapOffsetY = fullMapOffsetY + delta.y
+        imgui.ResetMouseDragDelta(0)
+    end
+
+    -- Clamp drag
     local maxOffsetX = math.max(0, (mapDisplaySize - sw) / 2 + sw / 2)
     local maxOffsetY = math.max(0, (mapDisplaySize - sh) / 2 + sh / 2)
     fullMapOffsetX = clamp(fullMapOffsetX, -maxOffsetX, maxOffsetX)
     fullMapOffsetY = clamp(fullMapOffsetY, -maxOffsetY, maxOffsetY)
 
-    -- Zoom controls (draw +/- buttons)
-    local btnSize = 50
-    local zoomInPos = imgui.ImVec2(sw - btnSize - 20, sh / 2 - btnSize - 10)
-    local zoomOutPos = imgui.ImVec2(sw - btnSize - 20, sh / 2 + 10)
-
-    -- Zoom In button
-    draw_list:AddRectFilled(zoomInPos, imgui.ImVec2(zoomInPos.x + btnSize, zoomInPos.y + btnSize),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.2, 0.2, 0.3, 0.9)), 8)
-    local plusSize = imgui.CalcTextSize("+")
-    draw_list:AddText(imgui.ImVec2(zoomInPos.x + (btnSize - plusSize.x) / 2, zoomInPos.y + (btnSize - plusSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "+")
-
-    -- Zoom Out button
-    draw_list:AddRectFilled(zoomOutPos, imgui.ImVec2(zoomOutPos.x + btnSize, zoomOutPos.y + btnSize),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.2, 0.2, 0.3, 0.9)), 8)
-    local minusSize = imgui.CalcTextSize("-")
-    draw_list:AddText(imgui.ImVec2(zoomOutPos.x + (btnSize - minusSize.x) / 2, zoomOutPos.y + (btnSize - minusSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "-")
-
-    -- Close button (top-right)
-    local closeBtnPos = imgui.ImVec2(sw - btnSize - 20, 20)
-    draw_list:AddRectFilled(closeBtnPos, imgui.ImVec2(closeBtnPos.x + btnSize, closeBtnPos.y + btnSize),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.6, 0.1, 0.1, 0.9)), 8)
-    local xSize = imgui.CalcTextSize("X")
-    draw_list:AddText(imgui.ImVec2(closeBtnPos.x + (btnSize - xSize.x) / 2, closeBtnPos.y + (btnSize - xSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "X")
-
-    -- Handle tap for buttons (X button and zoom only)
+    -- Double tap detection for waypoint
     local mapCooldown = (os.clock() - fullMapOpenTime) > 0.3
     if imgui.IsMouseClicked(0) and mapCooldown then
-        -- Zoom In
-        if mx >= zoomInPos.x and mx <= zoomInPos.x + btnSize and my >= zoomInPos.y and my <= zoomInPos.y + btnSize then
-            fullMapZoom = clamp(fullMapZoom + 0.3, 0.5, 5.0)
-            return
-        end
-        -- Zoom Out
-        if mx >= zoomOutPos.x and mx <= zoomOutPos.x + btnSize and my >= zoomOutPos.y and my <= zoomOutPos.y + btnSize then
-            fullMapZoom = clamp(fullMapZoom - 0.3, 0.5, 5.0)
-            return
-        end
-        -- Close button
-        if mx >= closeBtnPos.x and mx <= closeBtnPos.x + btnSize and my >= closeBtnPos.y and my <= closeBtnPos.y + btnSize then
-            fullMapMode = false
-            pcall(function() lockPlayerControl(false) end)
-            return
-        end
-
-        -- Double tap detection for waypoint (on map area only)
         if mx >= mapX and mx <= mapX + mapDisplaySize and my >= mapY and my <= mapY + mapDisplaySize then
             local now = os.clock()
             local tapDist = math.sqrt((mx - lastTapX)^2 + (my - lastTapY)^2)
             if (now - lastTapTime) < DOUBLE_TAP_INTERVAL and tapDist < 50 then
-                -- DOUBLE TAP DETECTED
                 if waypointActive then
-                    -- Remove waypoint
                     waypointActive = false
                     removeGPSWaypoint()
                     cacheValid = false
                 else
-                    -- Set waypoint: convert screen tap to world coords
                     local tapUVX = (mx - mapX) / mapDisplaySize
                     local tapUVY = (my - mapY) / mapDisplaySize
                     local wx, wy = uvToWorld(tapUVX, tapUVY)
@@ -729,6 +674,10 @@ local function drawFullMap(draw_list)
             end
         end
     end
+
+    imgui.End()
+    imgui.PopStyleVar()
+    imgui.PopStyleColor()
 end
 
 -- ============================================================================
