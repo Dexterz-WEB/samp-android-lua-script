@@ -1150,21 +1150,35 @@ function main()
                 imgui.SliderFloat("##opacity", hamburgerAlpha, 0.3, 1.0, "%.2f")
                 
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-                imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "MAIN SECTORS")
+                imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "MAIN SECTORS (4 SLOTS)")
                 imgui.Spacing()
-                imgui.TextDisabled("Sector 1 (VEHICLE) - Leave cmd empty to use category menu")
-                imgui.TextDisabled("Sector 3 (ANIM) - Leave cmd empty to use category menu")
+                imgui.TextDisabled("S1: Context Vehicle (ENGINE/LOCK/LIGHT) - fixed")
+                imgui.TextDisabled("S3: Animation Menu (if on foot) - fixed")
+                imgui.TextDisabled("S2/S4: Custom - name='VEHICLE/ANIM', cmd='' for menu")
+                imgui.TextDisabled("       OR direct command")
                 imgui.Spacing()
-                for i = 1, 4 do
-                    imgui.Text("S"..i..":"); imgui.SameLine()
-                    imgui.PushItemWidth(100); imgui.InputText("##sn"..i, editName[i], 32); imgui.PopItemWidth()
-                    if i == 1 or i == 3 then
-                        imgui.SameLine(); imgui.TextDisabled("(menu)")
-                    else
-                        imgui.SameLine()
-                        imgui.PushItemWidth(-1); imgui.InputText("##sc"..i, editCmd[i], 64); imgui.PopItemWidth()
-                    end
-                end
+                
+                -- Sector 1 (fixed - context vehicle)
+                imgui.Text("S1:"); imgui.SameLine()
+                imgui.PushItemWidth(100); imgui.InputText("##sn1", editName[1], 32); imgui.PopItemWidth()
+                imgui.SameLine(); imgui.TextDisabled("(Context: ENGINE/LOCK/LIGHT)")
+                
+                -- Sector 2 (custom)
+                imgui.Text("S2:"); imgui.SameLine()
+                imgui.PushItemWidth(100); imgui.InputText("##sn2", editName[2], 32); imgui.PopItemWidth()
+                imgui.SameLine()
+                imgui.PushItemWidth(-1); imgui.InputText("##sc2", editCmd[2], 64); imgui.PopItemWidth()
+                
+                -- Sector 3 (fixed - anim menu)
+                imgui.Text("S3:"); imgui.SameLine()
+                imgui.PushItemWidth(100); imgui.InputText("##sn3", editName[3], 32); imgui.PopItemWidth()
+                imgui.SameLine(); imgui.TextDisabled("(Anim Category Menu)")
+                
+                -- Sector 4 (custom)
+                imgui.Text("S4:"); imgui.SameLine()
+                imgui.PushItemWidth(100); imgui.InputText("##sn4", editName[4], 32); imgui.PopItemWidth()
+                imgui.SameLine()
+                imgui.PushItemWidth(-1); imgui.InputText("##sc4", editCmd[4], 64); imgui.PopItemWidth()
                 
                 imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                 imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIM CATEGORIES")
@@ -1372,29 +1386,29 @@ function main()
                 -- Close
                 closeAllRadial()
             elseif selected == 1 then
-                -- VEHICLE sector - check if it's configured for context-aware or category menu
-                local sector1Cmd = menuItems[1].cmd
+                -- VEHICLE sector - ALWAYS open context-aware menu (ENGINE/LOCK/LIGHT)
+                if inVehicle then
+                    contextVehCommands = getInVehicleCommands()
+                else
+                    contextVehCommands = getOnFootCommands()
+                end
+                showRadialMenu[0] = false
+                showContextVehRadial[0] = true
+                menuOpenTime = os.clock()
+            elseif selected == 2 then
+                -- Sector 2 - check if it's for vehicle category menu or direct command
+                local sector2Name = menuItems[2].label or ""
+                local sector2Cmd = menuItems[2].cmd or ""
                 
-                -- If sector has no command, open vehicle category menu
-                if not sector1Cmd or sector1Cmd == "" then
+                if sector2Name:upper() == "VEHICLE" and sector2Cmd == "" then
+                    -- Open vehicle category menu
                     showRadialMenu[0] = false
                     showVehCatRadial[0] = true
                     menuOpenTime = os.clock()
                 else
-                    -- If sector has command, use context-aware mode (old behavior)
-                    if inVehicle then
-                        contextVehCommands = getInVehicleCommands()
-                    else
-                        contextVehCommands = getOnFootCommands()
-                    end
-                    showRadialMenu[0] = false
-                    showContextVehRadial[0] = true
-                    menuOpenTime = os.clock()
+                    -- Direct command
+                    if executeCommand(sector2Cmd) then closeAllRadial() end
                 end
-            elseif selected == 2 then
-                -- Sector 2 - direct command
-                local cmd = menuItems[2].cmd
-                if executeCommand(cmd) then closeAllRadial() end
             elseif selected == 3 then
                 -- ANIM sector - category selection (only if not in vehicle)
                 if not inVehicle then
@@ -1403,9 +1417,24 @@ function main()
                     menuOpenTime = os.clock()
                 end
             elseif selected == 4 then
-                -- Sector 4 - direct command
-                local cmd = menuItems[4].cmd
-                if executeCommand(cmd) then closeAllRadial() end
+                -- Sector 4 - check if it's for anim/vehicle category menu or direct command
+                local sector4Name = menuItems[4].label or ""
+                local sector4Cmd = menuItems[4].cmd or ""
+                
+                if sector4Name:upper() == "ANIM" and sector4Cmd == "" and not inVehicle then
+                    -- Open anim category menu
+                    showRadialMenu[0] = false
+                    showCatRadial[0] = true
+                    menuOpenTime = os.clock()
+                elseif sector4Name:upper() == "VEHICLE" and sector4Cmd == "" then
+                    -- Open vehicle category menu
+                    showRadialMenu[0] = false
+                    showVehCatRadial[0] = true
+                    menuOpenTime = os.clock()
+                else
+                    -- Direct command
+                    if executeCommand(sector4Cmd) then closeAllRadial() end
+                end
             end
 
             imgui.End()
