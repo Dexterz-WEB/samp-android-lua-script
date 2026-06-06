@@ -21,7 +21,7 @@ local BASE = MONET_GTASA_BASE
 -- ============================================================================
 -- GPS CONSTANTS
 -- ============================================================================
-local MAX_NODES = 5000
+local MAX_NODES = 7000
 local GPS_WIDTH = 6.0
 local GPS_COLOR = 0xFF1818B4
 
@@ -167,7 +167,7 @@ local lastCalcY = 0.0
 local lastCalcZ = 0.0
 local lastTargetX = 0.0
 local lastTargetY = 0.0
-local RECALC_DISTANCE = 50.0
+local RECALC_DISTANCE = 30.0
 local cacheValid = false
 
 local resultNodes = ffi.new("CNodeAddress[?]", MAX_NODES)
@@ -538,11 +538,16 @@ local function drawFullMap(draw_list)
     pcall(function() sw, sh = getScreenResolution() end)
     if sw == 0 or sh == 0 then sw, sh = 1280, 720 end
 
-    -- Fullscreen window to block GTA SA camera/touch input
+    -- Fullscreen window to block GTA SA camera/touch input + capture drag
     imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
     imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
     imgui.Begin('##FullMapOverlay', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings + imgui.WindowFlags.NoBackground)
+    imgui.SetCursorPos(imgui.ImVec2(0, 0))
+    imgui.InvisibleButton("##fullmap_drag_area", imgui.ImVec2(sw, sh))
+    local isTouchActive = imgui.IsItemActive()
     imgui.End()
+    imgui.PopStyleVar()
 
     local io = imgui.GetIO()
     local mx = io.MousePos.x
@@ -630,8 +635,8 @@ local function drawFullMap(draw_list)
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
     end
 
-    -- Handle drag (touch hold and move)
-    if imgui.IsMouseDown(0) then
+    -- Handle drag (using InvisibleButton touch state)
+    if isTouchActive then
         if not fullMapDragging then
             fullMapDragging = true
             fullMapLastX = mx
