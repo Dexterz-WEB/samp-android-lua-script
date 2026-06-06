@@ -538,16 +538,8 @@ local function drawFullMap(draw_list)
     pcall(function() sw, sh = getScreenResolution() end)
     if sw == 0 or sh == 0 then sw, sh = 1280, 720 end
 
-    -- Fullscreen window to block GTA SA camera/touch input + capture drag
-    imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
-    imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
-    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
-    imgui.Begin('##FullMapOverlay', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings + imgui.WindowFlags.NoBackground)
-    imgui.SetCursorPos(imgui.ImVec2(0, 0))
-    imgui.InvisibleButton("##fullmap_drag_area", imgui.ImVec2(sw, sh))
-    local isTouchActive = imgui.IsItemActive()
-    imgui.End()
-    imgui.PopStyleVar()
+    -- Lock player control to prevent camera movement during full map
+    pcall(function() lockPlayerControl(true) end)
 
     local io = imgui.GetIO()
     local mx = io.MousePos.x
@@ -635,8 +627,8 @@ local function drawFullMap(draw_list)
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
     end
 
-    -- Handle drag (using InvisibleButton touch state)
-    if isTouchActive then
+    -- Handle drag (touch hold and move)
+    if imgui.IsMouseDown(0) then
         if not fullMapDragging then
             fullMapDragging = true
             fullMapLastX = mx
@@ -702,6 +694,7 @@ local function drawFullMap(draw_list)
         -- Close button
         if mx >= closeBtnPos.x and mx <= closeBtnPos.x + btnSize and my >= closeBtnPos.y and my <= closeBtnPos.y + btnSize then
             fullMapMode = false
+            pcall(function() lockPlayerControl(false) end)
             return
         end
 
@@ -1041,21 +1034,15 @@ function main()
         showConfigWindow[0] = not showConfigWindow[0]
     end)
 
-    -- Disable built-in radar if configured
-    if cfgRadarOff[0] then
-        pcall(function() displayRadar(false) end)
-    end
+    -- Radar stays rendered so GPS hook (DrawRadarMap) keeps working
+    -- Custom minimap overlays on top of radar visually
 
     -- Main rendering frame
     imgui.OnFrame(function() return true end, function()
         local draw_list = imgui.GetBackgroundDrawList()
 
-        -- Handle radar toggle
-        if cfgRadarOff[0] then
-            pcall(function() displayRadar(false) end)
-        else
-            pcall(function() displayRadar(true) end)
-        end
+        -- Radar stays rendered (GPS hook needs DrawRadarMap to be called)
+        -- Custom minimap overlays on top of radar visually
 
         -- Render based on mode
         if fullMapMode then
