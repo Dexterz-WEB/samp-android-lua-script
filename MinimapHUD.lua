@@ -276,29 +276,9 @@ local function drawFullMap(draw_list)
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
     end
 
-    -- Handle drag (only when zoomed in - map larger than screen)
-    local canDrag = mapDisplaySize > math.min(sw, sh)
-    if canDrag and imgui.IsMouseDown(0) then
-        if not fullMapDragging then
-            fullMapDragging = true
-            fullMapLastX = mx
-            fullMapLastY = my
-        else
-            local dx = mx - fullMapLastX
-            local dy = my - fullMapLastY
-            fullMapOffsetX = fullMapOffsetX + dx
-            fullMapOffsetY = fullMapOffsetY + dy
-            fullMapLastX = mx
-            fullMapLastY = my
-        end
-    else
-        fullMapDragging = false
-        -- Reset offset when zoomed out (can't drag)
-        if not canDrag then
-            fullMapOffsetX = 0
-            fullMapOffsetY = 0
-        end
-    end
+    -- Map fixed at center, no drag (GTA V style)
+    fullMapOffsetX = 0
+    fullMapOffsetY = 0
 
     -- Zoom controls (draw +/- buttons)
     local btnSize = 50
