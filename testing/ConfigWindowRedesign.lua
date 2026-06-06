@@ -58,11 +58,16 @@ imgui.OnFrame(function() return showWindow[0] end, function()
     if currentTab == 3 then winH = 400 end  -- VEHICLE (2 sections)
     if currentTab == 4 then winH = 280 end  -- PROFILE
     
-    -- Clean modern styling (applied once before Begin - safe)
-    imgui.PushStyleVar(imgui.StyleVar.WindowRounding, 12)
-    imgui.PushStyleVar(imgui.StyleVar.WindowPadding, imgui.ImVec2(15, 15))
-    imgui.PushStyleVar(imgui.StyleVar.FrameRounding, 6)
-    imgui.PushStyleVar(imgui.StyleVar.ItemSpacing, imgui.ImVec2(8, 6))
+    -- Clean modern styling (CORRECT function names for MonetLoader mimgui!)
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(15, 12))
+    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 6)
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(8, 6))
+    imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.08, 0.08, 0.1, 0.95))
+    imgui.PushStyleColor(imgui.Col.FrameBg, imgui.ImVec4(0.15, 0.15, 0.2, 1.0))
+    imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.2, 0.3, 1.0))
+    imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.3, 0.5, 1.0))
+    imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
     
     imgui.SetNextWindowPos(imgui.ImVec2((sw - winW) / 2, (sh - winH) / 2), imgui.Cond.Always)
     imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
@@ -181,7 +186,8 @@ imgui.OnFrame(function() return showWindow[0] end, function()
     end
 
     imgui.End()
-    imgui.PopStyleVar(4)  -- Pop all 4 style vars
+    imgui.PopStyleColor(5)
+    imgui.PopStyleVar(4)
 end)
 
 -- ============================================================================
