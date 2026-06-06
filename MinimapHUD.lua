@@ -238,11 +238,19 @@ local function drawFullMap(draw_list)
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0, 0, 0, 0.7))
     )
 
-    -- Calculate map display area (centered, respecting zoom and offset)
+    -- Get player UV position for centering zoom on player
+    getPlayerData()
+    local playerUVX, playerUVY = worldToUV(cachedPlayerX, cachedPlayerY)
+
+    -- Calculate map display area (zoom centered on player position)
     local baseSize = math.min(sw, sh) * 0.9
     local mapDisplaySize = baseSize * fullMapZoom
-    local mapX = (sw - mapDisplaySize) / 2 + fullMapOffsetX
-    local mapY = (sh - mapDisplaySize) / 2 + fullMapOffsetY
+    
+    -- Center map so that player is at screen center, then apply drag offset
+    local playerScreenX = sw / 2
+    local playerScreenY = sh / 2
+    local mapX = playerScreenX - (playerUVX * mapDisplaySize) + fullMapOffsetX
+    local mapY = playerScreenY - (playerUVY * mapDisplaySize) + fullMapOffsetY
 
     -- Draw the full map
     local pMin = imgui.ImVec2(mapX, mapY)
@@ -252,35 +260,36 @@ local function drawFullMap(draw_list)
 
     -- Draw player arrow on full map
     if arrowTexture then
-        getPlayerData()
-        local uvx, uvy = worldToUV(cachedPlayerX, cachedPlayerY)
-        local playerMapX = mapX + uvx * mapDisplaySize
-        local playerMapY = mapY + uvy * mapDisplaySize
+        local playerMapX = mapX + playerUVX * mapDisplaySize
+        local playerMapY = mapY + playerUVY * mapDisplaySize
         local headingRad = -math.rad(cachedHeading)
         local arrowSz = 28
         local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1))
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
     end
 
-    -- Handle drag (touch hold and move)
+    -- Handle drag (touch hold and move) - process before click detection
+    local dragged = false
     if imgui.IsMouseDown(0) then
         if not fullMapDragging then
-            -- Check if touch is on the map area
-            if mx >= mapX and mx <= mapX + mapDisplaySize and my >= mapY and my <= mapY + mapDisplaySize then
-                fullMapDragging = true
-                fullMapLastX = mx
-                fullMapLastY = my
-            end
+            fullMapDragging = true
+            fullMapLastX = mx
+            fullMapLastY = my
         else
             local dx = mx - fullMapLastX
             local dy = my - fullMapLastY
-            fullMapOffsetX = fullMapOffsetX + dx
-            fullMapOffsetY = fullMapOffsetY + dy
+            if math.abs(dx) > 2 or math.abs(dy) > 2 then
+                fullMapOffsetX = fullMapOffsetX + dx
+                fullMapOffsetY = fullMapOffsetY + dy
+                dragged = true
+            end
             fullMapLastX = mx
             fullMapLastY = my
         end
     else
-        fullMapDragging = false
+        if fullMapDragging then
+            fullMapDragging = false
+        end
     end
 
     -- Zoom controls (draw +/- buttons)
@@ -310,16 +319,16 @@ local function drawFullMap(draw_list)
     draw_list:AddText(imgui.ImVec2(closeBtnPos.x + (btnSize - xSize.x) / 2, closeBtnPos.y + (btnSize - xSize.y) / 2),
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "X")
 
-    -- Handle tap for zoom buttons and close
-    if imgui.IsMouseClicked(0) then
+    -- Handle tap for zoom buttons and close (only if not dragging)
+    if imgui.IsMouseClicked(0) and not dragged then
         -- Zoom In
         if mx >= zoomInPos.x and mx <= zoomInPos.x + btnSize and my >= zoomInPos.y and my <= zoomInPos.y + btnSize then
-            fullMapZoom = clamp(fullMapZoom + 0.2, 0.5, 4.0)
+            fullMapZoom = clamp(fullMapZoom + 0.3, 0.5, 5.0)
             return
         end
         -- Zoom Out
         if mx >= zoomOutPos.x and mx <= zoomOutPos.x + btnSize and my >= zoomOutPos.y and my <= zoomOutPos.y + btnSize then
-            fullMapZoom = clamp(fullMapZoom - 0.2, 0.5, 4.0)
+            fullMapZoom = clamp(fullMapZoom - 0.3, 0.5, 5.0)
             return
         end
         -- Close button
@@ -327,7 +336,10 @@ local function drawFullMap(draw_list)
             fullMapMode = false
             return
         end
-        -- Tap outside map area to close
+    end
+    
+    -- Tap outside map to close (only on mouse release, and only if not dragged)
+    if imgui.IsMouseReleased(0) and not dragged then
         if not (mx >= mapX and mx <= mapX + mapDisplaySize and my >= mapY and my <= mapY + mapDisplaySize) then
             fullMapMode = false
             return
