@@ -57,26 +57,18 @@ imgui.OnFrame(function() return showWindow[0] end, function()
     imgui.Begin("Radial Menu Config v2", showWindow)
 
     -- ========================================================================
-    -- TAB BAR (big colored buttons - touch friendly)
+    -- TAB BAR (simple buttons - no PushStyleColor to avoid crash)
     -- ========================================================================
-    local tabW = (sw - 80) / 4
-    local tabH = 40
+    local tabW = (sw - 100) / 4
+    local tabH = 35
 
-    if currentTab == 1 then imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.7, 0.3, 1)) end
-    if imgui.Button("MAIN", imgui.ImVec2(tabW, tabH)) then currentTab = 1 end
-    if currentTab == 1 then imgui.PopStyleColor() end
-    imgui.SameLine()
-    if currentTab == 2 then imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.8, 0.6, 0.1, 1)) end
-    if imgui.Button("ANIM", imgui.ImVec2(tabW, tabH)) then currentTab = 2 end
-    if currentTab == 2 then imgui.PopStyleColor() end
-    imgui.SameLine()
-    if currentTab == 3 then imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.5, 0.9, 1)) end
-    if imgui.Button("VEHICLE", imgui.ImVec2(tabW, tabH)) then currentTab = 3 end
-    if currentTab == 3 then imgui.PopStyleColor() end
-    imgui.SameLine()
-    if currentTab == 4 then imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.7, 0.3, 0.7, 1)) end
-    if imgui.Button("PROFILE", imgui.ImVec2(tabW, tabH)) then currentTab = 4 end
-    if currentTab == 4 then imgui.PopStyleColor() end
+    local tabLabels = {"1.MAIN", "2.ANIM", "3.VEH", "4.PROF"}
+    for t = 1, 4 do
+        local label = tabLabels[t]
+        if currentTab == t then label = "> " .. label .. " <" end
+        if imgui.Button(label, imgui.ImVec2(tabW, tabH)) then currentTab = t end
+        if t < 4 then imgui.SameLine() end
+    end
 
     imgui.Spacing(); imgui.Separator(); imgui.Spacing()
 
