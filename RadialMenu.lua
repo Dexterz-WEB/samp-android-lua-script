@@ -154,6 +154,36 @@ local btnSize = imgui.new.float(iniData.ButtonSettings.size or 80.0)
 local btnAlpha = imgui.new.float(iniData.ButtonSettings.alpha or 0.8)
 local btnPulse = 0
 
+-- Config Window Tab State
+local configTab = 1
+
+-- Config edit buffers - Vehicle Context
+local ctxVehName, ctxVehOn, ctxVehOff = {}, {}, {}
+for i = 1, 4 do
+    local s = iniData["CtxVeh"..i] or { name = "-", onCmd = "", offCmd = "" }
+    ctxVehName[i] = imgui.new.char[32](s.name or "-")
+    ctxVehOn[i] = imgui.new.char[64](s.onCmd or "")
+    ctxVehOff[i] = imgui.new.char[64](s.offCmd or "")
+end
+
+-- Config edit buffers - Foot Context
+local ctxFootName, ctxFootOn, ctxFootOff = {}, {}, {}
+for i = 1, 4 do
+    local s = iniData["CtxFoot"..i] or { name = "-", onCmd = "", offCmd = "" }
+    ctxFootName[i] = imgui.new.char[32](s.name or "-")
+    ctxFootOn[i] = imgui.new.char[64](s.onCmd or "")
+    ctxFootOff[i] = imgui.new.char[64](s.offCmd or "")
+end
+
+-- Config edit buffers - Animations (simplified to 8 most important)
+local animCat, animCmd, animLbl = {}, {}, {}
+for i = 1, 8 do
+    local s = iniData["Anim"..i] or { label = "", cmd = "", category = "" }
+    animCat[i] = imgui.new.char[32](s.category or "")
+    animCmd[i] = imgui.new.char[128](s.cmd or "")
+    animLbl[i] = imgui.new.char[64](s.label or "")
+end
+
 -- Animation lists
 local animList = {}
 local vehList = {}
@@ -182,6 +212,59 @@ local function showNotification(message, notifType, duration)
         pcall(function()
             sampAddChatMessage("{00BFFF}[RadialMenu] {FFFFFF}" .. message, -1)
         end)
+    end
+end
+
+local function readCharBuffer(buf, maxSize)
+    local result = {}
+    for i = 0, maxSize-1 do
+        local c = buf[i]
+        if not c or c == 0 then break end
+        result[#result+1] = string.char(c)
+    end
+    return table.concat(result)
+end
+
+local function saveAllConfig()
+    -- Save button position
+    iniData.ButtonSettings.posX = btnX[0]
+    iniData.ButtonSettings.posY = btnY[0]
+    iniData.ButtonSettings.size = btnSize[0]
+    iniData.ButtonSettings.alpha = btnAlpha[0]
+    
+    -- Save context vehicle commands
+    for i = 1, 4 do
+        if not iniData["CtxVeh"..i] then iniData["CtxVeh"..i] = {} end
+        iniData["CtxVeh"..i].name = readCharBuffer(ctxVehName[i], 32)
+        iniData["CtxVeh"..i].onCmd = readCharBuffer(ctxVehOn[i], 64)
+        iniData["CtxVeh"..i].offCmd = readCharBuffer(ctxVehOff[i], 64)
+    end
+    
+    -- Save context foot commands
+    for i = 1, 4 do
+        if not iniData["CtxFoot"..i] then iniData["CtxFoot"..i] = {} end
+        iniData["CtxFoot"..i].name = readCharBuffer(ctxFootName[i], 32)
+        iniData["CtxFoot"..i].onCmd = readCharBuffer(ctxFootOn[i], 64)
+        iniData["CtxFoot"..i].offCmd = readCharBuffer(ctxFootOff[i], 64)
+    end
+    
+    -- Save animations (first 8 slots)
+    for i = 1, 8 do
+        if not iniData["Anim"..i] then iniData["Anim"..i] = {} end
+        iniData["Anim"..i].category = readCharBuffer(animCat[i], 32)
+        iniData["Anim"..i].cmd = readCharBuffer(animCmd[i], 128)
+        iniData["Anim"..i].label = readCharBuffer(animLbl[i], 64)
+    end
+    
+    -- Save to file
+    if inicfg.save(iniData, iniFileName) then
+        rebuildAnimList()
+        rebuildVehList()
+        showNotification("Configuration saved!", notif_loaded and Notifications.TYPE.OK, 2)
+        return true
+    else
+        showNotification("Failed to save config!", notif_loaded and Notifications.TYPE.ERROR, 3)
+        return false
     end
 end
 
@@ -592,6 +675,134 @@ end
 -- ============================================================================
 local showTrigger = imgui.new.bool(true)
 
+-- Config Window Frame (separate from pie menu)
+imgui.OnFrame(function() return showConfigWindow[0] end, function()
+    local sw, sh = getScreenResolution()
+    
+    -- Adaptive window size per tab
+    local winW = 500
+    local winH = 250  -- default for MAIN tab
+    if configTab == 2 then winH = 380 end  -- ANIM (more rows)
+    if configTab == 3 then winH = 400 end  -- VEHICLE (2 sections)
+    if configTab == 4 then winH = 280 end  -- PROFILE
+    
+    -- Clean modern styling (ConfigWindowRedesign pattern)
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(15, 12))
+    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 6)
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(8, 6))
+    imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.08, 0.08, 0.1, 0.95))
+    imgui.PushStyleColor(imgui.Col.FrameBg, imgui.ImVec4(0.15, 0.15, 0.2, 1.0))
+    imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.2, 0.3, 1.0))
+    imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.3, 0.5, 1.0))
+    imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
+    
+    imgui.SetNextWindowPos(imgui.ImVec2((sw - winW) / 2, (sh - winH) / 2), imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
+    imgui.Begin("Radial Menu Config", showConfigWindow, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoTitleBar)
+    
+    -- TAB BAR (compact buttons)
+    local tabW = (winW - 30) / 4
+    local tabH = 30
+    local tabLabels = {"1.MAIN", "2.ANIM", "3.VEH", "4.PROF"}
+    for t = 1, 4 do
+        local label = tabLabels[t]
+        if configTab == t then label = "> " .. label .. " <" end
+        if imgui.Button(label, imgui.ImVec2(tabW, tabH)) then configTab = t end
+        if t < 4 then imgui.SameLine() end
+    end
+    
+    imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+    
+    -- TAB 1: MAIN
+    if configTab == 1 then
+        imgui.TextColored(imgui.ImVec4(0.2, 0.9, 0.4, 1), "HAMBURGER BUTTON")
+        imgui.Spacing()
+        imgui.Text("Position X:"); imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##posX", btnX, 0, sw - 100, "%.0f")
+        imgui.Text("Position Y:"); imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##posY", btnY, 0, sh - 100, "%.0f")
+        imgui.Spacing()
+        imgui.Text("Size:"); imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##size", btnSize, 50, 150, "%.0f")
+        imgui.Text("Opacity:"); imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##opacity", btnAlpha, 0.3, 1.0, "%.2f")
+    
+    -- TAB 2: ANIM
+    elseif configTab == 2 then
+        imgui.TextColored(imgui.ImVec4(0.9, 0.7, 0.1, 1), "ANIMATION COMMANDS (First 8 slots)")
+        imgui.Spacing()
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Category"); imgui.SameLine(130)
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Label"); imgui.SameLine(260)
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Command")
+        imgui.Separator(); imgui.Spacing()
+        for i = 1, 8 do
+            imgui.PushItemWidth(100); imgui.InputText("##ac"..i, animCat[i], 32); imgui.PopItemWidth()
+            imgui.SameLine(130)
+            imgui.PushItemWidth(100); imgui.InputText("##al"..i, animLbl[i], 64); imgui.PopItemWidth()
+            imgui.SameLine(260)
+            imgui.PushItemWidth(-1); imgui.InputText("##acmd"..i, animCmd[i], 128); imgui.PopItemWidth()
+        end
+        imgui.Spacing()
+        imgui.TextDisabled("Tip: Edit RadialMenuConfig.ini for slots 9-21")
+    
+    -- TAB 3: VEHICLE
+    elseif configTab == 3 then
+        -- IN-VEHICLE
+        imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "IN-VEHICLE COMMANDS")
+        imgui.Spacing()
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Name"); imgui.SameLine(130)
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "ON Cmd"); imgui.SameLine(310)
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "OFF Cmd")
+        imgui.Separator(); imgui.Spacing()
+        for i = 1, 4 do
+            imgui.PushItemWidth(100); imgui.InputText("##vn"..i, ctxVehName[i], 32); imgui.PopItemWidth()
+            imgui.SameLine(130)
+            imgui.PushItemWidth(150); imgui.InputText("##vo"..i, ctxVehOn[i], 64); imgui.PopItemWidth()
+            imgui.SameLine(310)
+            imgui.PushItemWidth(-1); imgui.InputText("##vf"..i, ctxVehOff[i], 64); imgui.PopItemWidth()
+        end
+        
+        imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+        
+        -- ON-FOOT
+        imgui.TextColored(imgui.ImVec4(0.2, 0.6, 1.0, 1), "ON-FOOT COMMANDS")
+        imgui.Spacing()
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "Name"); imgui.SameLine(130)
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "ON Cmd"); imgui.SameLine(310)
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "OFF Cmd")
+        imgui.Separator(); imgui.Spacing()
+        for i = 1, 4 do
+            imgui.PushItemWidth(100); imgui.InputText("##fn"..i, ctxFootName[i], 32); imgui.PopItemWidth()
+            imgui.SameLine(130)
+            imgui.PushItemWidth(150); imgui.InputText("##fo"..i, ctxFootOn[i], 64); imgui.PopItemWidth()
+            imgui.SameLine(310)
+            imgui.PushItemWidth(-1); imgui.InputText("##ff"..i, ctxFootOff[i], 64); imgui.PopItemWidth()
+        end
+    
+    -- TAB 4: PROFILE
+    elseif configTab == 4 then
+        imgui.TextColored(imgui.ImVec4(0.8, 0.3, 0.8, 1), "PROFILE MANAGEMENT")
+        imgui.Spacing()
+        imgui.Text("Current Profile:"); imgui.SameLine()
+        imgui.TextColored(imgui.ImVec4(1, 1, 0, 1), currentProfile)
+        imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+        imgui.TextDisabled("Profile features coming soon...")
+        imgui.TextDisabled("Edit RadialMenuProfiles.ini manually for now")
+    end
+    
+    -- BOTTOM: Save button
+    imgui.Spacing()
+    if imgui.Button("SAVE ALL", imgui.ImVec2(-1, 40)) then
+        saveAllConfig()
+    end
+    
+    imgui.End()
+    imgui.PopStyleColor(5)
+    imgui.PopStyleVar(4)
+end)
+
+-- Pie Menu Frame
 imgui.OnFrame(function() return showTrigger[0] end, function(self)
     self.HideCursor = not showPieMenu and not showConfigWindow[0]
     
@@ -761,17 +972,6 @@ imgui.OnFrame(function() return showTrigger[0] end, function(self)
 end)
 
 -- ============================================================================
--- CONFIG MANAGEMENT (Missing from rebuild - TODO)
--- ============================================================================
--- TODO: Add config window UI
--- TODO: Add profile management functions
--- TODO: Add save/load functions
--- TODO: Add ImGui editor buffers
--- TODO: Add profile dialog
--- NOTE: Config functionality is preserved in INI files but UI is missing
--- Use /rcfg command placeholder for now
-
--- ============================================================================
 -- MAIN
 -- ============================================================================
 function main()
@@ -784,14 +984,13 @@ function main()
     end)
     
     sampRegisterChatCommand("rcfg", function()
-        showNotification("Config UI coming soon! Config files still work.", notif_loaded and Notifications.TYPE.INFO, 3)
         showConfigWindow[0] = not showConfigWindow[0]
     end)
     
     -- Startup messages
-    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}v1.4.0-alpha loaded!", -1)
+    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}v1.4.0 loaded!", -1)
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Use {FFFF00}/rmenu{FFFFFF} to toggle menu", -1)
-    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Config: Edit .ini files manually (UI coming soon)", -1)
+    sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Use {FFFF00}/rcfg{FFFFFF} to configure", -1)
     sampAddChatMessage("{00FFFF}[Radial Menu] {FFFFFF}Profile: {FFFF00}" .. currentProfile, -1)
     
     -- Startup notification

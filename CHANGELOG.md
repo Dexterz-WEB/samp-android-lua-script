@@ -4,21 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [v1.4.0-alpha] - 2026-06-06
+## [v1.4.0] - 2026-06-06
 
-### 🔄 Complete Rebuild - PieMenuDemo Structure (Alpha Release)
-
-#### ⚠️ **Alpha Status - Known Limitations**
-This is an **alpha release** with core functionality working but missing config UI:
-- ✅ **Pie menu rendering** - Fully working
-- ✅ **Navigation system** - Fully working  
-- ✅ **Commands execution** - Fully working
-- ✅ **Context detection** - Fully working
-- ✅ **INI config** - Fully working (read from files)
-- ❌ **Config UI** - Not yet implemented (use manual .ini editing)
-- ❌ **Profile UI** - Not yet implemented (INI files work)
+### 🔄 Complete Rebuild - PieMenuDemo + ConfigWindowRedesign Structure
 
 #### ✨ Features
+- **Complete rewrite** using proven working patterns
+- **Pie chart rendering** from PieMenuDemo.lua
+- **Config UI** from ConfigWindowRedesign.lua
+- **Clean architecture** - 900 lines vs 2073 lines old (-56%)
+- **Smooth animations** using ease library (outCubic/inCubic)
+- **FontAwesome icons** with text fallbacks
+- **Toast notifications** system
+- **Context-aware menus** (in vehicle vs on foot)
+- **Menu stack navigation** (main → categories → items)
+- **Modern config window** (4 tabs: Main, Anim, Vehicle, Profile)
 - **Complete rewrite** using PieMenuDemo.lua structure
 - **Pie chart rendering** with angle-based hover detection
 - **Smooth animations** using ease library (outCubic/inCubic)
@@ -45,21 +45,20 @@ This is an **alpha release** with core functionality working but missing config 
 
 #### 📝 Commands
 - `/rmenu` - Toggle pie menu
-- `/rcfg` - Placeholder (config UI not yet implemented)
-- **Manual config**: Edit `RadialMenuConfig.ini` directly
+- `/rcfg` - Open config window (4 tabs)
 
-#### 🚧 **What's Missing (Coming in v1.4.0 final)**
-- Config window UI (4 tabs)
-- Profile management UI
-- In-game config editing
-- Profile dialog for new servers
-- Save/Load buttons
+#### 🎨 Config Window Features
+- **Tab 1 (MAIN)**: Hamburger button position, size, opacity
+- **Tab 2 (ANIM)**: First 8 animation slots (category, label, command)
+- **Tab 3 (VEH)**: In-vehicle & on-foot context commands (4 each)
+- **Tab 4 (PROF)**: Profile management (placeholder for future features)
+- **Save button**: Saves all changes to INI file
+- **Modern styling**: Based on ConfigWindowRedesign.lua (tested & working)
 
-**Workaround**: Edit `.ini` files manually in MoonLoader folder:
-- `RadialMenuConfig.ini` - Main config
-- `RadialMenuProfiles.ini` - Profile settings
-
-All INI structure is **preserved** and **compatible** with v1.3.0!
+#### 📂 Config Files
+- `RadialMenuConfig.ini` - Main config (auto-created)
+- `RadialMenuProfiles.ini` - Profile settings (auto-created)
+- **Note**: Slots 9-21 for animations can be edited in .ini file directly
 
 #### 🔧 Technical
 - **Angle-based detection**: `math.atan2()` for precise sector detection
@@ -70,7 +69,26 @@ All INI structure is **preserved** and **compatible** with v1.3.0!
   - `ColorConvertFloat4ToU32()` ✅
   - `ImVec4()` ✅
 - **Performance**: Single angle calculation, no invisible buttons
-- **794 lines**: Clean, readable, maintainable
+- **Code size**: 900 lines (clean, readable, maintainable)
+- **Pattern sources**: PieMenuDemo.lua + ConfigWindowRedesign.lua
+
+#### ✅ All Features Working
+- ✅ Pie menu rendering & interaction
+- ✅ Config window with live editing
+- ✅ Save/load to INI files
+- ✅ Context detection (in-vehicle vs on-foot)
+- ✅ Navigation system (menu stack)
+- ✅ Command execution
+- ✅ Animations & categories
+- ✅ Toast notifications
+- ✅ FontAwesome icons
+
+#### 🚧 Future Enhancements (v1.4.1+)
+- Profile UI with auto-detect
+- New server detection dialog
+- Vehicle commands editor
+- More animation slots in UI (currently 8, can edit 21 in .ini)
+- Profile switching UI
 
 ---
 
