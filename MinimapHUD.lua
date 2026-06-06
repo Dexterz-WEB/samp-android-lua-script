@@ -69,6 +69,16 @@ local fullMapLastX = 0
 local fullMapLastY = 0
 local fullMapOpenTime = 0
 
+-- Waypoint system
+local waypointActive = false
+local waypointX = 0.0
+local waypointY = 0.0
+local waypointZ = 0.0
+local lastTapTime = 0
+local DOUBLE_TAP_INTERVAL = 0.4  -- 400ms
+local lastTapX = 0
+local lastTapY = 0
+
 -- Pinch zoom state
 local fullMapPinching = false
 local fullMapPinchDist = 0
@@ -140,6 +150,36 @@ local function isPointInCircle(px, py, cx, cy, r)
     return (dx * dx + dy * dy) <= (r * r)
 end
 
+local function uvToWorld(uvx, uvy)
+    local wx = uvx * 6000 - 3000
+    local wy = (1.0 - uvy) * 6000 - 3000
+    return wx, wy
+end
+
+local function getDistanceTo(tx, ty)
+    local dx = cachedPlayerX - tx
+    local dy = cachedPlayerY - ty
+    return math.sqrt(dx*dx + dy*dy)
+end
+
+local function setGTAWaypoint(wx, wy)
+    -- Set waypoint blip in GTA SA via opcode
+    pcall(function()
+        -- Remove old waypoint first if exists
+        removeWaypointBlip()
+    end)
+    pcall(function()
+        -- Set new target blip
+        placeWaypoint(wx, wy)
+    end)
+end
+
+local function removeGTAWaypoint()
+    pcall(function()
+        removeWaypointBlip()
+    end)
+end
+
 local function saveConfig()
     iniData.Settings.minimapEnabled = cfgEnabled[0]
     iniData.Settings.radarDisabled = cfgRadarOff[0]
@@ -204,6 +244,43 @@ local function drawMinimap(draw_list)
         local headingRad = -math.rad(cachedHeading)
         local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, opacity))
         drawRotatedImage(draw_list, arrowTexture, centerX, centerY, arrowSz, headingRad, arrowColor)
+    end
+
+    -- Draw waypoint on minimap
+    if waypointActive then
+        local wpUVX, wpUVY = worldToUV(waypointX, waypointY)
+        -- Check if waypoint is within visible UV area
+        if wpUVX >= uvMinX and wpUVX <= uvMaxX and wpUVY >= uvMinY and wpUVY <= uvMaxY then
+            local wpLocalX = posX + ((wpUVX - uvMinX) / (uvMaxX - uvMinX)) * mapSize
+            local wpLocalY = posY + ((wpUVY - uvMinY) / (uvMaxY - uvMinY)) * mapSize
+            -- Pin dot
+            draw_list:AddCircleFilled(imgui.ImVec2(wpLocalX, wpLocalY), 6, 
+                imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 0.2, 0.2, opacity)), 12)
+            draw_list:AddCircle(imgui.ImVec2(wpLocalX, wpLocalY), 6, 
+                imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, opacity)), 12, 2)
+        end
+        
+        -- Draw line from center (player) toward waypoint direction
+        local wpUVDirX = wpUVX - uvCenterX
+        local wpUVDirY = wpUVY - uvCenterY
+        local dirLen = math.sqrt(wpUVDirX*wpUVDirX + wpUVDirY*wpUVDirY)
+        if dirLen > 0.001 then
+            local maxLineLen = radius * 0.8
+            local lineEndX = centerX + (wpUVDirX / dirLen) * math.min(dirLen / uvHalf * radius, maxLineLen)
+            local lineEndY = centerY + (wpUVDirY / dirLen) * math.min(dirLen / uvHalf * radius, maxLineLen)
+            draw_list:AddLine(
+                imgui.ImVec2(centerX, centerY),
+                imgui.ImVec2(lineEndX, lineEndY),
+                imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.7, 0.7 * opacity)), 2.0
+            )
+        end
+        
+        -- Auto clear if < 10m
+        local dist = getDistanceTo(waypointX, waypointY)
+        if dist < 10.0 then
+            waypointActive = false
+            removeGTAWaypoint()
+        end
     end
 
     -- Tap detection for opening full map
@@ -279,6 +356,58 @@ local function drawFullMap(draw_list)
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
     end
 
+    -- Draw waypoint pin on full map
+    if waypointActive then
+        local wpUVX, wpUVY = worldToUV(waypointX, waypointY)
+        local wpScreenX = mapX + wpUVX * mapDisplaySize
+        local wpScreenY = mapY + wpUVY * mapDisplaySize
+        
+        -- Pin shape (triangle + circle)
+        local pinColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 0.2, 0.2, 1.0))
+        local pinOutline = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 1.0, 1.0, 1.0))
+        
+        -- Pin circle (top)
+        draw_list:AddCircleFilled(imgui.ImVec2(wpScreenX, wpScreenY - 20), 10, pinColor, 16)
+        draw_list:AddCircle(imgui.ImVec2(wpScreenX, wpScreenY - 20), 10, pinOutline, 16, 2)
+        
+        -- Pin triangle (bottom point)
+        draw_list:AddTriangleFilled(
+            imgui.ImVec2(wpScreenX - 7, wpScreenY - 14),
+            imgui.ImVec2(wpScreenX + 7, wpScreenY - 14),
+            imgui.ImVec2(wpScreenX, wpScreenY),
+            pinColor
+        )
+        
+        -- Inner white dot
+        draw_list:AddCircleFilled(imgui.ImVec2(wpScreenX, wpScreenY - 20), 4, pinOutline, 12)
+        
+        -- Draw GPS line from player to waypoint
+        local playerMapX2 = mapX + playerUVX * mapDisplaySize
+        local playerMapY2 = mapY + playerUVY * mapDisplaySize
+        local lineColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.7, 0.8))
+        draw_list:AddLine(
+            imgui.ImVec2(playerMapX2, playerMapY2),
+            imgui.ImVec2(wpScreenX, wpScreenY),
+            lineColor, 3.0
+        )
+        
+        -- Distance text
+        local dist = getDistanceTo(waypointX, waypointY)
+        local distText = string.format("%.0fm", dist)
+        local distSize = imgui.CalcTextSize(distText)
+        draw_list:AddText(
+            imgui.ImVec2(wpScreenX - distSize.x / 2, wpScreenY + 5),
+            imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)),
+            distText
+        )
+        
+        -- Auto clear if < 10m
+        if dist < 10.0 then
+            waypointActive = false
+            removeGTAWaypoint()
+        end
+    end
+
     -- Handle drag (touch hold and move)
     if imgui.IsMouseDown(0) then
         if not fullMapDragging then
@@ -347,6 +476,35 @@ local function drawFullMap(draw_list)
         if mx >= closeBtnPos.x and mx <= closeBtnPos.x + btnSize and my >= closeBtnPos.y and my <= closeBtnPos.y + btnSize then
             fullMapMode = false
             return
+        end
+        
+        -- Double tap detection for waypoint (on map area only)
+        if mx >= mapX and mx <= mapX + mapDisplaySize and my >= mapY and my <= mapY + mapDisplaySize then
+            local now = os.clock()
+            local tapDist = math.sqrt((mx - lastTapX)^2 + (my - lastTapY)^2)
+            if (now - lastTapTime) < DOUBLE_TAP_INTERVAL and tapDist < 50 then
+                -- DOUBLE TAP DETECTED
+                if waypointActive then
+                    -- Remove waypoint
+                    waypointActive = false
+                    removeGTAWaypoint()
+                else
+                    -- Set waypoint: convert screen tap to world coords
+                    local tapUVX = (mx - mapX) / mapDisplaySize
+                    local tapUVY = (my - mapY) / mapDisplaySize
+                    local wx, wy = uvToWorld(tapUVX, tapUVY)
+                    waypointX = wx
+                    waypointY = wy
+                    waypointZ = 0
+                    waypointActive = true
+                    setGTAWaypoint(wx, wy)
+                end
+                lastTapTime = 0  -- Reset to prevent triple tap
+            else
+                lastTapTime = now
+                lastTapX = mx
+                lastTapY = my
+            end
         end
     end
 end
