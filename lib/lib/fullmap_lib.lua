@@ -4,7 +4,8 @@ local fullmap = {}
 
 -- State
 local active = false
-local offsetX, offsetY = 0, 0
+local viewCenterU = 0.5  -- UV center position (0-1)
+local viewCenterV = 0.5
 local zoom = 1.0
 local dragging = false
 local lastX, lastY = 0, 0
@@ -21,7 +22,8 @@ local MAP_RANGE = MAP_MAX - MAP_MIN -- 6000
 -- API
 function fullmap.show()
     active = true
-    offsetX, offsetY = 0, 0
+    viewCenterU = 0.5
+    viewCenterV = 0.5
     zoom = 1.0
     dragging = false
 end
@@ -110,23 +112,18 @@ imgui.OnFrame(
         local mapX2 = centerX + mapDisplaySize * 0.5
         local mapY2 = centerY + mapDisplaySize * 0.5
         
-        -- Calculate UV viewport based on zoom + offset
+        -- Calculate UV viewport based on zoom + viewCenter
         local uvSize = 1.0 / zoom
-        local uvCenterX = 0.5 - (offsetX / mapDisplaySize) * uvSize
-        local uvCenterY = 0.5 - (offsetY / mapDisplaySize) * uvSize
+        local uvX1 = viewCenterU - uvSize * 0.5
+        local uvY1 = viewCenterV - uvSize * 0.5
+        local uvX2 = viewCenterU + uvSize * 0.5
+        local uvY2 = viewCenterV + uvSize * 0.5
         
-        local uvX1 = uvCenterX - uvSize * 0.5
-        local uvY1 = uvCenterY - uvSize * 0.5
-        local uvX2 = uvCenterX + uvSize * 0.5
-        local uvY2 = uvCenterY + uvSize * 0.5
-        
-        -- Clamp UV to valid range
-        if uvX1 < 0 then uvX2 = uvX2 - uvX1; uvX1 = 0 end
-        if uvY1 < 0 then uvY2 = uvY2 - uvY1; uvY1 = 0 end
-        if uvX2 > 1 then uvX1 = uvX1 - (uvX2 - 1); uvX2 = 1 end
-        if uvY2 > 1 then uvY1 = uvY1 - (uvY2 - 1); uvY2 = 1 end
-        uvX1 = math.max(0, uvX1)
-        uvY1 = math.max(0, uvY1)
+        -- Clamp so UV stays within [0, 1]
+        if uvX1 < 0 then viewCenterU = uvSize * 0.5; uvX1 = 0; uvX2 = uvSize end
+        if uvY1 < 0 then viewCenterV = uvSize * 0.5; uvY1 = 0; uvY2 = uvSize end
+        if uvX2 > 1 then viewCenterU = 1.0 - uvSize * 0.5; uvX1 = 1.0 - uvSize; uvX2 = 1.0 end
+        if uvY2 > 1 then viewCenterV = 1.0 - uvSize * 0.5; uvY1 = 1.0 - uvSize; uvY2 = 1.0 end
         
         if mapTexture then
             dl:AddImage(mapTexture, imgui.ImVec2(mapX1, mapY1), imgui.ImVec2(mapX2, mapY2),
@@ -219,16 +216,15 @@ imgui.OnFrame(
         if dragging and imgui.IsMouseDown(0) then
             local dx = mousePos.x - lastX
             local dy = mousePos.y - lastY
-            offsetX = offsetX + dx
-            offsetY = offsetY + dy
+            -- Convert pixel movement to UV movement
+            local uvPerPixel = uvSize / mapDisplaySize
+            viewCenterU = viewCenterU - dx * uvPerPixel
+            viewCenterV = viewCenterV - dy * uvPerPixel
+            -- Clamp center so viewport stays in bounds
+            viewCenterU = math.max(uvSize * 0.5, math.min(1.0 - uvSize * 0.5, viewCenterU))
+            viewCenterV = math.max(uvSize * 0.5, math.min(1.0 - uvSize * 0.5, viewCenterV))
             lastX = mousePos.x
             lastY = mousePos.y
-            
-            -- Clamp offset: prevent UV going out of bounds
-            local maxOffsetX = mapDisplaySize * (1.0 - uvSize) / uvSize * 0.5
-            local maxOffsetY = mapDisplaySize * (1.0 - uvSize) / uvSize * 0.5
-            offsetX = math.max(-maxOffsetX, math.min(maxOffsetX, offsetX))
-            offsetY = math.max(-maxOffsetY, math.min(maxOffsetY, offsetY))
         end
         
         -- UI Buttons
