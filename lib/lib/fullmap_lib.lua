@@ -210,11 +210,6 @@ imgui.OnFrame(
         local btnSize = 70 * dpi
         local btnPadding = 20 * dpi
         local btnGap = 20 * dpi
-        local btnFontSize = 28 * dpi
-        
-        -- Scale font for buttons
-        imgui.PushFont(imgui.GetFont())
-        imgui.SetWindowFontScale(btnFontSize / imgui.GetFontSize())
         
         -- Close button (top-right)
         imgui.SetCursorPos(imgui.ImVec2(resX - btnSize - btnPadding, btnPadding))
@@ -253,10 +248,6 @@ imgui.OnFrame(
         end
         imgui.PopStyleVar()
         imgui.PopStyleColor(3)
-        
-        -- Reset font scale
-        imgui.SetWindowFontScale(1.0)
-        imgui.PopFont()
         
         imgui.End()
     end
