@@ -207,8 +207,14 @@ imgui.OnFrame(
         end
         
         -- UI Buttons
-        local btnSize = 40 * dpi
-        local btnPadding = 10 * dpi
+        local btnSize = 70 * dpi
+        local btnPadding = 20 * dpi
+        local btnGap = 20 * dpi
+        local btnFontSize = 28 * dpi
+        
+        -- Scale font for buttons
+        imgui.PushFont(imgui.GetFont())
+        imgui.SetWindowFontScale(btnFontSize / imgui.GetFontSize())
         
         -- Close button (top-right)
         imgui.SetCursorPos(imgui.ImVec2(resX - btnSize - btnPadding, btnPadding))
@@ -222,8 +228,8 @@ imgui.OnFrame(
         imgui.PopStyleVar()
         imgui.PopStyleColor(3)
         
-        -- Zoom In button (bottom-right)
-        imgui.SetCursorPos(imgui.ImVec2(resX - btnSize - btnPadding, resY - btnSize * 2 - btnPadding * 2))
+        -- Zoom In button (bottom-right, above zoom out with gap)
+        imgui.SetCursorPos(imgui.ImVec2(resX - btnSize - btnPadding, resY - btnSize * 2 - btnPadding - btnGap))
         imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.2, 0.2, 0.9))
         imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.3, 0.3, 1.0))
         imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.15, 0.15, 0.15, 1.0))
@@ -235,7 +241,7 @@ imgui.OnFrame(
         imgui.PopStyleVar()
         imgui.PopStyleColor(3)
         
-        -- Zoom Out button (below zoom in)
+        -- Zoom Out button (bottom-right, below zoom in)
         imgui.SetCursorPos(imgui.ImVec2(resX - btnSize - btnPadding, resY - btnSize - btnPadding))
         imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.2, 0.2, 0.9))
         imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.3, 0.3, 1.0))
@@ -247,6 +253,10 @@ imgui.OnFrame(
         end
         imgui.PopStyleVar()
         imgui.PopStyleColor(3)
+        
+        -- Reset font scale
+        imgui.SetWindowFontScale(1.0)
+        imgui.PopFont()
         
         imgui.End()
     end
