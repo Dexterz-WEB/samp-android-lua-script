@@ -150,14 +150,14 @@ imgui.OnFrame(
             local py = mapY1 + (mapY2 - mapY1) * pv
             
             if arrowTexture then
-                local arrowSize = 16 * dpi * zoom
+                local arrowSize = 16 * dpi
                 dl:AddImage(arrowTexture,
                     imgui.ImVec2(px - arrowSize, py - arrowSize),
                     imgui.ImVec2(px + arrowSize, py + arrowSize),
                     imgui.ImVec2(0, 0), imgui.ImVec2(1, 1), 0xFFFFFFFF)
             else
                 -- Fallback: draw a triangle as arrow
-                local sz = 8 * dpi * zoom
+                local sz = 8 * dpi
                 dl:AddTriangleFilled(
                     imgui.ImVec2(px, py - sz),
                     imgui.ImVec2(px - sz * 0.6, py + sz * 0.6),
