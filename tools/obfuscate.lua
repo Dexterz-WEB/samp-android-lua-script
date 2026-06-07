@@ -971,7 +971,7 @@ end
     
     -- Execute verified code
     finalParts[#finalParts+1] = string.format([[
-local %s = loadstring(%s)
+local %s = (loadstring or load)(%s)
 if %s then %s() end
 ]], execVar, loaderVarName, execVar, execVar)
     
@@ -1016,7 +1016,7 @@ if %s then %s() end
     print("  [x] Anti-Tamper Integrity Check (DJB2 hash)")
     print("  [x] Anti-Decompile (misleading variables)")
     print("  [x] Number Obfuscation (arithmetic encoding)")
-    print("  [x] Code wrapped in loadstring (prevents static analysis)")
+    print("  [x] Code wrapped in load/loadstring (prevents static analysis)")
     print("")
     print("[!] WARNING: Do NOT modify the output file - it will fail")
     print("    the integrity check and refuse to execute.")
