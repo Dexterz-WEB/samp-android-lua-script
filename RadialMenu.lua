@@ -622,16 +622,8 @@ function saveAllConfig()
 end
 
 -- ============================================================================
--- FULL MAP TEXTURE LOADING
+-- FULL MAP TEXTURE LOADING (lazy, inside OnFrame via drawFullMap)
 -- ============================================================================
-imgui.OnInitialize(function()
-    pcall(function()
-        mapTexture = imgui.CreateTextureFromFile("testing/map.png")
-    end)
-    pcall(function()
-        arrowTexture = imgui.CreateTextureFromFile("testing/arrow.png")
-    end)
-end)
 
 -- ============================================================================
 -- FULL MAP HELPER FUNCTIONS
@@ -671,6 +663,17 @@ end
 -- FULL MAP RENDERING
 -- ============================================================================
 local function drawFullMap(draw_list)
+    -- Lazy texture loading (load once, with full path)
+    if not mapTexture then
+        pcall(function()
+            mapTexture = imgui.CreateTextureFromFile(getWorkingDirectory() .. '/testing/map.png')
+        end)
+    end
+    if not arrowTexture then
+        pcall(function()
+            arrowTexture = imgui.CreateTextureFromFile(getWorkingDirectory() .. '/testing/arrow.png')
+        end)
+    end
     if not mapTexture then return end
 
     local sw, sh = 0, 0
@@ -1152,8 +1155,7 @@ function main()
         -- FULL MAP RENDERING
         if fullMapMode then
             drawFullMap(draw_list)
-            return
-        end
+        else
 
 
         -- NEW SERVER DETECTION DIALOG
@@ -1787,6 +1789,7 @@ function main()
             imgui.PopStyleColor(2)
             imgui.PopStyleVar(2)
         end
+        end -- end else (not fullMapMode)
     end)
 
     while true do wait(100) end
