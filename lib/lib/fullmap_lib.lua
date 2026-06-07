@@ -30,7 +30,7 @@ local lastTapY = 0
 local DOUBLE_TAP_TIME = 0.4
 local DOUBLE_TAP_DIST = 30 -- max pixel distance between two taps
 
--- GPS state
+-- GPS state (shared between hook callback and OnFrame renderer)
 local gpsPath = {} -- table of {x=, y=} world coordinates
 local gpsInitialized = false
 local gpsAvailable = false
@@ -41,17 +41,6 @@ local gpsLastTargetX = 0
 local gpsLastTargetY = 0
 local gpsCacheValid = false
 local GPS_RECALC_DISTANCE = 50.0
-
--- GPS FFI objects (lazy init)
-local ffi = nil
-local memory = nil
-local gtasa = nil
-local gpsResultNodes = nil
-local gpsOutCount = nil
-local gpsOutDist = nil
-local gpsNullNode = nil
-local gpsTmpWorld = nil
-local gpsGTP = nil -- function to get CPathFind ptr
 
 -- API
 function fullmap.show()
@@ -116,15 +105,18 @@ local function screenToWorld(sx, sy, mapX1, mapY1, mapX2, mapY2)
     return uvToWorld(u, v)
 end
 
--- GPS: Lazy initialization (all FFI/memory calls wrapped in pcall)
+-- GPS: Lazy initialization using monethook (hooks CRadar::DrawRadarMap)
+-- This approach works because DoPathSearch must be called from the game thread.
+-- The hook runs in game thread context, making the FFI call reliable on ARM32.
 local function initGPS()
     if gpsInitialized then return gpsAvailable end
     gpsInitialized = true
     gpsAvailable = false
 
     local ok = pcall(function()
-        ffi = require("ffi")
-        memory = require("memory")
+        local ffi = require("ffi")
+        local memory = require("memory")
+        local hook = require("monethook")
 
         local BASE = MONET_GTASA_BASE
         if not BASE or BASE == 0 then
@@ -137,32 +129,141 @@ local function initGPS()
         local PN_POS = 0x08
         local MAX_NODES = 5000
 
-        ffi.cdef[[
-            typedef struct { float x, y, z; } CVector_gps;
-            typedef struct { short areaId; short nodeId; } CNodeAddress_gps;
-        ]]
+        -- Define FFI types (pcall to avoid redefinition errors)
+        pcall(ffi.cdef, [[
+            typedef struct { float x, y, z; } CVector;
+            typedef struct { float x, y; } CVector2D;
+            typedef struct { short areaId; short nodeId; } CNodeAddress;
+            void* _Z13FindPlayerPedi(int n);
+            CVector _Z15FindPlayerCoorsi(int n);
+            void _ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb(
+                void* thiz, uint8_t graphType,
+                CVector startCoors, CNodeAddress startNode,
+                CVector targetCoors, CNodeAddress* pNodeList,
+                int16_t* pNumNodes, int32_t numReq,
+                float* pDist, float cutoff,
+                CNodeAddress* pGivenTarget, float maxDist,
+                bool noWrongWay, CNodeAddress avoid,
+                bool amphibious, bool boat
+            );
+            float _ZN6CWorld19FindGroundZForCoordEff(float x, float y);
+            void _ZN6CRadar12DrawRadarMapEv(void* thiz);
+        ]])
 
-        gtasa = ffi.load("GTASA")
+        local gtasa = ffi.load("GTASA")
 
-        gpsResultNodes = ffi.new("CNodeAddress_gps[?]", MAX_NODES)
-        gpsOutCount = ffi.new("int16_t[1]")
-        gpsOutDist = ffi.new("float[1]")
-        gpsNullNode = ffi.new("CNodeAddress_gps")
-        gpsTmpWorld = ffi.new("CVector_gps")
+        -- Allocate buffers for pathfinding
+        local resultNodes = ffi.new("CNodeAddress[?]", MAX_NODES)
+        local outCount = ffi.new("int16_t[1]")
+        local outDist = ffi.new("float[1]")
+        local nullNode = ffi.new("CNodeAddress")
 
-        gpsGTP = function()
+        -- Helper: get CPathFind pointer
+        local function gtp()
             return memory.getuint32(GOT_THEPATHS)
         end
 
-        -- Store constants for later use
-        fullmap._gps_internals = {
-            BASE = BASE,
-            PF_NODES = PF_NODES,
-            PN_SIZE = PN_SIZE,
-            PN_POS = PN_POS,
-            MAX_NODES = MAX_NODES,
-            GOT_THEPATHS = GOT_THEPATHS,
-        }
+        -- Helper: check if recalculation is needed
+        local function needsRecalculation(px, py, pz, tx, ty)
+            if not gpsCacheValid then return true end
+            local dx = px - gpsLastCalcX
+            local dy = py - gpsLastCalcY
+            local dz = pz - gpsLastCalcZ
+            local moved = math.sqrt(dx*dx + dy*dy + dz*dz)
+            if moved > GPS_RECALC_DISTANCE then return true end
+            if math.abs(tx - gpsLastTargetX) > 1.0 or math.abs(ty - gpsLastTargetY) > 1.0 then return true end
+            return false
+        end
+
+        -- Get address of CRadar::DrawRadarMap for hooking
+        local addrRadar = tonumber(ffi.cast("uintptr_t", ffi.cast("void*",
+            gtasa._ZN6CRadar12DrawRadarMapEv)))
+
+        if not addrRadar or addrRadar == 0 then
+            error("DrawRadarMap address is 0")
+        end
+
+        -- Install hook on CRadar::DrawRadarMap
+        local hkRadar
+        hkRadar = hook.new("void(__cdecl*)(void*)", function(thiz)
+            -- Call original first
+            hkRadar(thiz)
+
+            -- Only process if waypoint is active
+            if not waypointActive then
+                gpsCacheValid = false
+                return
+            end
+
+            -- Get player position from game thread
+            local sc = gtasa._Z15FindPlayerCoorsi(0)
+            local px, py, pz = sc.x, sc.y, sc.z
+
+            -- Auto-clear waypoint when player is within 10m
+            local wdx = px - waypointX
+            local wdy = py - waypointY
+            local wdist = math.sqrt(wdx*wdx + wdy*wdy)
+            if wdist < 10.0 then
+                waypointActive = false
+                waypointX = 0
+                waypointY = 0
+                gpsPath = {}
+                gpsCacheValid = false
+                if _G.MINIMAP_WAYPOINT then
+                    _G.MINIMAP_WAYPOINT.active = false
+                end
+                return
+            end
+
+            -- Only recalculate when needed (performance cache)
+            if not needsRecalculation(px, py, pz, waypointX, waypointY) then
+                return
+            end
+
+            -- Get target Z coordinate
+            local tz = gtasa._ZN6CWorld19FindGroundZForCoordEff(waypointX, waypointY)
+
+            -- Prepare target vector
+            local targetCoors = ffi.new("CVector", {x = waypointX, y = waypointY, z = tz})
+
+            outCount[0] = 0
+            outDist[0] = 0.0
+
+            -- Call DoPathSearch from game thread context (this is why monethook works)
+            gtasa._ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb(
+                ffi.cast("void*", gtp()),
+                0, sc, nullNode, targetCoors,
+                resultNodes, outCount, MAX_NODES,
+                outDist, 999999.0, nil, 999999.0,
+                false, nullNode, false, false
+            )
+
+            local nodeCount = outCount[0]
+            local newPath = {}
+
+            -- Extract world coordinates from result nodes
+            for i = 0, nodeCount - 1 do
+                local areaId = resultNodes[i].areaId
+                local nodeId = resultNodes[i].nodeId
+                local arr = memory.getuint32(gtp() + PF_NODES + areaId * 4)
+                if arr ~= 0 then
+                    local nodePtr = arr + nodeId * PN_SIZE
+                    local p = ffi.cast("int16_t*", nodePtr + PN_POS)
+                    local nx = p[0] / 8.0
+                    local ny = p[1] / 8.0
+                    newPath[#newPath + 1] = {x = nx, y = ny}
+                end
+            end
+
+            -- Update shared gpsPath table (read by OnFrame renderer)
+            gpsPath = newPath
+            gpsCacheValid = true
+            gpsLastCalcX = px
+            gpsLastCalcY = py
+            gpsLastCalcZ = pz
+            gpsLastTargetX = waypointX
+            gpsLastTargetY = waypointY
+        end, addrRadar)
 
         gpsAvailable = true
     end)
@@ -171,80 +272,6 @@ local function initGPS()
         gpsAvailable = false
     end
     return gpsAvailable
-end
-
--- GPS: Calculate path from player to waypoint
-local function calculateGPSPath(playerX, playerY, playerZ)
-    if not gpsAvailable then return end
-    if not waypointActive then
-        gpsPath = {}
-        return
-    end
-
-    -- Check if recalculation needed
-    if gpsCacheValid then
-        local dx = playerX - gpsLastCalcX
-        local dy = playerY - gpsLastCalcY
-        local dz = playerZ - gpsLastCalcZ
-        local moved = math.sqrt(dx*dx + dy*dy + dz*dz)
-        if moved < GPS_RECALC_DISTANCE then
-            local tdx = waypointX - gpsLastTargetX
-            local tdy = waypointY - gpsLastTargetY
-            if math.abs(tdx) < 1.0 and math.abs(tdy) < 1.0 then
-                return -- cache still valid
-            end
-        end
-    end
-
-    local ok = pcall(function()
-        local internals = fullmap._gps_internals
-        local pathFind = ffi.cast("void*", gpsGTP())
-
-        local startPos = ffi.new("CVector_gps", {x = playerX, y = playerY, z = playerZ})
-        local targetPos = ffi.new("CVector_gps", {x = waypointX, y = waypointY, z = 0})
-
-        gpsOutCount[0] = 0
-        gpsOutDist[0] = 0
-
-        -- Call DoPathSearch
-        local doPathSearch = gtasa._ZN9CPathFind12DoPathSearchEh7CVector12CNodeAddressS0_PS1_PsiPffS2_fbS1_bb
-        doPathSearch(
-            pathFind,
-            0, startPos, gpsNullNode, targetPos,
-            gpsResultNodes, gpsOutCount, internals.MAX_NODES,
-            gpsOutDist, 999999.0, nil, 999999.0,
-            false, gpsNullNode, false, false
-        )
-
-        local nodeCount = gpsOutCount[0]
-        local newPath = {}
-
-        for i = 0, nodeCount - 1 do
-            local areaId = gpsResultNodes[i].areaId
-            local nodeId = gpsResultNodes[i].nodeId
-            local arr = memory.getuint32(gpsGTP() + internals.PF_NODES + areaId * 4)
-            if arr ~= 0 then
-                local nodePtr = arr + nodeId * internals.PN_SIZE
-                local p = ffi.cast("int16_t*", nodePtr + internals.PN_POS)
-                local nx = p[0] / 8.0
-                local ny = p[1] / 8.0
-                newPath[#newPath + 1] = {x = nx, y = ny}
-            end
-        end
-
-        gpsPath = newPath
-        gpsCacheValid = true
-        gpsLastCalcX = playerX
-        gpsLastCalcY = playerY
-        gpsLastCalcZ = playerZ
-        gpsLastTargetX = waypointX
-        gpsLastTargetY = waypointY
-    end)
-
-    if not ok then
-        gpsPath = {}
-        gpsCacheValid = false
-    end
 end
 
 -- Helper: load textures lazily
@@ -349,21 +376,9 @@ imgui.OnFrame(
             end
         end)
         
-        -- GPS: try to initialize and calculate path
-        if hasPlayer and waypointActive then
-            if not gpsInitialized then
-                initGPS()
-            end
-            if gpsAvailable then
-                calculateGPSPath(playerX, playerY, playerZ)
-            end
-            -- Auto-clear waypoint when player is within 10m
-            local wdx = playerX - waypointX
-            local wdy = playerY - waypointY
-            local wdist = math.sqrt(wdx*wdx + wdy*wdy)
-            if wdist < 10.0 then
-                fullmap.clearWaypoint()
-            end
+        -- GPS: initialize hook if not done yet (hook fills gpsPath automatically)
+        if not gpsInitialized then
+            initGPS()
         end
         
         -- Draw GPS line on map
