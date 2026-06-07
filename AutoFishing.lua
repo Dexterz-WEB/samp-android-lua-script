@@ -15,7 +15,8 @@ local inicfg = require 'inicfg'
 
 -- Optional libs (won't crash if not available)
 local fa_loaded, faicons = pcall(require, 'fAwesome6')
-local notif_loaded, Notifications = pcall(function() require 'notifications'; return _G.Notifications end)
+local notif_loaded = false
+local Notifications = nil
 
 -- ============================================================================
 -- KONFIGURASI (inicfg)
@@ -106,15 +107,11 @@ local function logActivity(message)
 end
 
 --- showNotification(title, message)
---- Menampilkan toast notification jika library tersedia
+--- Disabled: notifications.lua has compatibility issues
 --- @param title string - Judul notifikasi
 --- @param message string - Isi notifikasi
 local function showNotification(title, message)
-    if notif_loaded and Notifications then
-        pcall(function()
-            Notifications:Show(title, message)
-        end)
-    end
+    -- Disabled: notifications.lua has compatibility issues
 end
 
 --- containsFishingPrompt(text)
