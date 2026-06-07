@@ -1140,7 +1140,9 @@ function main()
     end)
 
     imgui.OnFrame(function() return true end, function()
-        local sw, sh = getScreenResolution()
+        local sw, sh = 0, 0
+        pcall(function() sw, sh = getScreenResolution() end)
+        if sw == 0 or sh == 0 then return end
         local draw_list = imgui.GetBackgroundDrawList()
         local cx, cy = sw / 2, sh / 2
 
@@ -1152,10 +1154,11 @@ function main()
             end
         end
 
-        -- FULL MAP RENDERING
+        -- FULL MAP RENDERING (early return if active)
         if fullMapMode then
             drawFullMap(draw_list)
-        else
+            return
+        end
 
 
         -- NEW SERVER DETECTION DIALOG
@@ -1789,7 +1792,6 @@ function main()
             imgui.PopStyleColor(2)
             imgui.PopStyleVar(2)
         end
-        end -- end else (not fullMapMode)
     end)
 
     while true do wait(100) end
