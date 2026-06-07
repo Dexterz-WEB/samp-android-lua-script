@@ -557,6 +557,18 @@ function main()
     imgui.OnFrame(function() return true end, function()
         local draw_list = imgui.GetBackgroundDrawList()
 
+        -- Check if RadialMenu requested full map open
+        if _G.RADIAL_OPEN_FULLMAP then
+            _G.RADIAL_OPEN_FULLMAP = false
+            fullMapMode = true
+            fullMapOffsetX = 0
+            fullMapOffsetY = 0
+            fullMapZoom = 1.0
+            fullMapDragging = false
+            fullMapFocusPlayer = false
+            fullMapOpenTime = os.clock()
+        end
+
         -- Handle radar toggle
         if cfgRadarOff[0] then
             pcall(function() displayRadar(false) end)

@@ -90,7 +90,7 @@ local defaultStructure = {
     CtxFoot9 = { name = "-", onCmd = "", offCmd = "" },
     CtxFoot10 = { name = "-", onCmd = "", offCmd = "" },
     Sector1 = { name = "VEHICLE", cmd = "" },
-    Sector2 = { name = "-",       cmd = "" },
+    Sector2 = { name = "MAP",     cmd = "" },
     Sector3 = { name = "ANIM",    cmd = "" },
     Sector4 = { name = "-",       cmd = "" },
     CatSector1 = { name = "" }, CatSector2 = { name = "" },
@@ -1217,8 +1217,8 @@ function main()
                         showContextVehRadial[0] = true
                         menuOpenTime = os.clock()
                     elseif hoveredSector == 2 then
-                        local cmd = iniData.Sector2.cmd or ""
-                        if executeCommand(cmd) then closeAllRadial() end
+                        _G.RADIAL_OPEN_FULLMAP = true
+                        closeAllRadial()
                     elseif hoveredSector == 3 then
                         if not inVehicle then
                             showRadialMenu[0] = false
