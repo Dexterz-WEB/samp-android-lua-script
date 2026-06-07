@@ -962,10 +962,11 @@ function main()
                 imgui.Spacing()
                 for i = 1, 4 do
                     imgui.Text("Sector "..i..":"); imgui.SameLine()
-                    imgui.SetNextItemWidth(120); imgui.InputText("Name##n"..i, editName[i], 32); imgui.SameLine()
-                    if i == 1 or i == 3 then 
-                        imgui.TextDisabled(i == 1 and "(vehicle menu)" or "(anim menu)")
-                    else 
+                    if i == 1 or i == 2 or i == 3 then
+                        local labels = {[1] = "(vehicle menu)", [2] = "(full map)", [3] = "(anim menu)"}
+                        imgui.TextDisabled(labels[i])
+                    else
+                        imgui.SetNextItemWidth(120); imgui.InputText("Name##n"..i, editName[i], 32); imgui.SameLine()
                         imgui.SetNextItemWidth(-1); imgui.InputText("Cmd##c"..i, editCmd[i], 64) 
                     end
                 end
