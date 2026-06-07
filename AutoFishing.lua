@@ -122,6 +122,13 @@ end
 local function containsFishingPrompt(text)
     if not text or text == "" then return nil end
 
+    -- Pattern: TextDraw yang cuma berisi 1 huruf (H/Y/N)
+    -- Server fishing sering kirim single character di textdraw
+    local trimmed = text:match("^%s*(.-)%s*$")
+    if trimmed == "H" or trimmed == "h" then return "H" end
+    if trimmed == "Y" or trimmed == "y" then return "Y" end
+    if trimmed == "N" or trimmed == "n" then return "N" end
+
     -- Pola umum fishing prompt di berbagai server SA-MP:
     -- "Press H to pull the rod" / "Tekan H untuk menarik"
     -- "Press Y to reel in" / "Tekan Y untuk menarik ikan"
@@ -484,6 +491,37 @@ function main()
                                 sendFishingResponse(detectedKey)
                             end
                             break
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- ========================================================================
+    -- TEXTDRAW POLLING
+    -- Scan TextDraw aktif untuk detect prompt fishing
+    -- Server kadang kirim prompt via TextDraw (bukan chat)
+    -- ========================================================================
+    local lastTextdrawResponse = ""
+    lua_thread.create(function()
+        while true do
+            wait(150)
+            if fishingActive then
+                pcall(function()
+                    for id = 0, 2303 do
+                        if sampTextdrawIsExists(id) then
+                            local text = sampTextdrawGetString(id)
+                            if text and text ~= "" then
+                                local detectedKey = containsFishingPrompt(text)
+                                if detectedKey then
+                                    local tdIdentifier = tostring(id) .. ":" .. text
+                                    if tdIdentifier ~= lastTextdrawResponse then
+                                        lastTextdrawResponse = tdIdentifier
+                                        sendFishingResponse(detectedKey)
+                                    end
+                                end
+                            end
                         end
                     end
                 end)
