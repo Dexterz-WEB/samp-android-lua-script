@@ -333,7 +333,7 @@ local function drawFullMap(draw_list)
         local playerMapX = mapX + playerUVX * mapDisplaySize
         local playerMapY = mapY + playerUVY * mapDisplaySize
         local headingRad = -math.rad(cachedHeading)
-        local arrowSz = 28
+        local arrowSz = fullMapFocusPlayer and 40 or 28
         local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1))
         drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
     end
@@ -412,8 +412,8 @@ local function drawFullMap(draw_list)
             fullMapFocusBtnLastClick = os.clock()
             fullMapFocusPlayer = not fullMapFocusPlayer
             if fullMapFocusPlayer then
-                -- Activate focus mode: zoom to 2.0 and reset offset
-                fullMapZoom = 2.0
+                -- Activate focus mode: zoom to 3.5 and reset offset
+                fullMapZoom = 3.5
                 fullMapOffsetX = 0
                 fullMapOffsetY = 0
             else
