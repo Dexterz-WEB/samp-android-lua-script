@@ -73,6 +73,10 @@ local fullMapOpenTime = 0
 local fullMapPinching = false
 local fullMapPinchDist = 0
 
+-- Focus player state
+local fullMapFocusPlayer = false
+local fullMapFocusBtnLastClick = 0
+
 -- Player cached data
 local cachedPlayerX = 0
 local cachedPlayerY = 0
@@ -214,6 +218,7 @@ local function drawMinimap(draw_list)
             fullMapOffsetY = 0
             fullMapZoom = 1.0
             fullMapDragging = false
+            fullMapFocusPlayer = false
             fullMapOpenTime = os.clock()
         end
     end
@@ -254,40 +259,66 @@ local function drawFullMap(draw_list)
     local baseSize = math.min(sw, sh) * 0.9
     local mapDisplaySize = baseSize * fullMapZoom
 
-    -- Center map IMAGE on screen, then apply drag offset
-    local mapX = (sw - mapDisplaySize) / 2 + fullMapOffsetX
-    local mapY = (sh - mapDisplaySize) / 2 + fullMapOffsetY
+    local mapX, mapY
+
+    if fullMapFocusPlayer then
+        -- Focus mode: center map on player position
+        local playerScreenX = sw / 2 - playerUVX * mapDisplaySize
+        local playerScreenY = sh / 2 - playerUVY * mapDisplaySize
+        mapX = playerScreenX + fullMapOffsetX
+        mapY = playerScreenY + fullMapOffsetY
+    else
+        -- Default centered mode: center map on screen, then apply drag offset
+        mapX = (sw - mapDisplaySize) / 2 + fullMapOffsetX
+        mapY = (sh - mapDisplaySize) / 2 + fullMapOffsetY
+    end
 
     -- Drag limits: map edges cannot go past screen edges
     if mapDisplaySize <= sw then
-        -- Map fits horizontally, center it (no drag on X)
         mapX = (sw - mapDisplaySize) / 2
-        fullMapOffsetX = 0
+        if not fullMapFocusPlayer then
+            fullMapOffsetX = 0
+        end
     else
-        -- Map is bigger than screen width, clamp edges
         if mapX > 0 then
             mapX = 0
-            fullMapOffsetX = mapX - (sw - mapDisplaySize) / 2
+            if fullMapFocusPlayer then
+                fullMapOffsetX = mapX - (sw / 2 - playerUVX * mapDisplaySize)
+            else
+                fullMapOffsetX = mapX - (sw - mapDisplaySize) / 2
+            end
         end
         if mapX + mapDisplaySize < sw then
             mapX = sw - mapDisplaySize
-            fullMapOffsetX = mapX - (sw - mapDisplaySize) / 2
+            if fullMapFocusPlayer then
+                fullMapOffsetX = mapX - (sw / 2 - playerUVX * mapDisplaySize)
+            else
+                fullMapOffsetX = mapX - (sw - mapDisplaySize) / 2
+            end
         end
     end
 
     if mapDisplaySize <= sh then
-        -- Map fits vertically, center it (no drag on Y)
         mapY = (sh - mapDisplaySize) / 2
-        fullMapOffsetY = 0
+        if not fullMapFocusPlayer then
+            fullMapOffsetY = 0
+        end
     else
-        -- Map is bigger than screen height, clamp edges
         if mapY > 0 then
             mapY = 0
-            fullMapOffsetY = mapY - (sh - mapDisplaySize) / 2
+            if fullMapFocusPlayer then
+                fullMapOffsetY = mapY - (sh / 2 - playerUVY * mapDisplaySize)
+            else
+                fullMapOffsetY = mapY - (sh - mapDisplaySize) / 2
+            end
         end
         if mapY + mapDisplaySize < sh then
             mapY = sh - mapDisplaySize
-            fullMapOffsetY = mapY - (sh - mapDisplaySize) / 2
+            if fullMapFocusPlayer then
+                fullMapOffsetY = mapY - (sh / 2 - playerUVY * mapDisplaySize)
+            else
+                fullMapOffsetY = mapY - (sh - mapDisplaySize) / 2
+            end
         end
     end
 
@@ -323,6 +354,11 @@ local function drawFullMap(draw_list)
         end
     else
         fullMapDragging = false
+        -- In focus mode, reset offset every frame so map snaps back to player
+        if fullMapFocusPlayer then
+            fullMapOffsetX = 0
+            fullMapOffsetY = 0
+        end
     end
 
     -- Zoom controls (draw +/- buttons)
@@ -352,9 +388,41 @@ local function drawFullMap(draw_list)
     draw_list:AddText(imgui.ImVec2(closeBtnPos.x + (btnSize - xSize.x) / 2, closeBtnPos.y + (btnSize - xSize.y) / 2),
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "X")
 
-    -- Handle tap for buttons (X button and zoom only)
+    -- Focus Player button (below zoom buttons, right side)
+    local focusBtnPos = imgui.ImVec2(sw - btnSize - 20, sh / 2 + btnSize + 30)
+    local focusBtnColor
+    if fullMapFocusPlayer then
+        focusBtnColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.7, 0.2, 0.9))
+    else
+        focusBtnColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.3, 0.3, 0.3, 0.9))
+    end
+    draw_list:AddRectFilled(focusBtnPos, imgui.ImVec2(focusBtnPos.x + btnSize, focusBtnPos.y + btnSize),
+        focusBtnColor, 8)
+    local focusText = "F"
+    local fSize = imgui.CalcTextSize(focusText)
+    draw_list:AddText(imgui.ImVec2(focusBtnPos.x + (btnSize - fSize.x) / 2, focusBtnPos.y + (btnSize - fSize.y) / 2),
+        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), focusText)
+
+    -- Handle tap for buttons (X button, zoom, and focus)
     local mapCooldown = (os.clock() - fullMapOpenTime) > 0.3
     if imgui.IsMouseClicked(0) and mapCooldown then
+        -- Focus Player button
+        local focusCooldown = (os.clock() - fullMapFocusBtnLastClick) > 0.5
+        if mx >= focusBtnPos.x and mx <= focusBtnPos.x + btnSize and my >= focusBtnPos.y and my <= focusBtnPos.y + btnSize and focusCooldown then
+            fullMapFocusBtnLastClick = os.clock()
+            fullMapFocusPlayer = not fullMapFocusPlayer
+            if fullMapFocusPlayer then
+                -- Activate focus mode: zoom to 2.0 and reset offset
+                fullMapZoom = 2.0
+                fullMapOffsetX = 0
+                fullMapOffsetY = 0
+            else
+                -- Deactivate focus mode: keep current zoom, reset offset for centered mode
+                fullMapOffsetX = 0
+                fullMapOffsetY = 0
+            end
+            return
+        end
         -- Zoom In
         if mx >= zoomInPos.x and mx <= zoomInPos.x + btnSize and my >= zoomInPos.y and my <= zoomInPos.y + btnSize then
             fullMapZoom = clamp(fullMapZoom + 0.3, 0.5, 5.0)
