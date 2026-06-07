@@ -179,17 +179,6 @@ local hamburgerSize = imgui.new.float(iniData.HamburgerButton and iniData.Hambur
 local hamburgerAlpha = imgui.new.float(iniData.HamburgerButton and iniData.HamburgerButton.alpha or 0.8)
 local hamburgerPulse = 0
 
--- Full Map (integrated)
-local fullMapMode = false
-local fmOffsetX = 0
-local fmOffsetY = 0
-local fmZoom = 1.0
-local fmDragging = false
-local fmLastX = 0
-local fmLastY = 0
-local fmMapTexture = nil
-local fmArrowTexture = nil
-
 -- Config edit buffers
 local editName = {}
 local editCmd = {}
@@ -878,70 +867,6 @@ function main()
         end
 
 
-        -- FULL MAP OVERLAY
-        if fullMapMode then
-            if not fmMapTexture then
-                pcall(function() fmMapTexture = imgui.CreateTextureFromFile(getWorkingDirectory() .. "/testing/map.png") end)
-            end
-            if not fmArrowTexture then
-                pcall(function() fmArrowTexture = imgui.CreateTextureFromFile(getWorkingDirectory() .. "/testing/arrow.png") end)
-            end
-            draw_list:AddRectFilled(imgui.ImVec2(0, 0), imgui.ImVec2(sw, sh), 0xDD000000)
-            if fmMapTexture then
-                local mapSize = math.min(sw, sh) * 0.85 * fmZoom
-                local mx = (sw - mapSize) / 2 + fmOffsetX
-                local my = (sh - mapSize) / 2 + fmOffsetY
-                draw_list:AddImage(fmMapTexture, imgui.ImVec2(mx, my), imgui.ImVec2(mx + mapSize, my + mapSize), imgui.ImVec2(0, 0), imgui.ImVec2(1, 1), 0xFFFFFFFF)
-                local px, py = 0, 0
-                pcall(function()
-                    local posX, posY, posZ = getCharCoordinates(PLAYER_PED)
-                    px = mx + ((posX + 3000) / 6000) * mapSize
-                    py = my + ((3000 - posY) / 6000) * mapSize
-                end)
-                if px > 0 and py > 0 then
-                    draw_list:AddCircleFilled(imgui.ImVec2(px, py), 10 * fmZoom, 0xFF00FF00, 16)
-                end
-            end
-            local btnW, btnH = 120, 50
-            local closeX, closeY = sw / 2 - btnW / 2, sh - 80
-            draw_list:AddRectFilled(imgui.ImVec2(closeX, closeY), imgui.ImVec2(closeX + btnW, closeY + btnH), 0xCC0000FF, 8)
-            draw_list:AddText(imgui.ImVec2(closeX + 35, closeY + 15), 0xFFFFFFFF, "CLOSE")
-            local zpX = sw - 150
-            draw_list:AddRectFilled(imgui.ImVec2(zpX, sh/2 - 60), imgui.ImVec2(zpX + 60, sh/2 - 10), 0xCC00AA00, 8)
-            draw_list:AddText(imgui.ImVec2(zpX + 22, sh/2 - 50), 0xFFFFFFFF, "+")
-            draw_list:AddRectFilled(imgui.ImVec2(zpX, sh/2 + 10), imgui.ImVec2(zpX + 60, sh/2 + 60), 0xCCAA0000, 8)
-            draw_list:AddText(imgui.ImVec2(zpX + 24, sh/2 + 20), 0xFFFFFFFF, "-")
-            imgui.SetNextWindowPos(imgui.ImVec2(0, 0))
-            imgui.SetNextWindowSize(imgui.ImVec2(sw, sh))
-            imgui.Begin("##fullmap", nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground + imgui.WindowFlags.NoScrollbar)
-            if imgui.IsWindowHovered() then
-                local mpos = imgui.GetIO().MousePos
-                if imgui.IsMouseClicked(0) then
-                    if mpos.x >= closeX and mpos.x <= closeX + btnW and mpos.y >= closeY and mpos.y <= closeY + btnH then
-                        fullMapMode = false
-                    elseif mpos.x >= zpX and mpos.x <= zpX + 60 and mpos.y >= sh/2 - 60 and mpos.y <= sh/2 - 10 then
-                        fmZoom = math.min(fmZoom + 0.3, 4.0)
-                    elseif mpos.x >= zpX and mpos.x <= zpX + 60 and mpos.y >= sh/2 + 10 and mpos.y <= sh/2 + 60 then
-                        fmZoom = math.max(fmZoom - 0.3, 0.5)
-                    else
-                        fmDragging = true
-                        fmLastX = mpos.x
-                        fmLastY = mpos.y
-                    end
-                end
-                if imgui.IsMouseDragging(0) and fmDragging then
-                    local dx = mpos.x - fmLastX
-                    local dy = mpos.y - fmLastY
-                    fmOffsetX = math.max(-sw, math.min(sw, fmOffsetX + dx))
-                    fmOffsetY = math.max(-sh, math.min(sh, fmOffsetY + dy))
-                    fmLastX = mpos.x
-                    fmLastY = mpos.y
-                end
-                if imgui.IsMouseReleased(0) then fmDragging = false end
-            end
-            imgui.End()
-        end
-
         -- NEW SERVER DETECTION DIALOG
         if showNewServerDialog[0] then
             imgui.SetNextWindowPos(imgui.ImVec2(sw/2 - 250, sh/2 - 150), imgui.Cond.Always)
@@ -1295,11 +1220,7 @@ function main()
                         menuOpenTime = os.clock()
                     elseif hoveredSector == 2 then
                         closeAllRadial()
-                        fullMapMode = true
-                        fmOffsetX = 0
-                        fmOffsetY = 0
-                        fmZoom = 1.0
-                        fmDragging = false
+                        sampProcessChatInput("/openmap")
                     elseif hoveredSector == 3 then
                         if not inVehicle then
                             showRadialMenu[0] = false
