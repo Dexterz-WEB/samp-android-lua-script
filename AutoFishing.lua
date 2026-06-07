@@ -12,24 +12,10 @@ script_author("OnlyDexterZ")
 -- ============================================================================
 local imgui = require 'mimgui'
 local inicfg = require 'inicfg'
-local ev = require 'lib.samp.events'
 
--- Optional: FontAwesome icons untuk toggle button
-local fa_loaded = false
-local faicons = nil
-pcall(function()
-    faicons = require 'fAwesome6'
-    fa_loaded = true
-end)
-
--- Optional: Notifications untuk toast notif
-local notif_loaded = false
-local Notifications = nil
-pcall(function()
-    require 'notifications'
-    Notifications = _G.Notifications
-    notif_loaded = true
-end)
+-- Optional libs (won't crash if not available)
+local fa_loaded, faicons = pcall(require, 'fAwesome6')
+local notif_loaded, Notifications = pcall(function() require 'notifications'; return _G.Notifications end)
 
 -- ============================================================================
 -- KONFIGURASI (inicfg)
@@ -243,30 +229,10 @@ local function sendFishingResponse(key)
 end
 
 -- ============================================================================
--- CHAT MESSAGE DETECTION (Events Hook)
--- Hook ke onServerMessage untuk mendeteksi prompt fishing dari server
--- Menggunakan library events.lua untuk intercept pesan masuk
+-- CHAT MESSAGE DETECTION (Polling via sampGetChatString)
+-- Menggunakan polling approach yang compatible dengan MonetLoader
+-- Tidak perlu require 'lib.samp.events' yang sering crash di MonetLoader
 -- ============================================================================
-
---- ev.onServerMessage(color, text)
---- Hook yang dipanggil setiap kali server mengirim pesan chat
---- Mengecek apakah pesan mengandung prompt fishing dan auto-respond
---- @param color number - Warna pesan dalam format integer
---- @param text string - Isi pesan dari server
---- @return boolean|nil - Return false untuk block pesan, nil untuk lanjut normal
-function ev.onServerMessage(color, text)
-    -- Jika script tidak aktif, lewati
-    if not fishingActive then return end
-
-    -- Deteksi apakah pesan mengandung prompt fishing
-    local detectedKey = containsFishingPrompt(text)
-
-    if detectedKey then
-        -- Kirim response otomatis dengan delay random
-        sendFishingResponse(detectedKey)
-        -- Tidak block pesan, biarkan tampil di chat
-    end
-end
 
 -- ============================================================================
 -- IMGUI TOGGLE BUTTON RENDERING
@@ -497,6 +463,34 @@ function main()
         while true do
             wait(60000) -- Save setiap 60 detik
             pcall(saveConfig)
+        end
+    end)
+
+    -- ========================================================================
+    -- CHAT POLLING THREAD
+    -- Thread yang monitor chat baru setiap 100ms menggunakan sampGetChatString
+    -- Ini pengganti events hook yang tidak tersedia di MonetLoader
+    -- ========================================================================
+    lua_thread.create(function()
+        local lastChatLine = ""
+        while true do
+            wait(100)
+            if fishingActive then
+                -- Cek chat string terbaru (index 99 = paling baru)
+                pcall(function()
+                    for i = 99, 95, -1 do
+                        local result, text, prefix, color = sampGetChatString(i)
+                        if result and text and text ~= "" and text ~= lastChatLine then
+                            lastChatLine = text
+                            local detectedKey = containsFishingPrompt(text)
+                            if detectedKey then
+                                sendFishingResponse(detectedKey)
+                            end
+                            break
+                        end
+                    end
+                end)
+            end
         end
     end)
 
