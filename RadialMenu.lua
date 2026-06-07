@@ -34,6 +34,11 @@ pcall(function()
     notif_loaded = true
 end)
 
+local sharedState = nil
+pcall(function()
+    sharedState = require 'SharedState'
+end)
+
 -- ============================================================================
 -- CONFIG FILES
 -- ============================================================================
@@ -1218,7 +1223,11 @@ function main()
                         menuOpenTime = os.clock()
                     elseif hoveredSector == 2 then
                         closeAllRadial()
-                        sampProcessChatInput("/openmap")
+                        if sharedState then
+                            sharedState.openFullMap = true
+                        else
+                            sampProcessChatInput("/openmap")
+                        end
                     elseif hoveredSector == 3 then
                         if not inVehicle then
                             showRadialMenu[0] = false

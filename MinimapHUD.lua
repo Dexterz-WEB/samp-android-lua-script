@@ -12,6 +12,11 @@ script_author("OnlyDexterZ")
 local imgui = require 'mimgui'
 local inicfg = require 'inicfg'
 
+local sharedState = nil
+pcall(function()
+    sharedState = require 'SharedState'
+end)
+
 -- ============================================================================
 -- CONFIG
 -- ============================================================================
@@ -566,6 +571,18 @@ function main()
     -- Main rendering frame
     imgui.OnFrame(function() return true end, function()
         local draw_list = imgui.GetBackgroundDrawList()
+
+        -- Check shared state from RadialMenu
+        if sharedState and sharedState.openFullMap then
+            sharedState.openFullMap = false
+            fullMapMode = true
+            fullMapOffsetX = 0
+            fullMapOffsetY = 0
+            fullMapZoom = 1.0
+            fullMapDragging = false
+            fullMapFocusPlayer = false
+            fullMapOpenTime = os.clock()
+        end
 
         -- Handle radar toggle
         if cfgRadarOff[0] then
