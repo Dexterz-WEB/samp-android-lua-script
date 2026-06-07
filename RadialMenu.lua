@@ -34,6 +34,8 @@ pcall(function()
     notif_loaded = true
 end)
 
+local fullmap = require 'fullmap_lib'
+
 
 
 -- ============================================================================
@@ -1220,7 +1222,7 @@ function main()
                         menuOpenTime = os.clock()
                     elseif hoveredSector == 2 then
                         closeAllRadial()
-                        sampProcessChatInput("/openmap")
+                        fullmap.show()
                     elseif hoveredSector == 3 then
                         if not inVehicle then
                             showRadialMenu[0] = false
