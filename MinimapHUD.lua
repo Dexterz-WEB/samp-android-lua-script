@@ -548,6 +548,16 @@ function main()
         showConfigWindow[0] = not showConfigWindow[0]
     end)
 
+    sampRegisterChatCommand("openmap", function()
+        fullMapMode = true
+        fullMapOffsetX = 0
+        fullMapOffsetY = 0
+        fullMapZoom = 1.0
+        fullMapDragging = false
+        fullMapFocusPlayer = false
+        fullMapOpenTime = os.clock()
+    end)
+
     -- Disable built-in radar if configured
     if cfgRadarOff[0] then
         pcall(function() displayRadar(false) end)
@@ -556,18 +566,6 @@ function main()
     -- Main rendering frame
     imgui.OnFrame(function() return true end, function()
         local draw_list = imgui.GetBackgroundDrawList()
-
-        -- Check if RadialMenu requested full map open
-        if _G.RADIAL_OPEN_FULLMAP then
-            _G.RADIAL_OPEN_FULLMAP = false
-            fullMapMode = true
-            fullMapOffsetX = 0
-            fullMapOffsetY = 0
-            fullMapZoom = 1.0
-            fullMapDragging = false
-            fullMapFocusPlayer = false
-            fullMapOpenTime = os.clock()
-        end
 
         -- Handle radar toggle
         if cfgRadarOff[0] then

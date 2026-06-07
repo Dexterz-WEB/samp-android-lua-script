@@ -1217,8 +1217,8 @@ function main()
                         showContextVehRadial[0] = true
                         menuOpenTime = os.clock()
                     elseif hoveredSector == 2 then
-                        _G.RADIAL_OPEN_FULLMAP = true
                         closeAllRadial()
+                        sampProcessChatInput("/openmap")
                     elseif hoveredSector == 3 then
                         if not inVehicle then
                             showRadialMenu[0] = false
