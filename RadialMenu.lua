@@ -90,7 +90,7 @@ local defaultStructure = {
     CtxFoot9 = { name = "-", onCmd = "", offCmd = "" },
     CtxFoot10 = { name = "-", onCmd = "", offCmd = "" },
     Sector1 = { name = "VEHICLE", cmd = "" },
-    Sector2 = { name = "MAP",       cmd = "" },
+    Sector2 = { name = "-",       cmd = "" },
     Sector3 = { name = "ANIM",    cmd = "" },
     Sector4 = { name = "-",       cmd = "" },
     CatSector1 = { name = "" }, CatSector2 = { name = "" },
@@ -124,28 +124,6 @@ local showVehCatRadial = imgui.new.bool(false)
 local showVehRadial    = imgui.new.bool(false)
 local showContextVehRadial = imgui.new.bool(false)
 local showCtxSubRadial = imgui.new.bool(false)
-
--- Full Map State
-local fullMapMode = false
-local fullMapOffsetX = 0
-local fullMapOffsetY = 0
-local fullMapZoom = 1.0
-local fullMapDragging = false
-local fullMapLastX = 0
-local fullMapLastY = 0
-local fullMapOpenTime = 0
-local fullMapFocusPlayer = false
-local fullMapFocusBtnLastClick = 0
-
--- Full Map Textures
-local mapTexture = nil
-local arrowTexture = nil
-
--- Full Map Player cached data
-local cachedPlayerX = 0
-local cachedPlayerY = 0
-local cachedPlayerZ = 0
-local cachedHeading = 0
 
 -- Click debounce to prevent rapid menu transitions
 local lastClickTime = 0
@@ -622,272 +600,6 @@ function saveAllConfig()
 end
 
 -- ============================================================================
--- FULL MAP TEXTURE LOADING (lazy, inside OnFrame via drawFullMap)
--- ============================================================================
-
--- ============================================================================
--- FULL MAP HELPER FUNCTIONS
--- ============================================================================
-local function getPlayerData()
-    local ok, x, y, z = pcall(getCharCoordinates, PLAYER_PED)
-    if ok and x then
-        cachedPlayerX = x
-        cachedPlayerY = y
-        cachedPlayerZ = z
-    end
-    local ok2, h = pcall(getCharHeading, PLAYER_PED)
-    if ok2 and h then
-        cachedHeading = h
-    end
-end
-
-local function worldToUV(wx, wy)
-    local uvx = (wx + 3000) / 6000
-    local uvy = 1.0 - (wy + 3000) / 6000
-    return uvx, uvy
-end
-
-local function drawRotatedImage(draw_list, texture, cx, cy, size, angle, color)
-    local cos_a = math.cos(angle)
-    local sin_a = math.sin(angle)
-    local half = size / 2
-    local p1 = imgui.ImVec2(cx + (-half * cos_a - (-half) * sin_a), cy + (-half * sin_a + (-half) * cos_a))
-    local p2 = imgui.ImVec2(cx + (half * cos_a - (-half) * sin_a), cy + (half * sin_a + (-half) * cos_a))
-    local p3 = imgui.ImVec2(cx + (half * cos_a - half * sin_a), cy + (half * sin_a + half * cos_a))
-    local p4 = imgui.ImVec2(cx + (-half * cos_a - half * sin_a), cy + (-half * sin_a + half * cos_a))
-    draw_list:AddImageQuad(texture, p1, p2, p3, p4,
-        imgui.ImVec2(0, 0), imgui.ImVec2(1, 0), imgui.ImVec2(1, 1), imgui.ImVec2(0, 1), color)
-end
-
--- ============================================================================
--- FULL MAP RENDERING
--- ============================================================================
-local function drawFullMap(draw_list)
-    -- Lazy texture loading (load once, with full path)
-    if not mapTexture then
-        pcall(function()
-            mapTexture = imgui.CreateTextureFromFile(getWorkingDirectory() .. '/testing/map.png')
-        end)
-    end
-    if not arrowTexture then
-        pcall(function()
-            arrowTexture = imgui.CreateTextureFromFile(getWorkingDirectory() .. '/testing/arrow.png')
-        end)
-    end
-    if not mapTexture then return end
-
-    local sw, sh = 0, 0
-    pcall(function() sw, sh = getScreenResolution() end)
-    if sw == 0 or sh == 0 then sw, sh = 1280, 720 end
-
-    -- Fullscreen window to block GTA SA camera/touch input
-    imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
-    imgui.SetNextWindowSize(imgui.ImVec2(sw, sh), imgui.Cond.Always)
-    imgui.Begin('##FullMapOverlay', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings + imgui.WindowFlags.NoBackground)
-    imgui.End()
-
-    local io = imgui.GetIO()
-    local mx = io.MousePos.x
-    local my = io.MousePos.y
-
-    -- Background overlay
-    draw_list:AddRectFilled(
-        imgui.ImVec2(0, 0),
-        imgui.ImVec2(sw, sh),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0, 0, 0, 0.7))
-    )
-
-    -- Get player UV position
-    getPlayerData()
-    local playerUVX, playerUVY = worldToUV(cachedPlayerX, cachedPlayerY)
-
-    -- Calculate map display area (at zoom 1.0, map fits screen)
-    local baseSize = math.min(sw, sh) * 0.9
-    local mapDisplaySize = baseSize * fullMapZoom
-
-    local mapX, mapY
-
-    if fullMapFocusPlayer then
-        -- Focus mode: center map on player position
-        local playerScreenX = sw / 2 - playerUVX * mapDisplaySize
-        local playerScreenY = sh / 2 - playerUVY * mapDisplaySize
-        mapX = playerScreenX + fullMapOffsetX
-        mapY = playerScreenY + fullMapOffsetY
-    else
-        -- Default centered mode: center map on screen, then apply drag offset
-        mapX = (sw - mapDisplaySize) / 2 + fullMapOffsetX
-        mapY = (sh - mapDisplaySize) / 2 + fullMapOffsetY
-    end
-
-    -- Drag limits: map edges cannot go past screen edges
-    if mapDisplaySize <= sw then
-        mapX = (sw - mapDisplaySize) / 2
-        if not fullMapFocusPlayer then
-            fullMapOffsetX = 0
-        end
-    else
-        if mapX > 0 then
-            mapX = 0
-            if fullMapFocusPlayer then
-                fullMapOffsetX = mapX - (sw / 2 - playerUVX * mapDisplaySize)
-            else
-                fullMapOffsetX = mapX - (sw - mapDisplaySize) / 2
-            end
-        end
-        if mapX + mapDisplaySize < sw then
-            mapX = sw - mapDisplaySize
-            if fullMapFocusPlayer then
-                fullMapOffsetX = mapX - (sw / 2 - playerUVX * mapDisplaySize)
-            else
-                fullMapOffsetX = mapX - (sw - mapDisplaySize) / 2
-            end
-        end
-    end
-
-    if mapDisplaySize <= sh then
-        mapY = (sh - mapDisplaySize) / 2
-        if not fullMapFocusPlayer then
-            fullMapOffsetY = 0
-        end
-    else
-        if mapY > 0 then
-            mapY = 0
-            if fullMapFocusPlayer then
-                fullMapOffsetY = mapY - (sh / 2 - playerUVY * mapDisplaySize)
-            else
-                fullMapOffsetY = mapY - (sh - mapDisplaySize) / 2
-            end
-        end
-        if mapY + mapDisplaySize < sh then
-            mapY = sh - mapDisplaySize
-            if fullMapFocusPlayer then
-                fullMapOffsetY = mapY - (sh / 2 - playerUVY * mapDisplaySize)
-            else
-                fullMapOffsetY = mapY - (sh - mapDisplaySize) / 2
-            end
-        end
-    end
-
-    -- Draw the full map
-    local pMin = imgui.ImVec2(mapX, mapY)
-    local pMax = imgui.ImVec2(mapX + mapDisplaySize, mapY + mapDisplaySize)
-    local colorU32 = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 0.95))
-    draw_list:AddImage(mapTexture, pMin, pMax, imgui.ImVec2(0, 0), imgui.ImVec2(1, 1), colorU32)
-
-    -- Draw player arrow on full map
-    if arrowTexture then
-        local playerMapX = mapX + playerUVX * mapDisplaySize
-        local playerMapY = mapY + playerUVY * mapDisplaySize
-        local headingRad = -math.rad(cachedHeading)
-        local arrowSz = fullMapFocusPlayer and 40 or 28
-        local arrowColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1))
-        drawRotatedImage(draw_list, arrowTexture, playerMapX, playerMapY, arrowSz, headingRad, arrowColor)
-    end
-
-    -- Handle drag (touch hold and move)
-    if imgui.IsMouseDown(0) then
-        if not fullMapDragging then
-            fullMapDragging = true
-            fullMapLastX = mx
-            fullMapLastY = my
-        else
-            local dx = mx - fullMapLastX
-            local dy = my - fullMapLastY
-            fullMapOffsetX = fullMapOffsetX + dx
-            fullMapOffsetY = fullMapOffsetY + dy
-            fullMapLastX = mx
-            fullMapLastY = my
-        end
-    else
-        fullMapDragging = false
-        -- In focus mode, reset offset every frame so map snaps back to player
-        if fullMapFocusPlayer then
-            fullMapOffsetX = 0
-            fullMapOffsetY = 0
-        end
-    end
-
-    -- Zoom controls (draw +/- buttons)
-    local btnSize = 50
-    local zoomInPos = imgui.ImVec2(sw - btnSize - 20, sh / 2 - btnSize - 10)
-    local zoomOutPos = imgui.ImVec2(sw - btnSize - 20, sh / 2 + 10)
-
-    -- Zoom In button
-    draw_list:AddRectFilled(zoomInPos, imgui.ImVec2(zoomInPos.x + btnSize, zoomInPos.y + btnSize),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.2, 0.2, 0.3, 0.9)), 8)
-    local plusSize = imgui.CalcTextSize("+")
-    draw_list:AddText(imgui.ImVec2(zoomInPos.x + (btnSize - plusSize.x) / 2, zoomInPos.y + (btnSize - plusSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "+")
-
-    -- Zoom Out button
-    draw_list:AddRectFilled(zoomOutPos, imgui.ImVec2(zoomOutPos.x + btnSize, zoomOutPos.y + btnSize),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.2, 0.2, 0.3, 0.9)), 8)
-    local minusSize = imgui.CalcTextSize("-")
-    draw_list:AddText(imgui.ImVec2(zoomOutPos.x + (btnSize - minusSize.x) / 2, zoomOutPos.y + (btnSize - minusSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "-")
-
-    -- Close button (top-right)
-    local closeBtnPos = imgui.ImVec2(sw - btnSize - 20, 20)
-    draw_list:AddRectFilled(closeBtnPos, imgui.ImVec2(closeBtnPos.x + btnSize, closeBtnPos.y + btnSize),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.6, 0.1, 0.1, 0.9)), 8)
-    local xSize = imgui.CalcTextSize("X")
-    draw_list:AddText(imgui.ImVec2(closeBtnPos.x + (btnSize - xSize.x) / 2, closeBtnPos.y + (btnSize - xSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), "X")
-
-    -- Focus Player button (below zoom buttons, right side)
-    local focusBtnPos = imgui.ImVec2(sw - btnSize - 20, sh / 2 + btnSize + 30)
-    local focusBtnColor
-    if fullMapFocusPlayer then
-        focusBtnColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.7, 0.2, 0.9))
-    else
-        focusBtnColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.3, 0.3, 0.3, 0.9))
-    end
-    draw_list:AddRectFilled(focusBtnPos, imgui.ImVec2(focusBtnPos.x + btnSize, focusBtnPos.y + btnSize),
-        focusBtnColor, 8)
-    local focusText = "F"
-    local fSize = imgui.CalcTextSize(focusText)
-    draw_list:AddText(imgui.ImVec2(focusBtnPos.x + (btnSize - fSize.x) / 2, focusBtnPos.y + (btnSize - fSize.y) / 2),
-        imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1, 1, 1, 1)), focusText)
-
-    -- Handle tap for buttons (X button, zoom, and focus)
-    local mapCooldown = (os.clock() - fullMapOpenTime) > 0.3
-    if imgui.IsMouseClicked(0) and mapCooldown then
-        -- Focus Player button
-        local focusCooldown = (os.clock() - fullMapFocusBtnLastClick) > 0.5
-        if mx >= focusBtnPos.x and mx <= focusBtnPos.x + btnSize and my >= focusBtnPos.y and my <= focusBtnPos.y + btnSize and focusCooldown then
-            fullMapFocusBtnLastClick = os.clock()
-            fullMapFocusPlayer = not fullMapFocusPlayer
-            if fullMapFocusPlayer then
-                -- Activate focus mode: zoom to 3.5 and reset offset
-                fullMapZoom = 3.5
-                fullMapOffsetX = 0
-                fullMapOffsetY = 0
-            else
-                -- Deactivate focus mode: keep current zoom, reset offset for centered mode
-                fullMapOffsetX = 0
-                fullMapOffsetY = 0
-            end
-            return
-        end
-        -- Zoom In
-        if mx >= zoomInPos.x and mx <= zoomInPos.x + btnSize and my >= zoomInPos.y and my <= zoomInPos.y + btnSize then
-            fullMapZoom = clamp(fullMapZoom + 0.3, 0.5, 5.0)
-            return
-        end
-        -- Zoom Out
-        if mx >= zoomOutPos.x and mx <= zoomOutPos.x + btnSize and my >= zoomOutPos.y and my <= zoomOutPos.y + btnSize then
-            fullMapZoom = clamp(fullMapZoom - 0.3, 0.5, 5.0)
-            return
-        end
-        -- Close button (X only)
-        if mx >= closeBtnPos.x and mx <= closeBtnPos.x + btnSize and my >= closeBtnPos.y and my <= closeBtnPos.y + btnSize then
-            fullMapMode = false
-            return
-        end
-    end
-end
-
--- ============================================================================
 -- PIE CHART RENDERING SYSTEM
 -- ============================================================================
 function drawPieMenuBackground(draw_list, centerX, centerY, radius, scale)
@@ -1140,9 +852,7 @@ function main()
     end)
 
     imgui.OnFrame(function() return true end, function()
-        local sw, sh = 0, 0
-        pcall(function() sw, sh = getScreenResolution() end)
-        if sw == 0 or sh == 0 then return end
+        local sw, sh = getScreenResolution()
         local draw_list = imgui.GetBackgroundDrawList()
         local cx, cy = sw / 2, sh / 2
 
@@ -1152,12 +862,6 @@ function main()
             if showRadialMenu[0] or showCatRadial[0] or showAnimRadial[0] or showVehCatRadial[0] or showVehRadial[0] or showContextVehRadial[0] or showCtxSubRadial[0] then
                 closeAllRadial()
             end
-        end
-
-        -- FULL MAP RENDERING (early return if active)
-        if fullMapMode then
-            drawFullMap(draw_list)
-            return
         end
 
 
@@ -1513,14 +1217,8 @@ function main()
                         showContextVehRadial[0] = true
                         menuOpenTime = os.clock()
                     elseif hoveredSector == 2 then
-                        closeAllRadial()
-                        fullMapMode = true
-                        fullMapOpenTime = os.clock()
-                        fullMapOffsetX = 0
-                        fullMapOffsetY = 0
-                        fullMapZoom = 1.0
-                        fullMapDragging = false
-                        fullMapFocusPlayer = false
+                        local cmd = iniData.Sector2.cmd or ""
+                        if executeCommand(cmd) then closeAllRadial() end
                     elseif hoveredSector == 3 then
                         if not inVehicle then
                             showRadialMenu[0] = false
