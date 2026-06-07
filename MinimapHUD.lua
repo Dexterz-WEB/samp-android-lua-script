@@ -246,19 +246,50 @@ local function drawFullMap(draw_list)
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0, 0, 0, 0.7))
     )
 
-    -- Get player UV position for centering zoom on player
+    -- Get player UV position
     getPlayerData()
     local playerUVX, playerUVY = worldToUV(cachedPlayerX, cachedPlayerY)
 
-    -- Calculate map display area (zoom centered on player position)
+    -- Calculate map display area (at zoom 1.0, map fits screen)
     local baseSize = math.min(sw, sh) * 0.9
     local mapDisplaySize = baseSize * fullMapZoom
-    
-    -- Center map so that player is at screen center, then apply drag offset
-    local playerScreenX = sw / 2
-    local playerScreenY = sh / 2
-    local mapX = playerScreenX - (playerUVX * mapDisplaySize) + fullMapOffsetX
-    local mapY = playerScreenY - (playerUVY * mapDisplaySize) + fullMapOffsetY
+
+    -- Center map IMAGE on screen, then apply drag offset
+    local mapX = (sw - mapDisplaySize) / 2 + fullMapOffsetX
+    local mapY = (sh - mapDisplaySize) / 2 + fullMapOffsetY
+
+    -- Drag limits: map edges cannot go past screen edges
+    if mapDisplaySize <= sw then
+        -- Map fits horizontally, center it (no drag on X)
+        mapX = (sw - mapDisplaySize) / 2
+        fullMapOffsetX = 0
+    else
+        -- Map is bigger than screen width, clamp edges
+        if mapX > 0 then
+            mapX = 0
+            fullMapOffsetX = mapX - (sw - mapDisplaySize) / 2
+        end
+        if mapX + mapDisplaySize < sw then
+            mapX = sw - mapDisplaySize
+            fullMapOffsetX = mapX - (sw - mapDisplaySize) / 2
+        end
+    end
+
+    if mapDisplaySize <= sh then
+        -- Map fits vertically, center it (no drag on Y)
+        mapY = (sh - mapDisplaySize) / 2
+        fullMapOffsetY = 0
+    else
+        -- Map is bigger than screen height, clamp edges
+        if mapY > 0 then
+            mapY = 0
+            fullMapOffsetY = mapY - (sh - mapDisplaySize) / 2
+        end
+        if mapY + mapDisplaySize < sh then
+            mapY = sh - mapDisplaySize
+            fullMapOffsetY = mapY - (sh - mapDisplaySize) / 2
+        end
+    end
 
     -- Draw the full map
     local pMin = imgui.ImVec2(mapX, mapY)
