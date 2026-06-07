@@ -380,6 +380,18 @@ imgui.OnFrame(
             end
         end
         
+        -- Fallback: draw straight line from player to waypoint if no GPS path
+        if waypointActive and #gpsPath < 2 and hasPlayer then
+            local pu, pv = worldToUV(playerX, playerY)
+            local psx = mapX1 + (mapX2 - mapX1) * pu
+            local psy = mapY1 + (mapY2 - mapY1) * pv
+            local wu, wv = worldToUV(waypointX, waypointY)
+            local wsx = mapX1 + (mapX2 - mapX1) * wu
+            local wsy = mapY1 + (mapY2 - mapY1) * wv
+            local fallbackColor = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.2, 0.5, 1.0, 0.6))
+            dl:AddLine(imgui.ImVec2(psx, psy), imgui.ImVec2(wsx, wsy), fallbackColor, 2.0 * dpi)
+        end
+        
         if hasPlayer then
             local pu, pv = worldToUV(playerX, playerY)
             local px = mapX1 + (mapX2 - mapX1) * pu
@@ -440,9 +452,23 @@ imgui.OnFrame(
                 local tapDist = math.sqrt(tapDx*tapDx + tapDy*tapDy)
                 
                 if (now - lastTapTime) < DOUBLE_TAP_TIME and tapDist < DOUBLE_TAP_DIST then
-                    -- Double tap detected: set waypoint
-                    local wx, wy = screenToWorld(mousePos.x, mousePos.y, mapX1, mapY1, mapX2, mapY2)
-                    fullmap.setWaypoint(wx, wy)
+                    -- Double tap detected
+                    if waypointActive then
+                        -- Check if tapping near existing waypoint to remove it
+                        local wu, wv = worldToUV(waypointX, waypointY)
+                        local wpScreenX = mapX1 + (mapX2 - mapX1) * wu
+                        local wpScreenY = mapY1 + (mapY2 - mapY1) * wv
+                        local distToWP = math.sqrt((mousePos.x - wpScreenX)^2 + (mousePos.y - wpScreenY)^2)
+                        if distToWP < 50 then
+                            fullmap.clearWaypoint()
+                        else
+                            local wx, wy = screenToWorld(mousePos.x, mousePos.y, mapX1, mapY1, mapX2, mapY2)
+                            fullmap.setWaypoint(wx, wy)
+                        end
+                    else
+                        local wx, wy = screenToWorld(mousePos.x, mousePos.y, mapX1, mapY1, mapX2, mapY2)
+                        fullmap.setWaypoint(wx, wy)
+                    end
                     lastTapTime = 0 -- reset to prevent triple-tap
                 else
                     -- Single tap: start dragging
