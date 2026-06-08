@@ -1,21 +1,63 @@
-MIT License
+LISENSI PENGGUNAAN SCRIPT
+Radial Menu & Full Map Library untuk SA-MP Android
+Hak Cipta (c) 2024-2026 OnlyDexterZ (Dexterz-WEB)
 
-Copyright (c) 2026 OnlyDexterZ
+==============================================================================
+BERDASARKAN HUKUM NEGARA KESATUAN REPUBLIK INDONESIA
+(UU No. 28 Tahun 2014 tentang Hak Cipta)
+==============================================================================
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+KETENTUAN PENGGUNAAN:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. LARANGAN KERAS MEMPERJUALBELIKAN
+   Script ini DILARANG KERAS untuk diperjualbelikan dalam bentuk apapun,
+   baik secara langsung maupun tidak langsung, termasuk namun tidak
+   terbatas pada:
+   - Menjual script ini secara utuh atau sebagian
+   - Menjual script yang memodifikasi/memanfaatkan script ini
+   - Menyertakan script ini dalam paket berbayar
+   - Menggunakan script ini sebagai bagian dari layanan berbayar
+   - Menjual akses ke script ini dalam bentuk apapun
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+   Pelanggaran terhadap ketentuan ini akan ditindak sesuai dengan
+   hukum yang berlaku di Republik Indonesia.
+
+2. PENGGUNAAN YANG DIPERBOLEHKAN
+   - Menggunakan script ini secara gratis untuk keperluan pribadi
+   - Mengedit/memodifikasi kode untuk menambah fitur baru
+   - Mengedit/memodifikasi tampilan/desain radial menu
+   - Mempelajari kode untuk tujuan edukasi
+
+3. DISTRIBUSI/PEMBAGIAN
+   Pengguna yang telah mengedit/memodifikasi script ini DIPERBOLEHKAN
+   untuk membagikannya kepada publik DENGAN SYARAT:
+   - Mencantumkan kredit kepada OnlyDexterZ sebagai pembuat asli
+   - Menyertakan file lisensi ini tanpa perubahan
+   - TIDAK memungut biaya dalam bentuk apapun
+   - Menyebutkan bahwa script merupakan modifikasi dari karya asli
+
+4. KREDIT WAJIB
+   Setiap penggunaan, modifikasi, atau distribusi WAJIB mencantumkan:
+   "Original script by OnlyDexterZ (https://github.com/Dexterz-WEB)"
+
+5. PELANGGARAN
+   Segala bentuk pelanggaran terhadap ketentuan di atas, khususnya
+   penjualan tanpa izin, merupakan pelanggaran Hak Cipta berdasarkan:
+   - UU No. 28 Tahun 2014 tentang Hak Cipta (Republik Indonesia)
+   - Pasal 9 ayat (3): Setiap Orang yang tanpa izin Pencipta atau
+     Pemegang Hak Cipta dilarang melakukan Penggandaan dan/atau
+     Penggunaan Secara Komersial Ciptaan.
+   - Pasal 113: Sanksi pidana penjara paling lama 4 tahun dan/atau
+     denda paling banyak Rp 1.000.000.000 (satu miliar rupiah).
+
+==============================================================================
+RINGKASAN:
+- GRATIS digunakan: YA
+- BOLEH diedit: YA
+- BOLEH dibagikan (gratis + credit): YA
+- BOLEH DIJUAL: TIDAK, DILARANG KERAS
+==============================================================================
+
+Kontak pembuat:
+GitHub: https://github.com/Dexterz-WEB
+Author: OnlyDexterZ
