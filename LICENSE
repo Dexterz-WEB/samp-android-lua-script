@@ -40,7 +40,23 @@ KETENTUAN PENGGUNAAN:
    Setiap penggunaan, modifikasi, atau distribusi WAJIB mencantumkan:
    "Original script by OnlyDexterZ (https://github.com/Dexterz-WEB)"
 
-5. PELANGGARAN
+5. LARANGAN KERAS MENYISIPKAN KEYLOGGER / MALWARE
+   DILARANG KERAS menambahkan, menyisipkan, atau memodifikasi script
+   ini dengan kode yang bersifat:
+   - Keylogger (merekam input pengguna)
+   - Spyware (mengumpulkan data tanpa izin)
+   - Malware dalam bentuk apapun
+   - Kode yang mengirim data pengguna ke pihak ketiga
+   - Backdoor atau remote access tanpa sepengetahuan pengguna
+   
+   Pelanggaran ini termasuk tindak pidana berdasarkan:
+   - UU No. 11 Tahun 2008 jo. UU No. 19 Tahun 2016 tentang
+     Informasi dan Transaksi Elektronik (UU ITE)
+   - Pasal 30: Akses ilegal terhadap sistem elektronik
+   - Pasal 32: Mengubah/merusak informasi elektronik
+   - Sanksi: Pidana penjara maks 8 tahun dan/atau denda maks Rp 2 Miliar
+
+6. PELANGGARAN HAK CIPTA
    Segala bentuk pelanggaran terhadap ketentuan di atas, khususnya
    penjualan tanpa izin, merupakan pelanggaran Hak Cipta berdasarkan:
    - UU No. 28 Tahun 2014 tentang Hak Cipta (Republik Indonesia)
@@ -56,6 +72,7 @@ RINGKASAN:
 - BOLEH diedit: YA
 - BOLEH dibagikan (gratis + credit): YA
 - BOLEH DIJUAL: TIDAK, DILARANG KERAS
+- BOLEH SISIPKAN KEYLOGGER/MALWARE: TIDAK, DILARANG KERAS (UU ITE)
 ==============================================================================
 
 Kontak pembuat:
