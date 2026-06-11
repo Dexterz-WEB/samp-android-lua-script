@@ -546,18 +546,15 @@ local function renderList(dpi, contentHeight)
     imgui.PushStyleColor(imgui.Col.Header, COLORS.selectedItem)
     imgui.PushStyleColor(imgui.Col.HeaderHovered, imgui.ImVec4(COLORS.selectedItem.x, COLORS.selectedItem.y, COLORS.selectedItem.z, 0.8))
     imgui.PushStyleColor(imgui.Col.HeaderActive, imgui.ImVec4(COLORS.selectedItem.x, COLORS.selectedItem.y, COLORS.selectedItem.z, 0.9))
-    imgui.PushStyleVarFloat(imgui.StyleVar.ItemSpacing, 2 * dpi)
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(0, 2 * dpi))
 
     for i, item in ipairs(dialogState.listItems) do
         local isSelected = (dialogState.selectedItem == i - 1)
         local label = item
         if #label == 0 then label = " " end
 
-        -- We need unique IDs
-        imgui.PushID(i)
-
-        -- Render selectable with color codes
-        if imgui.Selectable("##listitem", isSelected, 0, imgui.ImVec2(0, 22 * dpi)) then
+        -- Render selectable with unique ID suffix
+        if imgui.Selectable("##listitem_" .. tostring(i), isSelected, 0, imgui.ImVec2(0, 22 * dpi)) then
             dialogState.selectedItem = i - 1
         end
         if imgui.IsItemHovered() and imgui.IsMouseDoubleClicked(0) then
@@ -572,8 +569,6 @@ local function renderList(dpi, contentHeight)
             if si > 1 then imgui.SameLine(0, 0) end
             imgui.TextColored(seg.color, seg.text)
         end
-
-        imgui.PopID()
     end
 
     imgui.PopStyleVar()
