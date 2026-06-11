@@ -855,36 +855,36 @@ addEventHandler('onReceiveRpc', function(id, bs)
     if id == RPC_SHOWDIALOG and customDialogEnabled then
         -- Read dialog data from bitstream
         -- Format: {dialogId = 'int16'}, {style = 'int8'}, {title = 'string8'}, {button1 = 'string8'}, {button2 = 'string8'}, {text = 'encodedString4096'}
-        local ok, dialogId, style, title, button1, button2, text = pcall(function()
+        local dialogId, style, title, button1, button2, text
+        
+        local ok = pcall(function()
             raknetBitStreamResetReadPointer(bs)
-            local dId = raknetBitStreamReadInt16(bs)
-            local st = raknetBitStreamReadInt8(bs)
-            local ti = readString8(bs)
-            local b1 = readString8(bs)
-            local b2 = readString8(bs)
-            local tx = readEncodedString4096(bs)
-            return dId, st, ti, b1, b2, tx
+            dialogId = raknetBitStreamReadInt16(bs)
+            style = raknetBitStreamReadInt8(bs)
+            title = readString8(bs)
+            button1 = readString8(bs)
+            button2 = readString8(bs)
+            text = readEncodedString4096(bs)
         end)
         
-        if not ok then return end -- parse failed, let original handle it
+        if not ok or not dialogId then return end -- parse failed, let original handle it
         
         -- Open our custom dialog
         openDialog(dialogId, style, title, button1, button2, text)
         
-        -- Rewrite the bitstream to show a HIDDEN dialog
-        -- We pass through a dialog with empty content so SAMP client registers it
-        -- but shows nothing visible (empty title, empty text, MSGBOX style)
-        pcall(function()
-            raknetBitStreamSetWriteOffset(bs, 0)
-            raknetBitStreamWriteInt16(bs, dialogId)  -- keep same dialog ID
-            raknetBitStreamWriteInt8(bs, 0)          -- style = MSGBOX (smallest)
-            raknetBitStreamWriteInt8(bs, 0)          -- title = empty (len=0)
-            raknetBitStreamWriteInt8(bs, 0)          -- button1 = empty (len=0)
-            raknetBitStreamWriteInt8(bs, 0)          -- button2 = empty (len=0)
-            raknetBitStreamWriteInt32(bs, 0)         -- text = empty (len=0, encodedString4096 uses int32 length)
+        -- Let the RPC pass through normally so SAMP client registers dialog internally
+        -- (required for sampSendDialogResponse to work)
+        -- The native dialog WILL appear, but we hide it after 1 frame
+        lua_thread.create(function()
+            wait(0) -- wait 1 frame for dialog to register
+            -- Hide native dialog by showing an empty dialog with ID 65535 (invalid)
+            -- This effectively closes the visible dialog but keeps the response mechanism
+            pcall(function()
+                sampShowDialog(65535, " ", " ", " ", "", 0)
+                wait(0)
+                sampShowDialog(65535, " ", " ", " ", "", 0)
+            end)
         end)
-        
-        -- Don't block - let modified (empty) dialog through to register in client
     end
 end)
 
