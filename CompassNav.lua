@@ -606,9 +606,20 @@ imgui.OnFrame(
                 )
             end
 
+            -- Helper: draw text with outline (shadow on 4 sides for visibility)
+            local function drawTextOutlined(drawList, pos, color, text, outlineColor)
+                outlineColor = outlineColor or 0xFF000000
+                local ox = 1 * scale
+                drawList:AddText(imgui.ImVec2(pos.x - ox, pos.y), outlineColor, text)
+                drawList:AddText(imgui.ImVec2(pos.x + ox, pos.y), outlineColor, text)
+                drawList:AddText(imgui.ImVec2(pos.x, pos.y - ox), outlineColor, text)
+                drawList:AddText(imgui.ImVec2(pos.x, pos.y + ox), outlineColor, text)
+                drawList:AddText(pos, color, text)
+            end
+
             -- Draw zone name below compass
             if config.zoneDisplay and currentZone ~= "Unknown" then
-                local zoneY = barY + barH + 4 * scale
+                local zoneY = barY + barH + 6 * scale
                 local zoneText = currentZone
                 if waypointActive and waypointName ~= "" then
                     zoneText = zoneText .. "  |  " .. waypointName .. " " .. compass_lib.formatDistance(waypointDistance)
@@ -617,21 +628,21 @@ imgui.OnFrame(
                 end
                 local textW = #zoneText * 5.5 * scale
                 local centerX = barX + barW * 0.5
-                dl:AddText(
+                drawTextOutlined(dl,
                     imgui.ImVec2(centerX - textW * 0.5, zoneY),
-                    COLORS.zone, zoneText
+                    0xFFFFFFFF, zoneText
                 )
             end
 
             -- Draw GPS distance if active (below zone)
             if gpsShown and gpsDistance > 0 then
-                local gpsY = barY + barH + (config.zoneDisplay and 20 or 4) * scale
+                local gpsY = barY + barH + (config.zoneDisplay and 24 or 6) * scale
                 local gpsText = "GPS: " .. compass_lib.formatDistance(gpsDistance)
                 local textW = #gpsText * 5.5 * scale
                 local centerX = barX + barW * 0.5
-                dl:AddText(
+                drawTextOutlined(dl,
                     imgui.ImVec2(centerX - textW * 0.5, gpsY),
-                    COLORS.accentDim, gpsText
+                    0xFF66CCFF, gpsText
                 )
             end
         end
