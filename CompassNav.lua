@@ -284,6 +284,20 @@ end
 -- ============================================================================
 -- PLAYER INFO
 -- ============================================================================
+local function getCameraHeading()
+    local h = 0
+    pcall(function()
+        local camX, camY, camZ = getActiveCameraCoordinates()
+        local targetX, targetY, targetZ = getActiveCameraPointAt()
+        local dx = targetX - camX
+        local dy = targetY - camY
+        -- atan2(dx, dy) gives angle from North (Y+), clockwise
+        h = math.deg(math.atan2(dx, dy))
+        if h < 0 then h = h + 360 end
+    end)
+    return h
+end
+
 local function getPlayerHeading()
     local h = 0
     pcall(function()
@@ -505,9 +519,8 @@ imgui.OnFrame(
         local barX = (screenW - barW) * 0.5
         local barY = config.compassY * scale
 
-        -- Update heading with smooth interpolation
-        local rawHeading = getPlayerHeading()
-        -- GTA heading: 0=North, increases counter-clockwise. Convert to compass: 0=N, clockwise
+        -- Update heading with smooth interpolation (using CAMERA heading, not player)
+        local rawHeading = getCameraHeading()
         currentHeading = rawHeading
 
         -- Smooth heading interpolation
