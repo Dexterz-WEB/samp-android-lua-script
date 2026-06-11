@@ -305,30 +305,46 @@ local function closeDialog(button)
     dialogState.closing = true
     dialogState.closeTime = os.clock()
 
-    -- Send response after animation
+    -- Capture values before async delay
+    local savedDialogId = dialogState.dialogId
+    local savedStyle = dialogState.style
+    local savedSelectedItem = dialogState.selectedItem
+    local savedListItems = dialogState.listItems
+
+    -- Get input text immediately (before buffer might be overwritten)
+    local inputText = ""
+    if savedStyle == DIALOG_STYLE_INPUT or savedStyle == DIALOG_STYLE_PASSWORD then
+        local rawInput = ffi.string(dialogState.inputText)
+        -- Decode UTF-8 back to CP1251 for server
+        pcall(function()
+            inputText = u8:decode(rawInput)
+        end)
+        if not inputText or #inputText == 0 then
+            inputText = rawInput -- fallback: send as-is
+        end
+    end
+
+    local listboxId = savedSelectedItem
+    if savedStyle == DIALOG_STYLE_LIST or
+       savedStyle == DIALOG_STYLE_TABLIST or
+       savedStyle == DIALOG_STYLE_TABLIST_HEADERS then
+        if savedStyle == DIALOG_STYLE_LIST and savedListItems[listboxId + 1] then
+            local rawItem = savedListItems[listboxId + 1]:gsub("{%x%x%x%x%x%x}", "")
+            pcall(function()
+                inputText = u8:decode(rawItem)
+            end)
+            if not inputText then inputText = rawItem end
+        end
+    end
+
+    -- Send response after animation completes
     lua_thread.create(function()
-        wait(math.floor(ANIM_DURATION_CLOSE * 1000))
+        wait(math.floor(ANIM_DURATION_CLOSE * 1000) + 50) -- extra 50ms safety margin
         dialogState.active = false
         dialogState.closing = false
 
-        -- Build response
-        local inputText = ""
-        if dialogState.style == DIALOG_STYLE_INPUT or dialogState.style == DIALOG_STYLE_PASSWORD then
-            inputText = ffi.string(dialogState.inputText)
-        end
-
-        local listboxId = dialogState.selectedItem
-        if dialogState.style == DIALOG_STYLE_LIST or
-           dialogState.style == DIALOG_STYLE_TABLIST or
-           dialogState.style == DIALOG_STYLE_TABLIST_HEADERS then
-            -- Get selected item text for list types
-            if dialogState.style == DIALOG_STYLE_LIST and dialogState.listItems[listboxId + 1] then
-                -- Strip color codes for input field
-                inputText = dialogState.listItems[listboxId + 1]:gsub("{%x%x%x%x%x%x}", "")
-            end
-        end
-
-        sampSendDialogResponse(dialogState.dialogId, button, listboxId, inputText)
+        -- Send the dialog response to server
+        sampSendDialogResponse(savedDialogId, button, listboxId, inputText)
     end)
 end
 
@@ -840,15 +856,21 @@ end
 
 -- ============================================================================
 -- HOOK: onShowDialog - intercept server dialogs
+-- Uses both methods for compatibility (MoonLoader global + SAMP.Lua events)
 -- ============================================================================
+
+-- Method 1: Global function hook (MoonLoader style)
 function onShowDialog(dialogId, style, title, button1, button2, text)
+    -- Prevent re-entry if already showing a dialog response
+    if dialogState.closing then return true end -- let it through during close
     openDialog(dialogId, style, title, button1, button2, text)
     return false -- block original dialog
 end
 
--- Hook via events library (MonetLoader/SAMP.Lua)
+-- Method 2: SAMP.Lua events library hook (MonetLoader style)
 if events_loaded and events then
     function events.onShowDialog(dialogId, style, title, button1, button2, text)
+        if dialogState.closing then return true end
         openDialog(dialogId, style, title, button1, button2, text)
         return false -- block original dialog
     end
