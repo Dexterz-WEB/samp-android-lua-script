@@ -340,8 +340,8 @@ local function closeDialog(button)
         dialogState.active = false
         dialogState.closing = false
 
-        -- Use sampSendDialogResponse - dialog is registered in SAMP client 
-        -- because we did NOT block the original RPC
+        -- Send dialog response - dialog is registered in SAMP client
+        -- (we let the RPC through with modified empty content)
         sampSendDialogResponse(savedDialogId, button, listboxId, inputText)
     end)
 end
@@ -706,11 +706,11 @@ imgui.OnFrame(
         local posX = (resX - dialogWidth * scale) * 0.5
         local posY = (resY - dialogMaxHeight * scale) * 0.5 - dialogState.keyboardOffset
 
-        -- Full screen overlay for dimming
+        -- Full screen overlay for dimming (fully opaque to hide native dialog behind)
         imgui.SetNextWindowPos(imgui.ImVec2(0, 0), imgui.Cond.Always)
         imgui.SetNextWindowSize(imgui.ImVec2(resX, resY), imgui.Cond.Always)
-        imgui.PushStyleVarFloat(imgui.StyleVar.Alpha, alpha * 0.6)
-        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0.5))
+        imgui.PushStyleVarFloat(imgui.StyleVar.Alpha, alpha)
+        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0.85))
         imgui.Begin("##dlg_overlay", nil, 0
             + imgui.WindowFlags.NoTitleBar
             + imgui.WindowFlags.NoResize
@@ -871,9 +871,20 @@ addEventHandler('onReceiveRpc', function(id, bs)
         -- Open our custom dialog
         openDialog(dialogId, style, title, button1, button2, text)
         
-        -- Do NOT block the RPC - let SAMP client register the dialog internally
-        -- so sampSendDialogResponse() will work correctly.
-        -- The native dialog will show briefly but our custom dialog renders on top.
+        -- Rewrite the bitstream to show a HIDDEN dialog
+        -- We pass through a dialog with empty content so SAMP client registers it
+        -- but shows nothing visible (empty title, empty text, MSGBOX style)
+        pcall(function()
+            raknetBitStreamSetWriteOffset(bs, 0)
+            raknetBitStreamWriteInt16(bs, dialogId)  -- keep same dialog ID
+            raknetBitStreamWriteInt8(bs, 0)          -- style = MSGBOX (smallest)
+            raknetBitStreamWriteInt8(bs, 0)          -- title = empty (len=0)
+            raknetBitStreamWriteInt8(bs, 0)          -- button1 = empty (len=0)
+            raknetBitStreamWriteInt8(bs, 0)          -- button2 = empty (len=0)
+            raknetBitStreamWriteInt32(bs, 0)         -- text = empty (len=0, encodedString4096 uses int32 length)
+        end)
+        
+        -- Don't block - let modified (empty) dialog through to register in client
     end
 end)
 
