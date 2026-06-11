@@ -34,10 +34,7 @@ end)
 
 local events_loaded = false
 local events = nil
-pcall(function()
-    events = require 'lib.samp.events'
-    events_loaded = true
-end)
+-- Events library no longer needed - we hook RPC directly via addEventHandler
 
 -- ============================================================================
 -- CONSTANTS
@@ -343,19 +340,9 @@ local function closeDialog(button)
         dialogState.active = false
         dialogState.closing = false
 
-        -- Send dialog response via RPC BitStream directly
-        -- RPC ID 62 = DIALOGRESPONSE
-        -- Format: {dialogId = 'int16'}, {button = 'int8'}, {listboxId = 'int16'}, {input = 'string8'}
-        local bs = raknetNewBitStream()
-        raknetBitStreamWriteInt16(bs, savedDialogId)
-        raknetBitStreamWriteInt8(bs, button)
-        raknetBitStreamWriteInt16(bs, listboxId)
-        raknetBitStreamWriteInt8(bs, #inputText)
-        if #inputText > 0 then
-            raknetBitStreamWriteString(bs, inputText)
-        end
-        raknetSendRpcEx(62, bs, 2, 9, 0, false) -- HIGH_PRIORITY=2, RELIABLE_ORDERED=9
-        raknetDeleteBitStream(bs)
+        -- Use sampSendDialogResponse - dialog is registered in SAMP client 
+        -- because we did NOT block the original RPC
+        sampSendDialogResponse(savedDialogId, button, listboxId, inputText)
     end)
 end
 
@@ -846,50 +833,75 @@ end)
 -- ============================================================================
 -- SAMP EVENT HOOKS
 -- ============================================================================
+
+-- RPC ID for ShowDialog
+local RPC_SHOWDIALOG = 61
+
+-- Custom dialog enabled state
+local customDialogEnabled = true
+
+-- Read encoded string from bitstream (same format as 'encodedString4096')
+local function readEncodedString4096(bs)
+    local len = raknetBitStreamReadInt32(bs)
+    if len <= 0 then return '' end
+    if len > 4096 then len = 4096 end
+    return raknetBitStreamReadString(bs, len)
+end
+
+-- Read string8 from bitstream
+local function readString8(bs)
+    local len = raknetBitStreamReadInt8(bs)
+    if len <= 0 then return '' end
+    return raknetBitStreamReadString(bs, len)
+end
+
+-- Direct RPC hook for ShowDialog (RPC 61)
+addEventHandler('onReceiveRpc', function(id, bs)
+    if id == RPC_SHOWDIALOG and customDialogEnabled then
+        -- Read dialog data from bitstream
+        -- Format: {dialogId = 'int16'}, {style = 'int8'}, {title = 'string8'}, {button1 = 'string8'}, {button2 = 'string8'}, {text = 'encodedString4096'}
+        local ok, dialogId, style, title, button1, button2, text = pcall(function()
+            raknetBitStreamResetReadPointer(bs)
+            local dId = raknetBitStreamReadInt16(bs)
+            local st = raknetBitStreamReadInt8(bs)
+            local ti = readString8(bs)
+            local b1 = readString8(bs)
+            local b2 = readString8(bs)
+            local tx = readEncodedString4096(bs)
+            return dId, st, ti, b1, b2, tx
+        end)
+        
+        if not ok then return end -- parse failed, let original handle it
+        
+        -- Open our custom dialog
+        openDialog(dialogId, style, title, button1, button2, text)
+        
+        -- Do NOT block the RPC - let SAMP client register the dialog internally
+        -- so sampSendDialogResponse() will work correctly.
+        -- The native dialog will show briefly but our custom dialog renders on top.
+    end
+end)
+
 function main()
     if not isSampLoaded() or not isSampfuncsLoaded() then return end
     while not isSampAvailable() do wait(100) end
 
     sampAddChatMessage("{4D99E6}[CostumDialog] {FFFFFF}Custom Dialog loaded! v1.0", -1)
 
-    -- Register command to toggle (for testing/debugging)
+    -- Register command to toggle custom dialog on/off
     sampRegisterChatCommand("cdialog", function()
         if dialogState.active then
             closeDialog(0)
             sampAddChatMessage("{4D99E6}[CostumDialog] {FFFFFF}Dialog closed.", -1)
         else
-            sampAddChatMessage("{4D99E6}[CostumDialog] {FFFFFF}No active dialog.", -1)
+            customDialogEnabled = not customDialogEnabled
+            if customDialogEnabled then
+                sampAddChatMessage("{4D99E6}[CostumDialog] {FFFFFF}Custom dialog {00FF00}ENABLED", -1)
+            else
+                sampAddChatMessage("{4D99E6}[CostumDialog] {FFFFFF}Custom dialog {FF0000}DISABLED", -1)
+            end
         end
     end)
 
     wait(-1)
-end
-
--- ============================================================================
--- HOOK: onShowDialog - intercept server dialogs
--- ============================================================================
-
--- Flag to prevent re-intercepting dialogs during response sending
-local ignoreNextDialog = false
-
--- Method 1: Global function hook (MoonLoader/MonetLoader style)
-function onShowDialog(dialogId, style, title, button1, button2, text)
-    if ignoreNextDialog then
-        ignoreNextDialog = false
-        return false -- let it pass through to client (will be hidden anyway)
-    end
-    openDialog(dialogId, style, title, button1, button2, text)
-    return false -- block original dialog
-end
-
--- Method 2: SAMP.Lua events library hook (MonetLoader/SAMP.Lua style)
-if events_loaded and events then
-    function events.onShowDialog(dialogId, style, title, button1, button2, text)
-        if ignoreNextDialog then
-            ignoreNextDialog = false
-            return -- don't block, let it through
-        end
-        openDialog(dialogId, style, title, button1, button2, text)
-        return false -- block original dialog
-    end
 end
