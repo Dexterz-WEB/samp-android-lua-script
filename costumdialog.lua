@@ -343,8 +343,19 @@ local function closeDialog(button)
         dialogState.active = false
         dialogState.closing = false
 
-        -- Send the dialog response to server
-        sampSendDialogResponse(savedDialogId, button, listboxId, inputText)
+        -- Send dialog response via RPC BitStream directly
+        -- RPC ID 62 = DIALOGRESPONSE
+        -- Format: {dialogId = 'int16'}, {button = 'int8'}, {listboxId = 'int16'}, {input = 'string8'}
+        local bs = raknetNewBitStream()
+        raknetBitStreamWriteInt16(bs, savedDialogId)
+        raknetBitStreamWriteInt8(bs, button)
+        raknetBitStreamWriteInt16(bs, listboxId)
+        raknetBitStreamWriteInt8(bs, #inputText)
+        if #inputText > 0 then
+            raknetBitStreamWriteString(bs, inputText)
+        end
+        raknetSendRpcEx(62, bs, 2, 9, 0, false) -- HIGH_PRIORITY=2, RELIABLE_ORDERED=9
+        raknetDeleteBitStream(bs)
     end)
 end
 
@@ -856,21 +867,28 @@ end
 
 -- ============================================================================
 -- HOOK: onShowDialog - intercept server dialogs
--- Uses both methods for compatibility (MoonLoader global + SAMP.Lua events)
 -- ============================================================================
 
--- Method 1: Global function hook (MoonLoader style)
+-- Flag to prevent re-intercepting dialogs during response sending
+local ignoreNextDialog = false
+
+-- Method 1: Global function hook (MoonLoader/MonetLoader style)
 function onShowDialog(dialogId, style, title, button1, button2, text)
-    -- Prevent re-entry if already showing a dialog response
-    if dialogState.closing then return true end -- let it through during close
+    if ignoreNextDialog then
+        ignoreNextDialog = false
+        return false -- let it pass through to client (will be hidden anyway)
+    end
     openDialog(dialogId, style, title, button1, button2, text)
     return false -- block original dialog
 end
 
--- Method 2: SAMP.Lua events library hook (MonetLoader style)
+-- Method 2: SAMP.Lua events library hook (MonetLoader/SAMP.Lua style)
 if events_loaded and events then
     function events.onShowDialog(dialogId, style, title, button1, button2, text)
-        if dialogState.closing then return true end
+        if ignoreNextDialog then
+            ignoreNextDialog = false
+            return -- don't block, let it through
+        end
         openDialog(dialogId, style, title, button1, button2, text)
         return false -- block original dialog
     end
