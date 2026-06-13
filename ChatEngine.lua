@@ -36,7 +36,7 @@ local defaultConfig = {
     Settings = {
         enabled = true,
         fontSize = 14,
-        opacity = 0.85,
+        opacity = 0.55,
         autoHideDelay = 10,
         showTimestamp = true
     }
@@ -65,7 +65,7 @@ local filterOptions = {"All", "PM", "Server", "IC", "OOC"}
 
 -- Config imgui bindings
 local cfgFontSize = imgui.new.float(iniData.Settings.fontSize or 14)
-local cfgOpacity = imgui.new.float(iniData.Settings.opacity or 0.85)
+local cfgOpacity = imgui.new.float(iniData.Settings.opacity or 0.55)
 local cfgAutoHide = imgui.new.float(iniData.Settings.autoHideDelay or 10)
 local cfgEnabled = imgui.new.bool(iniData.Settings.enabled ~= false)
 local cfgTimestamp = imgui.new.bool(iniData.Settings.showTimestamp ~= false)
