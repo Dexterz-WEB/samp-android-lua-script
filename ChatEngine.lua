@@ -238,15 +238,34 @@ local function onNewMessage()
     end
 end
 
--- Check for new messages from the library
+-- Track nearby message count for auto-hide in NEARBY mode
+local lastNearbyCount = 0
+
+-- Check for new messages (respects active mode for auto-hide)
 local function checkNewMessages()
     if not chatlib then return end
+
     local currentCount = chatlib.getInsertionCount()
-    if currentCount > lastInsertionCount then
+    local currentNearbyCount = #nearbyMessages
+
+    if chatMode == "NEWEST" then
+        -- Auto-hide reacts to all messages
+        if currentCount > lastInsertionCount then
+            lastInsertionCount = currentCount
+            shouldAutoScroll = true
+            onNewMessage()
+        end
+    else
+        -- NEARBY mode: auto-hide only reacts to nearby messages
+        if currentNearbyCount > lastNearbyCount then
+            shouldAutoScroll = true
+            onNewMessage()
+        end
+        -- Still track main buffer (for scroll when switching back)
         lastInsertionCount = currentCount
-        shouldAutoScroll = true
-        onNewMessage()
     end
+
+    lastNearbyCount = currentNearbyCount
 end
 
 -- ============================================================================
