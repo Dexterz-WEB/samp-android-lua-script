@@ -331,41 +331,38 @@ imgui.OnFrame(
         imgui.Begin("ChatEngine Config", showConfigWindow, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)
 
         -- Title
-        imgui.TextColored(imgui.ImVec4(0.2, 0.9, 0.6, 1.0), "CHATENGINE SETTINGS")
+        imgui.TextColored(imgui.ImVec4(0.2, 0.9, 0.6, 1), "CHATENGINE SETTINGS")
         imgui.SameLine()
-        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), "v1.0")
-        imgui.Spacing()
-        imgui.Separator()
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "v1.0")
+        imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+
+        -- Toggle enabled (use Button instead of Checkbox for MonetLoader compat)
+        imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1, 1), "GENERAL")
         imgui.Spacing()
 
-        -- Toggle enabled
-        imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "GENERAL")
-        imgui.Spacing()
-        imgui.Checkbox("Enable ChatEngine", cfgEnabled)
-        imgui.Checkbox("Show Timestamps", cfgTimestamp)
-        imgui.Spacing()
-        imgui.Separator()
-        imgui.Spacing()
+        local enableLabel = cfgEnabled[0] and "[ON] ChatEngine" or "[OFF] ChatEngine"
+        if imgui.Button(enableLabel, imgui.ImVec2(-1, 30 * DPI_SCALE)) then
+            cfgEnabled[0] = not cfgEnabled[0]
+        end
+
+        local tsLabel = cfgTimestamp[0] and "[ON] Timestamps" or "[OFF] Timestamps"
+        if imgui.Button(tsLabel, imgui.ImVec2(-1, 30 * DPI_SCALE)) then
+            cfgTimestamp[0] = not cfgTimestamp[0]
+        end
+
+        imgui.Spacing(); imgui.Separator(); imgui.Spacing()
 
         -- Sliders
-        imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "APPEARANCE")
+        imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1, 1), "APPEARANCE")
         imgui.Spacing()
 
-        imgui.Text("Font Size:")
-        imgui.SetNextItemWidth(-1)
+        imgui.Text("Font Size:"); imgui.SetNextItemWidth(-1)
         imgui.SliderFloat("##fontSize", cfgFontSize, 10.0, 24.0, "%.0f")
 
-        imgui.Text("Opacity:")
-        imgui.SetNextItemWidth(-1)
+        imgui.Text("Opacity:"); imgui.SetNextItemWidth(-1)
         imgui.SliderFloat("##opacity", cfgOpacity, 0.3, 1.0, "%.2f")
 
-        imgui.Text("Auto-Hide Delay (seconds):")
-        imgui.SetNextItemWidth(-1)
-        imgui.SliderFloat("##autoHide", cfgAutoHide, 5.0, 30.0, "%.0f")
-
-        imgui.Spacing()
-        imgui.Separator()
-        imgui.Spacing()
+        imgui.Spacing(); imgui.Separator(); imgui.Spacing()
 
         -- Save button
         if imgui.Button("SAVE CONFIG", imgui.ImVec2(-1, 35 * DPI_SCALE)) then
