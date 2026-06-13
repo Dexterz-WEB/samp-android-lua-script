@@ -435,12 +435,63 @@ if sampev_loaded then
     function sampev.onServerMessage(color, text)
         if chatInterceptEnabled and chatlib then
             chatlib.addMessage(text, color)
+
+            -- Try to create bubble from server message (player chat format detection)
+            -- Common formats: "PlayerName (ID): message" or "PlayerName: message"
+            pcall(function()
+                -- Pattern: "Name (ID): text" or "Name_Name (ID): text"
+                local pName, pIdStr, pMsg = text:match("^(%S+)%s*%((%d+)%):%s*(.+)")
+                if not pName then
+                    -- Try without ID: "Name: text" (strip color codes first)
+                    local cleanText = text:gsub("{%x%x%x%x%x%x}", "")
+                    pName, pMsg = cleanText:match("^(%S+):%s*(.+)")
+                end
+
+                if pName and pMsg then
+                    local playerId = pIdStr and tonumber(pIdStr) or nil
+
+                    -- Try to find player by name if no ID parsed
+                    if not playerId then
+                        for pid = 0, 999 do
+                            if sampIsPlayerConnected(pid) then
+                                local name = sampGetPlayerNickname(pid)
+                                if name == pName then
+                                    playerId = pid
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    if playerId then
+                        -- Skip self
+                        local _, localId = sampGetPlayerIdByCharHandle(PLAYER_PED)
+                        if localId and playerId ~= localId then
+                            if sampIsPlayerConnected(playerId) then
+                                local result, handle = sampGetCharHandleBySampPlayerId(playerId)
+                                if result and handle then
+                                    local myX, myY, myZ = getCharCoordinates(PLAYER_PED)
+                                    local otherX, otherY, otherZ = getCharCoordinates(handle)
+                                    local dist = getDistance3D(myX, myY, myZ, otherX, otherY, otherZ)
+                                    if dist <= BUBBLE_MAX_DISTANCE then
+                                        createBubble(playerId, pName, pMsg)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+
             return false
         end
     end
 
     function sampev.onChatMessage(playerId, text)
         if chatInterceptEnabled and chatlib then
+            -- DEBUG: check if this hook triggers at all
+            sampAddChatMessage("{FF00FF}[DEBUG] onChatMessage triggered! ID:" .. tostring(playerId), -1)
+
             local playerName = nil
             pcall(function()
                 playerName = sampGetPlayerNickname(playerId)
