@@ -368,9 +368,8 @@ function main()
         chatlib.addMessage("{00FFFF}[ChatEngine] {FFFFFF}Loaded! Use {FFFF00}/chatcfg{FFFFFF} to configure, {FFFF00}/ceoff{FFFFFF} to toggle.", -1)
     end
 
-    -- Wait until player spawned then clear default chat
-    while not sampIsLocalPlayerSpawned() do wait(100) end
-    wait(1000)
+    -- Wait a bit after samp is available then clear default chat
+    wait(3000)
     for i = 1, 15 do sampAddChatMessage("", -1) end
 
     -- Initialize last message time
