@@ -1,0 +1,25 @@
+{
+  "project_type": "Lua scripting for SA-MP Android using MonetLoader engine",
+  "language": "Lua",
+  "build_system": "No build system - Lua scripts are loaded directly by MonetLoader on Android device. Validation is syntax-only via luac or lua parser.",
+  "test_framework": "No automated tests - testing is done on device. Validation can be done via Lua syntax check (luac -p).",
+  "build_command": "luac -p ChatEngine.lua chatengine_lib.lua 2>&1 || lua -e \"loadfile('ChatEngine.lua')\" 2>&1",
+  "test_command": "luac -p ChatEngine.lua && luac -p chatengine_lib.lua && echo 'Syntax OK'",
+  "verification_instructions": "1. Run luac -p on both files to verify no syntax errors. 2. Review code structure matches MonetLoader patterns from reference scripts.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup needed - files are standalone Lua scripts placed in the repo root.",
+  "environment_constraints": "Cannot run the scripts (MonetLoader Android runtime only). Can only validate Lua syntax. No luac available in sandbox - use lua 5.1 or basic syntax validation.",
+  "contribution_requirements": "Follow camelCase naming, safe pcall loading for optional libs, clear comments, error handling with nil checks, performance-conscious for mobile.",
+  "key_patterns": "1. require 'mimgui' (NOT 'imgui'). 2. imgui.OnFrame(condition_fn, render_fn) with self.HideCursor. 3. PushStyleVarFloat for float vars, PushStyleVarVec2 for vec2 vars, PushStyleColor for colors. 4. MONET_DPI_SCALE global for DPI. 5. Safe pcall loading for optional libs. 6. samp.events loaded as local and functions assigned as sampev.onServerMessage. 7. inicfg.load/save for config. 8. sampRegisterChatCommand for commands. 9. script_name/script_author at top. 10. TextColored(imgui.ImVec4(r,g,b,a), text) for colored text.",
+  "relevant_files": [
+    "ChatEngineTest.lua (reference for samp.events hook pattern, return false blocking)",
+    "RadialMenu.lua (reference for inicfg config, PushStyleVarFloat/Vec2, dark theme styling)",
+    "CompassNav.lua (reference for OnFrame overlay, PushStyleVarFloat/Vec2, DPI scaling)",
+    "PlayerStatsWidget.lua (reference for PushStyleColor, config window, imgui.new.bool/float)",
+    "MonetLoader-lib-full/notifications.lua (reference for MONET_DPI_SCALE usage, fade animations)",
+    "MonetLoader-lib-full/samp/events.lua (API: onServerMessage(color, text), onChatMessage(playerId, text))",
+    "MonetLoader-lib-full/inicfg.lua (config load/save API)",
+    "MonetLoader-lib-full/mimgui/init.lua (OnFrame API: cond, cbBeforeFrame/cbDraw)"
+  ],
+  "directory_structure": "Root contains .lua script files. MonetLoader-lib-full/ contains all libraries (mimgui/, samp/, inicfg.lua, fAwesome6.lua, notifications.lua). Scripts use require to load from lib folder."
+}

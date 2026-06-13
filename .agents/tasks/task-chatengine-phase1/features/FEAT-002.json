@@ -1,0 +1,48 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Create ChatEngine.lua - the main script with samp.events interception, mimgui chat window rendering, filter tabs, auto-hide, config panel, and commands",
+  "status": "pending",
+  "steps": [
+    "Create ChatEngine.lua at repo root (/projects/sandbox/samp-android-lua-script/ChatEngine.lua)",
+    "Add script_name('ChatEngine') and script_author('OnlyDexterZ') header",
+    "Safe library loading: require 'mimgui' as imgui, pcall require 'samp.events' as sampev, require 'inicfg', require local 'chatengine_lib' with pcall",
+    "DPI scaling: local DPI_SCALE = MONET_DPI_SCALE or 1.0",
+    "Config system with inicfg: default structure = { Settings = { enabled=true, fontSize=14, opacity=0.85, autoHideDelay=10, showTimestamp=true } }. Load/save with inicfg.load/save.",
+    "State variables: chatInterceptEnabled (bool, default true), lastMessageTime (for auto-hide), currentFilter ('ALL','PM','SERVER','IC','OOC'), showChatWindow (bool), showConfigWindow (imgui.new.bool(false)), chatMinimized (bool)",
+    "samp.events hooks: sampev.onServerMessage(color, text) - if chatInterceptEnabled then add message to chatengine_lib buffer with color/text/timestamp, update lastMessageTime, return false to block. sampev.onChatMessage(playerId, text) - same pattern, format with player name if available.",
+    "Auto-hide logic: track lastMessageTime = os.clock(). Chat visible = (os.clock() - lastMessageTime < autoHideDelay) or showChatWindow is forced open. Fade alpha based on time elapsed.",
+    "imgui.OnFrame for chat window: condition = chatInterceptEnabled and (time since last message < autoHideDelay or forced visible). Render function with self.HideCursor = true.",
+    "Chat window UI rendering: SetNextWindowPos top-left (10*DPI, 10*DPI). SetNextWindowSize(screenW*0.45, screenH*0.35). PushStyleVarFloat for WindowRounding(8*DPI). PushStyleVarVec2 for WindowPadding. PushStyleColor for dark theme (WindowBg, ChildBg, Button colors). imgui.Begin with NoResize+NoMove+NoScrollbar+NoTitleBar flags.",
+    "Header bar: Draw 'ChatEngine' title text + minimize button (small 'X' or '_' button aligned right). Handle minimize toggle.",
+    "Filter tabs row: Render buttons [ALL] [PM] [SERVER] [IC] [OOC] using imgui.Button with PushStyleColor for active tab highlight. On click set currentFilter.",
+    "Message area: imgui.BeginChild('##chatmessages', size, border, scrollflags). Loop through filtered messages from chatengine_lib.getFilteredMessages(currentFilter). For each message: render timestamp with TextColored(dimColor, '[HH:MM]'), then SameLine, then render each color segment with TextColored(segmentColor, segmentText). imgui.EndChild(). Auto-scroll: if new message added, imgui.SetScrollHereY(1.0).",
+    "Auto-scroll logic: track message count, when count increases call SetScrollHereY(1.0) at bottom of child window",
+    "imgui.OnFrame for config panel: condition = showConfigWindow[0]. Render config window with: toggle on/off checkbox, font size slider (10-24), opacity slider (0.3-1.0), auto-hide delay slider (5-30 seconds), save button calling inicfg.save.",
+    "Register commands in main() function: sampRegisterChatCommand('chatcfg', function() showConfigWindow[0] = not showConfigWindow[0] end). sampRegisterChatCommand('ceoff', function() chatInterceptEnabled = not chatInterceptEnabled; sampAddChatMessage notification end).",
+    "main() function: wait for isSampAvailable(), register commands, print load message via sampAddChatMessage, while true do wait(100) end loop.",
+    "Ensure all imgui.PushStyleColor/PushStyleVar calls have matching Pop calls",
+    "Use imgui.WindowFlags constants: NoTitleBar, NoResize, NoMove, NoScrollbar, NoBackground as needed"
+  ],
+  "acceptance_criteria": [
+    "ChatEngine.lua exists at repo root and has no Lua syntax errors",
+    "Script uses require 'mimgui' (NOT require 'imgui')",
+    "Uses PushStyleVarFloat for float style vars and PushStyleVarVec2 for vec2 style vars (NOT generic PushStyleVar)",
+    "Uses PushStyleColor for color styling",
+    "samp.events onServerMessage hook blocks default chat with return false when intercept enabled",
+    "samp.events onChatMessage hook also intercepts player chat messages",
+    "Chat window renders at top-left with semi-transparent dark background",
+    "Filter tabs (ALL, PM, SERVER, IC, OOC) correctly filter displayed messages",
+    "Auto-hide fades chat after configurable delay (default 10s)",
+    "/chatcfg command opens config panel",
+    "/ceoff command toggles interception on/off as safety fallback",
+    "Config saves/loads via inicfg",
+    "No usage of convert3DCoordsToScreen, addEventHandler('onWindowMessage'), isKeyDown, or sampAddChatMessage for rendering"
+  ],
+  "verification": [
+    "Run lua syntax check on ChatEngine.lua to verify no syntax errors",
+    "Verify both files can be parsed together without reference errors in the module interface"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

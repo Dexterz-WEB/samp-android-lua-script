@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Create chatengine_lib.lua - the core library module handling message buffer, parsing, category detection, and SA-MP color code conversion",
+  "status": "in_progress",
+  "steps": [
+    "Create chatengine_lib.lua at repo root (/projects/sandbox/samp-android-lua-script/chatengine_lib.lua)",
+    "Implement ring buffer (max 200 messages) with add/get/clear methods. Each message entry: {text, color, timestamp, category, parsed_segments}",
+    "Implement timestamp formatting function returning [HH:MM] using os.date('%H:%M')",
+    "Implement SA-MP color code parser: parse text with {RRGGBB} patterns, return array of segments [{text, r, g, b}]. Handle nested/sequential color codes. Default color from message color parameter (int32 from samp.events, convert to RGB).",
+    "Implement category detection function using string.find patterns: PM = contains 'Message from' or starts with PM format; OOC = starts with '((' or '[OOC]'; Action = starts with '* ' but not '** '; Ad = starts with '[Advertisement]' or '[AD]'; Server = default fallback",
+    "Implement color int32 to RGBA converter (SA-MP sends ARGB as int32, need to extract R,G,B components)",
+    "Implement filter function that returns messages matching a category (or all)",
+    "Export module table with all public functions: addMessage, getMessages, getFilteredMessages, parseColorCodes, detectCategory, colorToRGBA, clearMessages, getBufferSize"
+  ],
+  "acceptance_criteria": [
+    "chatengine_lib.lua exists at repo root and has no Lua syntax errors",
+    "Ring buffer correctly wraps at 200 messages (oldest dropped when full)",
+    "Color code parser correctly splits '{FF0000}Hello {00FF00}World' into [{text='Hello ', r=1, g=0, b=0}, {text='World', r=0, g=1, b=0}]",
+    "Category detection correctly identifies PM, OOC, Action, Ad, and Server messages",
+    "Module returns a table with all documented public functions"
+  ],
+  "verification": [
+    "Run lua syntax check on chatengine_lib.lua to verify no syntax errors"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
