@@ -162,7 +162,7 @@ imgui.OnFrame(
         imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 4 * DPI_SCALE)
         imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(10 * DPI_SCALE, 8 * DPI_SCALE))
         imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(6 * DPI_SCALE, 4 * DPI_SCALE))
-        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.06, 0.06, 0.08, opacity))
+        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.0, 0.0, 0.0, 0.0))
         imgui.PushStyleColor(imgui.Col.ChildBg, imgui.ImVec4(0.0, 0.0, 0.0, 0.0))
         imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.9, 0.9, 0.9, opacity))
         imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.15, 0.15, 0.2, opacity))
@@ -178,10 +178,21 @@ imgui.OnFrame(
         -- Apply font size scaling from config
         imgui.SetWindowFontScale(cfgFontSize[0] / 14.0)
 
-        -- Header bar
-        imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.9, opacity), "ChatEngine")
-
-        imgui.Separator()
+        -- Header bar with background
+        local drawList = imgui.GetWindowDrawList()
+        local cursorPos = imgui.GetCursorScreenPos()
+        local headerText = "Chat Engine"
+        local textSize = imgui.CalcTextSize(headerText)
+        local padX = 8 * DPI_SCALE
+        local padY = 4 * DPI_SCALE
+        drawList:AddRectFilled(
+            imgui.ImVec2(cursorPos.x - padX, cursorPos.y - padY),
+            imgui.ImVec2(cursorPos.x + textSize.x + padX, cursorPos.y + textSize.y + padY),
+            imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.06, 0.06, 0.08, opacity)),
+            4 * DPI_SCALE
+        )
+        imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.9, 1.0), headerText)
+        imgui.Spacing()
 
         -- Message area
         local headerHeight = imgui.GetCursorPosY()
