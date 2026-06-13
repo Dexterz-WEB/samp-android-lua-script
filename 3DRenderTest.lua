@@ -36,6 +36,7 @@ local devbox = {
     textIndex = 1,
     offsetX = 0,
     offsetY = 0,
+    xWorldOffset = 0,
     zOffset = 1.5,
     maxTiltAngle = 30,
     padding = 8,
@@ -46,6 +47,7 @@ local devbox = {
 local showConfigWindow = imgui.new.bool(false)
 local sliderOffsetX = imgui.new.float(0)
 local sliderOffsetY = imgui.new.float(0)
+local sliderXWorldOffset = imgui.new.float(0)
 local sliderZOffset = imgui.new.float(1.5)
 local sliderMaxTilt = imgui.new.float(30)
 
@@ -71,7 +73,7 @@ local function getPlayerAbovePos()
         x, y, z = getCharCoordinates(PLAYER_PED)
     end)
     if ok and x ~= 0 then
-        return x, y, z + devbox.zOffset
+        return x + devbox.xWorldOffset, y, z + devbox.zOffset
     end
     return nil, nil, nil
 end
@@ -338,6 +340,13 @@ imgui.OnFrame(
 
         imgui.Spacing()
 
+        imgui.Text("X World Offset:")
+        imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##xWorldOffset", sliderXWorldOffset, -5.0, 5.0, "%.1f")
+        devbox.xWorldOffset = sliderXWorldOffset[0]
+
+        imgui.Spacing()
+
         imgui.Text("Z World Offset:")
         imgui.SetNextItemWidth(-1)
         imgui.SliderFloat("##zOffset", sliderZOffset, 0.5, 5.0, "%.1f")
@@ -361,10 +370,12 @@ imgui.OnFrame(
             devbox.textIndex = 1
             devbox.offsetX = 0
             devbox.offsetY = 0
+            devbox.xWorldOffset = 0
             devbox.zOffset = 1.5
             devbox.maxTiltAngle = 30
             sliderOffsetX[0] = 0
             sliderOffsetY[0] = 0
+            sliderXWorldOffset[0] = 0
             sliderZOffset[0] = 1.5
             sliderMaxTilt[0] = 30
         end
