@@ -143,7 +143,7 @@ end
 -- ============================================================================
 imgui.OnFrame(
     function()
-        return chatInterceptEnabled and isChatVisible() and not chatMinimized
+        return chatInterceptEnabled and isChatVisible()
     end,
     function(self)
         self.HideCursor = true
@@ -180,10 +180,6 @@ imgui.OnFrame(
 
         -- Header bar
         imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.9, opacity), "ChatEngine")
-        imgui.SameLine(winW - 60 * DPI_SCALE)
-        if imgui.SmallButton("_") then
-            chatMinimized = true
-        end
 
         imgui.Spacing()
 
@@ -262,41 +258,6 @@ imgui.OnFrame(
         imgui.End()
         imgui.PopStyleColor(6)
         imgui.PopStyleVar(4)
-    end
-)
-
--- ============================================================================
--- MINIMIZED INDICATOR (small bar when chat is minimized)
--- ============================================================================
-imgui.OnFrame(
-    function()
-        return chatInterceptEnabled and chatMinimized and isChatVisible()
-    end,
-    function(self)
-        self.HideCursor = true
-
-        local posX = 10 * DPI_SCALE
-        local posY = 10 * DPI_SCALE
-
-        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 6 * DPI_SCALE)
-        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(8 * DPI_SCALE, 4 * DPI_SCALE))
-        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.06, 0.06, 0.08, 0.8))
-
-        imgui.SetNextWindowPos(imgui.ImVec2(posX, posY), imgui.Cond.Always)
-        imgui.SetNextWindowSize(imgui.ImVec2(160 * DPI_SCALE, 30 * DPI_SCALE))
-
-        local flags = imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar
-        imgui.Begin("##ChatMinBar", nil, flags)
-
-        imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.9, 1.0), "CE")
-        imgui.SameLine()
-        if imgui.SmallButton("+") then
-            chatMinimized = false
-        end
-
-        imgui.End()
-        imgui.PopStyleColor(1)
-        imgui.PopStyleVar(2)
     end
 )
 
