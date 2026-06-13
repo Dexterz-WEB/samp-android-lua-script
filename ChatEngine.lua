@@ -52,12 +52,12 @@ end
 -- ============================================================================
 -- STATE VARIABLES
 -- ============================================================================
-local chatInterceptEnabled = true
+local chatInterceptEnabled = (iniData.Settings.enabled ~= false) -- Read from config at startup
 local lastMessageTime = 0
 local currentFilter = "All"
 local showConfigWindow = imgui.new.bool(false)
 local chatMinimized = false
-local lastMessageCount = 0
+local lastInsertionCount = 0 -- Track insertion count for auto-scroll (monotonic)
 local chatForceVisible = false
 
 -- Filter options
@@ -80,6 +80,8 @@ local function saveConfig()
     iniData.Settings.opacity = cfgOpacity[0]
     iniData.Settings.autoHideDelay = cfgAutoHide[0]
     iniData.Settings.showTimestamp = cfgTimestamp[0]
+    -- Wire cfgEnabled toggle to runtime interception state
+    chatInterceptEnabled = cfgEnabled[0]
     inicfg.save(iniData, iniFileName)
 end
 
@@ -105,9 +107,11 @@ local function calculateFadeAlpha()
 end
 
 -- Map filter name to chatlib category
+-- Note: "IC" filter maps to "IC" category. Player chat from onChatMessage is
+-- explicitly categorized as "IC". Ad messages appear only in "All" tab (Phase 1).
 local function mapFilterToCategory(filter)
     if filter == "All" then return "All" end
-    if filter == "IC" then return "Action" end
+    if filter == "IC" then return "IC" end
     return filter
 end
 
@@ -136,7 +140,8 @@ if sampev_loaded then
             else
                 formatted = "ID " .. playerId .. ": " .. text
             end
-            chatlib.addMessage(formatted, 0xFFFFFFFF)
+            -- Pass explicit "IC" category to avoid misclassification from text patterns
+            chatlib.addMessage(formatted, 0xFFFFFFFF, "IC")
             lastMessageTime = os.clock()
             return false
         end
@@ -179,6 +184,9 @@ imgui.OnFrame(
 
         local flags = imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar
         imgui.Begin("##ChatEngineWindow", nil, flags)
+
+        -- Apply font size scaling from config
+        imgui.SetWindowFontScale(cfgFontSize[0] / 14.0)
 
         -- Header bar
         imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.9, opacity), "ChatEngine")
@@ -248,15 +256,18 @@ imgui.OnFrame(
                 end
             end
 
-            -- Auto-scroll to bottom on new messages
-            local currentCount = chatlib.getBufferSize()
-            if currentCount > lastMessageCount then
+            -- Auto-scroll to bottom on new messages (uses monotonic insertion count)
+            local currentCount = chatlib.getInsertionCount()
+            if currentCount > lastInsertionCount then
                 imgui.SetScrollHereY(1.0)
-                lastMessageCount = currentCount
+                lastInsertionCount = currentCount
             end
         end
 
         imgui.EndChild()
+
+        -- Reset font scale
+        imgui.SetWindowFontScale(1.0)
 
         imgui.End()
         imgui.PopStyleColor(6)

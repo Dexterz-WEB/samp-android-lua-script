@@ -9,6 +9,7 @@ local MAX_BUFFER_SIZE = 200
 local buffer = {}
 local bufferHead = 1
 local bufferCount = 0
+local insertionCount = 0 -- Monotonically-increasing counter (never resets, never caps)
 
 -- ============================================================================
 -- Timestamp formatting
@@ -28,15 +29,18 @@ function M.colorToRGBA(color)
     if color == nil then
         return 1, 1, 1, 1
     end
-    -- Ensure color is treated as unsigned 32-bit
+    -- Use bit library for safe decomposition of signed int32 values on LuaJIT.
+    -- SA-MP can send colors with high bit set (e.g. 0xFF6633FF) which become
+    -- negative int32 in Lua. The % operator in Lua 5.1 follows dividend sign
+    -- for negative numbers, so we use bit.band/bit.rshift instead.
+    local bit = require('bit')
+    -- Normalize to unsigned 32-bit via bit.tobit (handles both positive and negative)
+    local c = bit.tobit(color)
     -- Extract components from AARRGGBB format
-    local b = color % 256
-    color = (color - b) / 256
-    local g = color % 256
-    color = (color - g) / 256
-    local r = color % 256
-    color = (color - r) / 256
-    local a = color % 256
+    local b = bit.band(c, 0xFF)
+    local g = bit.band(bit.rshift(c, 8), 0xFF)
+    local r = bit.band(bit.rshift(c, 16), 0xFF)
+    local a = bit.band(bit.rshift(c, 24), 0xFF)
 
     -- If alpha is 0, default to fully opaque (some colors lack alpha)
     if a == 0 then
@@ -161,9 +165,10 @@ end
 -- Ring buffer operations
 -- ============================================================================
 
-function M.addMessage(text, color)
+function M.addMessage(text, color, explicitCategory)
     local timestamp = formatTimestamp()
-    local category = M.detectCategory(text)
+    -- If explicitCategory is provided, use it directly; otherwise auto-detect
+    local category = explicitCategory or M.detectCategory(text)
     local parsedSegments = M.parseColorCodes(text, color)
 
     local entry = {
@@ -175,6 +180,7 @@ function M.addMessage(text, color)
     }
 
     -- Ring buffer insertion
+    insertionCount = insertionCount + 1
     if bufferCount < MAX_BUFFER_SIZE then
         bufferCount = bufferCount + 1
         buffer[bufferCount] = entry
@@ -237,10 +243,15 @@ function M.clearMessages()
     buffer = {}
     bufferHead = 1
     bufferCount = 0
+    -- Note: insertionCount is NOT reset here; it is monotonically increasing
 end
 
 function M.getBufferSize()
     return bufferCount
+end
+
+function M.getInsertionCount()
+    return insertionCount
 end
 
 return M

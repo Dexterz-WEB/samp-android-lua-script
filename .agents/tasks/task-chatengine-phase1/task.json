@@ -1,7 +1,26 @@
 {
   "task_id": "task-chatengine-phase1",
   "task_description": "Create ChatEngine Phase 1 for SA-MP Android MonetLoader: a custom chat rendering system that intercepts all server messages via samp.events, stores them in a ring buffer, and renders them in a custom mimgui window with color parsing, category filtering, auto-hide, and configuration panel.",
-  "status": "in_progress",
+  "status": "completed",
   "feature_order": ["FEAT-001", "FEAT-002"],
-  "blocked_reason": null
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "Both files validated: chatengine_lib.lua and ChatEngine.lua have correct Lua syntax, use proper MonetLoader mimgui API (PushStyleVarFloat/Vec2, PushStyleColor), have balanced Push/Pop calls (17 colors, 10 vars), correctly hook samp.events with return false, and contain no prohibited API calls. All 9 module exports verified present (including getInsertionCount)."
+  },
+  "review_fixes_applied": {
+    "date": "2025-06-13",
+    "issues_fixed": [
+      "Auto-scroll saturation: added monotonic insertionCount in chatengine_lib, exposed via getInsertionCount(), ChatEngine uses it instead of getBufferSize()",
+      "Negative color integers: colorToRGBA now uses bit.band/bit.rshift for safe decomposition on LuaJIT",
+      "cfgEnabled toggle: chatInterceptEnabled reads from config at startup, saveConfig updates chatInterceptEnabled from cfgEnabled[0]",
+      "IC filter mapping: onChatMessage passes explicit 'IC' category, mapFilterToCategory maps IC to IC (not Action)",
+      "Font size slider: SetWindowFontScale(cfgFontSize[0] / 14.0) applied in chat window, reset at end",
+      "Ad category: documented as appearing only in ALL tab for Phase 1",
+      "Category detection fragility: mitigated by explicit category parameter in onChatMessage hook"
+    ]
+  }
 }
