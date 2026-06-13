@@ -93,6 +93,10 @@ local shouldAutoScroll = false
 local chatMode = "NEWEST"
 local NEARBY_MAX_DISTANCE = 50
 
+-- Nearby messages buffer (separate from main buffer)
+local nearbyMessages = {}
+local MAX_NEARBY_MESSAGES = 100
+
 -- Debug mode
 local cfgDebug = imgui.new.bool(false)
 
@@ -120,96 +124,40 @@ local categoryPrefixes = {
 -- HELPER FUNCTIONS
 -- ============================================================================
 
--- Check if a message is from a nearby player (within NEARBY_MAX_DISTANCE)
--- Pattern: "playername (ID): message"
--- Returns true if nearby or if can't determine (fallback show)
-local function isMessageNearby(msg)
-    if not msg or not msg.text then return false end
-
-    local text = msg.text
-    -- Pattern: "Name (ID): message"
-    local pName, pIdStr = text:match("^(%S+)%s*%((%d+)%):")
-
-    if not pName or not pIdStr then
-        if cfgDebug[0] then
-            sampAddChatMessage("{FF8800}[CE Debug] Pattern failed: " .. text:sub(1, 40), -1)
-        end
-        return false
-    end
-
-    local playerId = tonumber(pIdStr)
-    if not playerId then
-        if cfgDebug[0] then
-            sampAddChatMessage("{FF8800}[CE Debug] Invalid ID: " .. tostring(pIdStr), -1)
-        end
-        return false
-    end
-
-    -- Skip self
-    local localId = nil
+-- Add message to nearby buffer
+local function addNearbyMessage(playerId, message, color)
+    local playerName = nil
     pcall(function()
-        local _, lid = sampGetPlayerIdByCharHandle(PLAYER_PED)
-        localId = lid
+        playerName = sampGetPlayerNickname(playerId)
     end)
-    if localId and playerId == localId then
-        return true -- own messages always show
+
+    local formatted = ""
+    if playerName then
+        formatted = playerName .. " (" .. playerId .. "): " .. message
+    else
+        formatted = "ID " .. playerId .. ": " .. message
     end
 
-    -- Get player handle
-    local handle = nil
-    local connected = false
-    pcall(function()
-        connected = sampIsPlayerConnected(playerId)
-    end)
-    if not connected then
-        if cfgDebug[0] then
-            sampAddChatMessage("{FF8800}[CE Debug] Player " .. playerId .. " not connected", -1)
-        end
-        return false
-    end
+    local timestamp = os.date('[%H:%M]')
 
-    local gotHandle = false
-    pcall(function()
-        local result, h = sampGetCharHandleBySampPlayerId(playerId)
-        if result and h then
-            handle = h
-            gotHandle = true
-        end
-    end)
-    if not gotHandle then
-        if cfgDebug[0] then
-            sampAddChatMessage("{FF8800}[CE Debug] No handle for ID " .. playerId, -1)
-        end
-        return false
-    end
+    local entry = {
+        text = formatted,
+        timestamp = timestamp,
+        color = color,
+        playerId = playerId,
+        playerName = playerName
+    }
 
-    -- Get positions
-    local myX, myY, myZ = 0, 0, 0
-    local otherX, otherY, otherZ = 0, 0, 0
-    local gotPos = false
-    pcall(function()
-        myX, myY, myZ = getCharCoordinates(PLAYER_PED)
-        otherX, otherY, otherZ = getCharCoordinates(handle)
-        gotPos = true
-    end)
-    if not gotPos then
-        if cfgDebug[0] then
-            sampAddChatMessage("{FF8800}[CE Debug] Can't get coords for ID " .. playerId, -1)
-        end
-        return false
-    end
+    nearbyMessages[#nearbyMessages + 1] = entry
 
-    -- Distance check
-    local dx = otherX - myX
-    local dy = otherY - myY
-    local dz = otherZ - myZ
-    local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+    -- Limit buffer size
+    if #nearbyMessages > MAX_NEARBY_MESSAGES then
+        table.remove(nearbyMessages, 1)
+    end
 
     if cfgDebug[0] then
-        sampAddChatMessage("{00FF00}[CE Debug] " .. pName .. " (ID:" .. playerId .. ") dist=" .. string.format("%.1f", dist) .. "m", -1)
+        sampAddChatMessage("{00FF00}[CE Debug] Nearby bubble: " .. (playerName or "?") .. " (ID:" .. playerId .. "): " .. message:sub(1, 30), -1)
     end
-
-    return dist <= NEARBY_MAX_DISTANCE
 end
 
 local function saveConfig()
@@ -328,6 +276,19 @@ if sampev_loaded then
             return false
         end
     end
+
+    -- Intercept chat bubble RPC — this gives us playerId + message + distance
+    function sampev.onPlayerChatBubble(playerId, color, distance, duration, message)
+        if chatInterceptEnabled then
+            -- Add to nearby buffer
+            addNearbyMessage(playerId, message, color)
+
+            if cfgDebug[0] then
+                sampAddChatMessage("{00FFFF}[CE Debug] onPlayerChatBubble ID:" .. playerId .. " dist:" .. string.format("%.0f", distance) .. " msg:" .. message:sub(1, 30), -1)
+            end
+        end
+        -- Don't return false — let the game render its own bubble too (or return false to hide default)
+    end
 end
 
 -- ============================================================================
@@ -405,20 +366,22 @@ imgui.OnFrame(
 
         -- Get messages and render
         if chatlib then
-            local allMessages = chatlib.getMessages()
-            local totalMessages = #allMessages
+            local allMessages
+            local totalMessages
+
+            if chatMode == "NEARBY" then
+                allMessages = nearbyMessages
+                totalMessages = #nearbyMessages
+            else
+                allMessages = chatlib.getMessages()
+                totalMessages = #allMessages
+            end
+
             local drawList = imgui.GetWindowDrawList()
             local lineHeight = (cfgFontSize[0] + 4) * DPI_SCALE
 
             for idx = 1, totalMessages do
                 local msg = allMessages[idx]
-
-                -- NEARBY mode: skip messages not from nearby players
-                if chatMode == "NEARBY" then
-                    if not isMessageNearby(msg) then
-                        goto continue_msg
-                    end
-                end
 
                 -- Gradient opacity: older = floor 0.5, newer = full opacity
                 local gradientAlpha = masterAlpha * math.max(0.5, idx / totalMessages)
@@ -498,16 +461,15 @@ imgui.OnFrame(
                         )
                     end
                 else
-                    -- Fallback: plain text with shadow
+                    -- Fallback: plain text with shadow (used by nearby messages too)
                     local fbScreenPos = imgui.GetCursorScreenPos()
-                    renderTextWithShadow(drawList, fbScreenPos.x, fbScreenPos.y, msg.text or "", 1, 1, 1, gradientAlpha)
+                    local displayText = msg.text or ""
+                    renderTextWithShadow(drawList, fbScreenPos.x, fbScreenPos.y, displayText, 1, 1, 1, gradientAlpha)
                     imgui.TextColored(
                         imgui.ImVec4(1.0, 1.0, 1.0, gradientAlpha),
-                        msg.text or ""
+                        displayText
                     )
                 end
-
-                ::continue_msg::
             end
 
             -- Auto-scroll to bottom when new messages arrive
