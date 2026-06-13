@@ -214,53 +214,47 @@ imgui.OnFrame(
         imgui.BeginChild("##chatmessages", imgui.ImVec2(-1, childHeight), false)
 
         if chatlib then
-            local ok, err = pcall(function()
-                local category = mapFilterToCategory(currentFilter)
-                local messages = chatlib.getFilteredMessages(category)
+            local category = mapFilterToCategory(currentFilter)
+            local messages = chatlib.getFilteredMessages(category)
 
-                for i = 1, #messages do
-                    local msg = messages[i]
-                    if msg then
-                        -- Timestamp
-                        if cfgTimestamp[0] and msg.timestamp then
-                            imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.6, opacity), msg.timestamp)
-                            imgui.SameLine()
-                        end
+            for i = 1, #messages do
+                local msg = messages[i]
+                if msg then
+                    -- Timestamp
+                    if cfgTimestamp[0] and msg.timestamp then
+                        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.6, opacity), msg.timestamp)
+                        imgui.SameLine()
+                    end
 
-                        -- Render color segments
-                        if msg.parsed_segments and #msg.parsed_segments > 0 then
-                            for j = 1, #msg.parsed_segments do
-                                local seg = msg.parsed_segments[j]
-                                if seg and seg.text and seg.text ~= "" then
-                                    if j > 1 then imgui.SameLine(0, 0) end
-                                    imgui.TextColored(
-                                        imgui.ImVec4(seg.r or 1, seg.g or 1, seg.b or 1, opacity),
-                                        seg.text
-                                    )
-                                end
+                    -- Render color segments
+                    if msg.parsed_segments and #msg.parsed_segments > 0 then
+                        for j = 1, #msg.parsed_segments do
+                            local seg = msg.parsed_segments[j]
+                            if seg and seg.text and seg.text ~= "" then
+                                if j > 1 then imgui.SameLine(0, 0) end
+                                imgui.TextColored(
+                                    imgui.ImVec4(seg.r or 1, seg.g or 1, seg.b or 1, opacity),
+                                    seg.text
+                                )
                             end
-                        else
-                            -- Fallback: plain text
-                            imgui.TextColored(imgui.ImVec4(0.9, 0.9, 0.9, opacity), msg.text or "")
                         end
+                    else
+                        -- Fallback: plain text
+                        imgui.TextColored(imgui.ImVec4(0.9, 0.9, 0.9, opacity), msg.text or "")
                     end
                 end
+            end
 
-                -- Bottom padding so last message isn't clipped
-                imgui.Spacing()
-                imgui.Spacing()
-                imgui.Spacing()
+            -- Bottom padding so last message isn't clipped
+            imgui.Spacing()
+            imgui.Spacing()
+            imgui.Spacing()
 
-                -- Auto-scroll to bottom on new messages (uses monotonic insertion count)
-                local currentCount = chatlib.getInsertionCount()
-                if currentCount > lastInsertionCount then
-                    imgui.SetScrollHereY(1.0)
-                    lastInsertionCount = currentCount
-                end
-            end)
-
-            if not ok then
-                imgui.TextColored(imgui.ImVec4(1, 0.3, 0.3, 1), "[render error]")
+            -- Auto-scroll to bottom on new messages (uses monotonic insertion count)
+            local currentCount = chatlib.getInsertionCount()
+            if currentCount > lastInsertionCount then
+                imgui.SetScrollHereY(1.0)
+                lastInsertionCount = currentCount
             end
         end
 
