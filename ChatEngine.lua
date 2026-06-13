@@ -71,7 +71,6 @@ local STATE_FADE_OUT = 3
 local chatState = STATE_HIDDEN
 local stateStartTime = os.clock()
 local lastInsertionCount = 0
-local prevInsertionCount = 0 -- for auto-scroll detection
 
 -- Fade durations
 local FADE_IN_DURATION = 0.5
@@ -315,11 +314,10 @@ imgui.OnFrame(
                 -- Gradient opacity: older = floor 0.5, newer = full opacity
                 local gradientAlpha = masterAlpha * math.max(0.5, idx / totalMessages)
 
-                -- Get cursor/window positions for DrawList operations
-                local cursorPos = imgui.GetCursorPos()
-                local windowPos = imgui.GetWindowPos()
-                local screenX = windowPos.x + cursorPos.x
-                local screenY = windowPos.y + cursorPos.y
+                -- Get screen position for DrawList operations (accounts for scroll)
+                local screenPos = imgui.GetCursorScreenPos()
+                local screenX = screenPos.x
+                local screenY = screenPos.y
 
                 -- Draw accent bar (thin colored bar 3px on the left)
                 if cfgAccentBar[0] and msg.category and msg.category ~= "Server" then
@@ -342,14 +340,13 @@ imgui.OnFrame(
                 if cfgAccentBar[0] then
                     textOffsetX = 6 * DPI_SCALE
                 end
+                local cursorPos = imgui.GetCursorPos()
                 imgui.SetCursorPosX(cursorPos.x + textOffsetX)
 
                 -- Timestamp [HH:MM]
                 if cfgTimestamp[0] and msg.timestamp then
-                    local tsCurPos = imgui.GetCursorPos()
-                    local tsScreenX = windowPos.x + tsCurPos.x
-                    local tsScreenY = windowPos.y + tsCurPos.y
-                    renderTextWithShadow(drawList, tsScreenX, tsScreenY, msg.timestamp, 0.5, 0.5, 0.6, gradientAlpha * 0.7)
+                    local tsScreenPos = imgui.GetCursorScreenPos()
+                    renderTextWithShadow(drawList, tsScreenPos.x, tsScreenPos.y, msg.timestamp, 0.5, 0.5, 0.6, gradientAlpha * 0.7)
                     imgui.TextColored(
                         imgui.ImVec4(0.5, 0.5, 0.6, gradientAlpha * 0.7),
                         msg.timestamp
@@ -362,10 +359,8 @@ imgui.OnFrame(
                     local catColor = categoryColors[msg.category]
                     local catPrefix = categoryPrefixes[msg.category]
                     if catColor and catPrefix then
-                        local pfxCurPos = imgui.GetCursorPos()
-                        local pfxScreenX = windowPos.x + pfxCurPos.x
-                        local pfxScreenY = windowPos.y + pfxCurPos.y
-                        renderTextWithShadow(drawList, pfxScreenX, pfxScreenY, catPrefix, catColor[1], catColor[2], catColor[3], gradientAlpha)
+                        local pfxScreenPos = imgui.GetCursorScreenPos()
+                        renderTextWithShadow(drawList, pfxScreenPos.x, pfxScreenPos.y, catPrefix, catColor[1], catColor[2], catColor[3], gradientAlpha)
                         imgui.TextColored(
                             imgui.ImVec4(catColor[1], catColor[2], catColor[3], gradientAlpha),
                             catPrefix
@@ -382,14 +377,12 @@ imgui.OnFrame(
                             imgui.SameLine(0, 0)
                         end
                         -- Shadow for message text
-                        local segCurPos = imgui.GetCursorPos()
-                        local segScreenX = windowPos.x + segCurPos.x
-                        local segScreenY = windowPos.y + segCurPos.y
+                        local segScreenPos = imgui.GetCursorScreenPos()
                         -- Brighten colors by 20%, capped at 1.0
                         local br = math.min(1.0, seg.r * 1.2)
                         local bg = math.min(1.0, seg.g * 1.2)
                         local bb = math.min(1.0, seg.b * 1.2)
-                        renderTextWithShadow(drawList, segScreenX, segScreenY, seg.text, br, bg, bb, gradientAlpha)
+                        renderTextWithShadow(drawList, segScreenPos.x, segScreenPos.y, seg.text, br, bg, bb, gradientAlpha)
                         imgui.TextColored(
                             imgui.ImVec4(br, bg, bb, gradientAlpha),
                             seg.text
@@ -397,10 +390,8 @@ imgui.OnFrame(
                     end
                 else
                     -- Fallback: plain text with shadow
-                    local fbCurPos = imgui.GetCursorPos()
-                    local fbScreenX = windowPos.x + fbCurPos.x
-                    local fbScreenY = windowPos.y + fbCurPos.y
-                    renderTextWithShadow(drawList, fbScreenX, fbScreenY, msg.text or "", 1, 1, 1, gradientAlpha)
+                    local fbScreenPos = imgui.GetCursorScreenPos()
+                    renderTextWithShadow(drawList, fbScreenPos.x, fbScreenPos.y, msg.text or "", 1, 1, 1, gradientAlpha)
                     imgui.TextColored(
                         imgui.ImVec4(1.0, 1.0, 1.0, gradientAlpha),
                         msg.text or ""
