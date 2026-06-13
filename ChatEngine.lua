@@ -393,17 +393,11 @@ imgui.OnFrame(
         -- Apply font size scaling
         imgui.SetWindowFontScale(cfgFontSize[0] / 14.0)
 
-        -- Header: "Chat Engine" text + mode toggle + separator
+        -- Header: "Chat Engine" text + mode indicator + separator
         imgui.TextColored(imgui.ImVec4(0.4, 0.7, 1.0, masterAlpha), "Chat Engine")
         imgui.SameLine()
-        local modeLabel = chatMode == "NEWEST" and "[NEWEST]" or "[NEARBY]"
-        if imgui.SmallButton(modeLabel) then
-            if chatMode == "NEWEST" then
-                chatMode = "NEARBY"
-            else
-                chatMode = "NEWEST"
-            end
-        end
+        local modeIndicator = chatMode == "NEWEST" and "[NEWEST]" or "[NEARBY]"
+        imgui.TextColored(imgui.ImVec4(0.8, 0.8, 0.3, masterAlpha), modeIndicator)
         imgui.Separator()
 
         -- Scrollable child region for messages
@@ -531,6 +525,53 @@ imgui.OnFrame(
         imgui.End()
         imgui.PopStyleColor(5)
         imgui.PopStyleVar(3)
+    end
+)
+
+-- ============================================================================
+-- MODE TOGGLE BUTTON (floating, bottom-right corner)
+-- ============================================================================
+imgui.OnFrame(
+    function()
+        return chatInterceptEnabled
+    end,
+    function(self)
+        self.HideCursor = false
+
+        local sw, sh = getScreenResolution()
+        local btnW = 120 * DPI_SCALE
+        local btnH = 40 * DPI_SCALE
+        local margin = 10 * DPI_SCALE
+
+        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 8 * DPI_SCALE)
+        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(4 * DPI_SCALE, 4 * DPI_SCALE))
+        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.08, 0.09, 0.14, 0.9))
+        imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.15, 0.2, 0.35, 1.0))
+        imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.25, 0.35, 0.55, 1.0))
+        imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.2, 0.4, 0.8, 1.0))
+
+        imgui.SetNextWindowPos(imgui.ImVec2(sw - btnW - margin, sh - btnH - margin - 50 * DPI_SCALE), imgui.Cond.Always)
+        imgui.SetNextWindowSize(imgui.ImVec2(btnW, btnH))
+
+        local flags = imgui.WindowFlags.NoTitleBar
+            + imgui.WindowFlags.NoResize
+            + imgui.WindowFlags.NoMove
+            + imgui.WindowFlags.NoScrollbar
+
+        imgui.Begin("##ChatModeToggle", nil, flags)
+
+        local modeLabel = chatMode == "NEWEST" and "NEWEST" or "NEARBY"
+        if imgui.Button(modeLabel, imgui.ImVec2(-1, -1)) then
+            if chatMode == "NEWEST" then
+                chatMode = "NEARBY"
+            else
+                chatMode = "NEWEST"
+            end
+        end
+
+        imgui.End()
+        imgui.PopStyleColor(4)
+        imgui.PopStyleVar(2)
     end
 )
 
