@@ -87,22 +87,12 @@ end
 
 local function isChatVisible()
     if not chatInterceptEnabled then return false end
-    if chatForceVisible then return true end
-    local elapsed = os.clock() - lastMessageTime
-    local delay = cfgAutoHide[0]
-    return elapsed < delay
+    -- Auto-hide disabled: chat always visible when intercept is on
+    return true
 end
 
 local function calculateFadeAlpha()
-    local elapsed = os.clock() - lastMessageTime
-    local delay = cfgAutoHide[0]
-    if chatForceVisible then return 1.0 end
-    if elapsed >= delay then return 0.0 end
-    -- Start fading in the last 2 seconds
-    local fadeStart = delay - 2.0
-    if elapsed > fadeStart then
-        return 1.0 - ((elapsed - fadeStart) / 2.0)
-    end
+    -- No fade, always full opacity
     return 1.0
 end
 
