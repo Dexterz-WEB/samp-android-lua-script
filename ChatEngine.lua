@@ -219,7 +219,9 @@ imgui.OnFrame(
             end
 
             -- Bottom padding so last message isn't clipped
-            imgui.Dummy(imgui.ImVec2(0, 2.5 * DPI_SCALE))
+            imgui.Spacing()
+            imgui.Spacing()
+            imgui.Spacing()
 
             -- Auto-scroll to bottom on new messages (uses monotonic insertion count)
             local currentCount = chatlib.getInsertionCount()
