@@ -365,7 +365,7 @@ function main()
 
     -- Clear default chat with blank lines
     for i = 1, 20 do
-        sampAddChatMessage(" ", -1)
+        sampAddChatMessage("", -1)
     end
 
     -- Add startup message to our custom chat buffer instead of default chat
