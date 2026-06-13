@@ -219,34 +219,30 @@ imgui.OnFrame(
 
             for i = 1, #messages do
                 local msg = messages[i]
-                if msg then
-                    -- Timestamp
-                    if cfgTimestamp[0] and msg.timestamp then
-                        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.6, opacity), msg.timestamp)
-                        imgui.SameLine()
-                    end
 
-                    -- Render color segments
-                    if msg.parsed_segments and #msg.parsed_segments > 0 then
-                        for j = 1, #msg.parsed_segments do
-                            local seg = msg.parsed_segments[j]
-                            if seg and seg.text and seg.text ~= "" then
-                                if j > 1 then imgui.SameLine(0, 0) end
-                                imgui.TextColored(
-                                    imgui.ImVec4(seg.r or 1, seg.g or 1, seg.b or 1, opacity),
-                                    seg.text
-                                )
-                            end
-                        end
-                    else
-                        -- Fallback: plain text
-                        imgui.TextColored(imgui.ImVec4(0.9, 0.9, 0.9, opacity), msg.text or "")
+                -- Timestamp
+                if cfgTimestamp[0] and msg.timestamp then
+                    imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.6, opacity), msg.timestamp)
+                    imgui.SameLine()
+                end
+
+                -- Render color segments
+                if msg.parsed_segments then
+                    for j = 1, #msg.parsed_segments do
+                        local seg = msg.parsed_segments[j]
+                        if j > 1 then imgui.SameLine(0, 0) end
+                        imgui.TextColored(
+                            imgui.ImVec4(seg.r, seg.g, seg.b, opacity),
+                            seg.text
+                        )
                     end
+                else
+                    -- Fallback: plain text
+                    imgui.TextColored(imgui.ImVec4(0.9, 0.9, 0.9, opacity), msg.text or "")
                 end
             end
 
             -- Bottom padding so last message isn't clipped
-            imgui.Spacing()
             imgui.Spacing()
             imgui.Spacing()
 
