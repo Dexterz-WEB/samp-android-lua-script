@@ -232,25 +232,28 @@ end
 -- ============================================================================
 imgui.OnFrame(
     function()
-        if not chatInterceptEnabled then return false end
-        -- Check for new messages and update state
+        -- Always run detection and state update every frame regardless of visibility.
+        -- Returning true unconditionally ensures MonetLoader never skips evaluation,
+        -- so messages arriving in HIDDEN state are never missed.
         checkNewMessages()
         updateStateMachine()
-        -- Render when not hidden
-        return chatState ~= STATE_HIDDEN
+        return true
     end,
     function(self)
         self.HideCursor = true
 
+        -- Short-circuit: skip rendering when disabled or fully transparent
+        if not chatInterceptEnabled then return end
         local masterAlpha = getMasterAlpha()
         if masterAlpha <= 0.01 then return end
 
         local posX = 10 * DPI_SCALE
         local posY = 10 * DPI_SCALE
 
-        -- Calculate window size based on content
+        -- Calculate window size based on screen width (responsive)
+        local sw, _ = getScreenResolution()
         local lineHeight = (cfgFontSize[0] + 4) * DPI_SCALE
-        local winW = 600 * DPI_SCALE
+        local winW = sw * 0.5
         local winH = (MAX_VISIBLE_MESSAGES + 2) * lineHeight + 20 * DPI_SCALE
 
         -- Push invisible window styles (no background, no border)
@@ -298,7 +301,8 @@ imgui.OnFrame(
                 local msg = visibleMessages[idx]
 
                 -- Gradient opacity: older (top) = transparent, newer (bottom) = solid
-                local gradientAlpha = masterAlpha * (idx / totalVisible)
+                -- Floor at 0.15 so oldest message remains readable (~15% minimum)
+                local gradientAlpha = masterAlpha * math.max(0.15, idx / totalVisible)
 
                 -- Get cursor position for this line
                 local cursorPos = imgui.GetCursorPos()
@@ -485,6 +489,7 @@ function main()
     -- Register /ceoff command: toggle interception on/off
     sampRegisterChatCommand("ceoff", function()
         chatInterceptEnabled = not chatInterceptEnabled
+        cfgEnabled[0] = chatInterceptEnabled
         if chatInterceptEnabled then
             sampAddChatMessage("{00FFFF}[ChatEngine] {FFFFFF}Chat interception: {00FF00}ON", -1)
         else
