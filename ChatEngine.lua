@@ -18,7 +18,7 @@ if not sampev_loaded then
     print("[ChatEngine] WARNING: samp.events not available!")
 end
 
-local chatlib_loaded, chatlib = pcall(require, "chatengine_lib")
+local chatlib_loaded, chatlib = pcall(require, "lib.chatengine_lib")
 if not chatlib_loaded then
     print("[ChatEngine] ERROR: chatengine_lib not found!")
     chatlib = nil
