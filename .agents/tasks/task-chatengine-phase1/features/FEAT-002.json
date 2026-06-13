@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Create ChatEngine.lua - the main script with samp.events interception, mimgui chat window rendering, filter tabs, auto-hide, config panel, and commands",
-  "status": "pending",
+  "status": "in_progress",
   "steps": [
     "Create ChatEngine.lua at repo root (/projects/sandbox/samp-android-lua-script/ChatEngine.lua)",
     "Add script_name('ChatEngine') and script_author('OnlyDexterZ') header",
