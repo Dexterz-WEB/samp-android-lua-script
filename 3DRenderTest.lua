@@ -1,7 +1,8 @@
 -- ============================================================================
--- DevBox3D v1.0
+-- DevBox3D v2.0
 -- Floating 3D box (background rectangle + text) above player head
 -- Uses manual camera projection (Test 2 approach - confirmed working)
+-- Config via mimgui panel (/devbox to toggle config window)
 -- Author: OnlyDexterZ
 -- ============================================================================
 
@@ -18,18 +19,35 @@ local imgui = require 'mimgui'
 -- ============================================================================
 local DPI = MONET_DPI_SCALE or 1.0
 
+local PRESET_TEXTS = {
+    "DevBox Test",
+    "Hello World",
+    "Testing 3D",
+    "Custom Box",
+    "SA-MP Android"
+}
+
 -- ============================================================================
 -- STATE
 -- ============================================================================
 local devbox = {
     enabled = true,
     text = "DevBox Test",
-    offsetX = 0,       -- screen pixel offset X
-    offsetY = 0,       -- screen pixel offset Y
-    zOffset = 1.5,     -- world Z offset above head
-    padding = 8,       -- padding inside box (px)
-    cornerRounding = 4 -- rounded corners radius
+    textIndex = 1,
+    offsetX = 0,
+    offsetY = 0,
+    zOffset = 1.5,
+    maxTiltAngle = 30,
+    padding = 8,
+    cornerRounding = 4
 }
+
+-- imgui state variables (float pointers for sliders, bool for window)
+local showConfigWindow = imgui.new.bool(false)
+local sliderOffsetX = imgui.new.float(0)
+local sliderOffsetY = imgui.new.float(0)
+local sliderZOffset = imgui.new.float(1.5)
+local sliderMaxTilt = imgui.new.float(30)
 
 -- Projection result
 local screen_x, screen_y = 0, 0
@@ -71,6 +89,7 @@ end
 
 -- ============================================================================
 -- PROJECTION: Manual camera projection (Test 2 approach)
+-- Returns screen position and camera pitch angle (in degrees)
 -- ============================================================================
 local function computeScreenPos()
     screen_valid = false
@@ -102,6 +121,15 @@ local function computeScreenPos()
     fwdX = fwdX / fwdLen
     fwdY = fwdY / fwdLen
     fwdZ = fwdZ / fwdLen
+
+    -- Calculate camera pitch angle
+    local fwdLen2D = math.sqrt(fwdX * fwdX + fwdY * fwdY)
+    local camPitch = math.deg(math.atan2(fwdZ, fwdLen2D))
+
+    -- Tilt angle limit: if abs(pitch) exceeds max, hide the box
+    if math.abs(camPitch) > devbox.maxTiltAngle then
+        return
+    end
 
     -- World up
     local wupX, wupY, wupZ = 0, 0, 1
@@ -159,7 +187,7 @@ local function computeScreenPos()
 end
 
 -- ============================================================================
--- IMGUI RENDERING FRAME
+-- IMGUI FRAME: 3D Box Rendering (background draw list)
 -- ============================================================================
 imgui.OnFrame(
     function()
@@ -221,83 +249,145 @@ imgui.OnFrame(
 )
 
 -- ============================================================================
--- COMMAND: /devbox
+-- IMGUI FRAME: Config Window
 -- ============================================================================
-sampRegisterChatCommand("devbox", function(args)
-    args = args or ""
+imgui.OnFrame(
+    function()
+        return showConfigWindow[0]
+    end,
+    function(self)
+        self.HideCursor = false
 
-    -- No argument = toggle
-    if args == "" then
-        devbox.enabled = not devbox.enabled
-        if devbox.enabled then
-            chat("Enabled")
-        else
-            chat("Disabled")
+        local sw, sh = getScreenRes()
+        local winW = 360 * DPI
+        local winH = 420 * DPI
+
+        -- Dark blue-grey theme (same as ChatEngine)
+        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12 * DPI)
+        imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 6 * DPI)
+        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(15 * DPI, 12 * DPI))
+        imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(8 * DPI, 6 * DPI))
+        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.08, 0.08, 0.1, 0.95))
+        imgui.PushStyleColor(imgui.Col.FrameBg, imgui.ImVec4(0.15, 0.15, 0.2, 1.0))
+        imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.2, 0.3, 1.0))
+        imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.3, 0.5, 1.0))
+        imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
+        imgui.PushStyleColor(imgui.Col.SliderGrab, imgui.ImVec4(0.3, 0.6, 0.9, 1.0))
+        imgui.PushStyleColor(imgui.Col.SliderGrabActive, imgui.ImVec4(0.4, 0.7, 1.0, 1.0))
+
+        imgui.SetNextWindowPos(imgui.ImVec2((sw - winW) / 2, (sh - winH) / 2), imgui.Cond.FirstUseEver)
+        imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
+
+        imgui.Begin("DevBox3D Settings", showConfigWindow, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)
+
+        -- Title
+        imgui.TextColored(imgui.ImVec4(0.2, 0.9, 0.6, 1), "DEVBOX3D SETTINGS")
+        imgui.SameLine()
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "v2.0")
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
+
+        -- Toggle ON/OFF (Button, NOT Checkbox)
+        imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1, 1), "GENERAL")
+        imgui.Spacing()
+
+        local enableLabel = devbox.enabled and "[ON] DevBox3D" or "[OFF] DevBox3D"
+        if imgui.Button(enableLabel, imgui.ImVec2(-1, 30 * DPI)) then
+            devbox.enabled = not devbox.enabled
         end
-        return
+
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
+
+        -- Text display + Change Text button
+        imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1, 1), "TEXT")
+        imgui.Spacing()
+
+        imgui.Text("Current: \"" .. devbox.text .. "\"")
+        imgui.Spacing()
+
+        if imgui.Button("Change Text", imgui.ImVec2(-1, 30 * DPI)) then
+            devbox.textIndex = devbox.textIndex + 1
+            if devbox.textIndex > #PRESET_TEXTS then
+                devbox.textIndex = 1
+            end
+            devbox.text = PRESET_TEXTS[devbox.textIndex]
+        end
+
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
+
+        -- Sliders
+        imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1, 1), "POSITION & LIMITS")
+        imgui.Spacing()
+
+        imgui.Text("Offset X:")
+        imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##offsetX", sliderOffsetX, -200.0, 200.0, "%.0f")
+        devbox.offsetX = sliderOffsetX[0]
+
+        imgui.Spacing()
+
+        imgui.Text("Offset Y:")
+        imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##offsetY", sliderOffsetY, -200.0, 200.0, "%.0f")
+        devbox.offsetY = sliderOffsetY[0]
+
+        imgui.Spacing()
+
+        imgui.Text("Z World Offset:")
+        imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##zOffset", sliderZOffset, 0.5, 5.0, "%.1f")
+        devbox.zOffset = sliderZOffset[0]
+
+        imgui.Spacing()
+
+        imgui.Text("Max Tilt Angle:")
+        imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##maxTilt", sliderMaxTilt, 10.0, 80.0, "%.0f")
+        devbox.maxTiltAngle = sliderMaxTilt[0]
+
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
+
+        -- RESET ALL button
+        if imgui.Button("RESET ALL", imgui.ImVec2(-1, 35 * DPI)) then
+            devbox.enabled = true
+            devbox.text = "DevBox Test"
+            devbox.textIndex = 1
+            devbox.offsetX = 0
+            devbox.offsetY = 0
+            devbox.zOffset = 1.5
+            devbox.maxTiltAngle = 30
+            sliderOffsetX[0] = 0
+            sliderOffsetY[0] = 0
+            sliderZOffset[0] = 1.5
+            sliderMaxTilt[0] = 30
+        end
+
+        imgui.End()
+        imgui.PopStyleColor(7)
+        imgui.PopStyleVar(4)
     end
+)
 
-    -- Parse subcommand
-    local cmd, value = args:match("^(%S+)%s*(.*)")
-    cmd = cmd and cmd:lower() or ""
-
-    if cmd == "text" then
-        if value == "" then
-            chat("Current text: \"" .. devbox.text .. "\"")
-        else
-            devbox.text = value
-            chat("Text set to: \"" .. value .. "\"")
-        end
-
-    elseif cmd == "x" then
-        local num = tonumber(value)
-        if num then
-            devbox.offsetX = num
-            chat("Offset X set to: " .. num .. " px")
-        else
-            chat("Current offset X: " .. devbox.offsetX .. " px")
-        end
-
-    elseif cmd == "y" then
-        local num = tonumber(value)
-        if num then
-            devbox.offsetY = num
-            chat("Offset Y set to: " .. num .. " px")
-        else
-            chat("Current offset Y: " .. devbox.offsetY .. " px")
-        end
-
-    elseif cmd == "z" then
-        local num = tonumber(value)
-        if num then
-            devbox.zOffset = num
-            chat("Z world offset set to: " .. num)
-        else
-            chat("Current Z offset: " .. devbox.zOffset)
-        end
-
-    elseif cmd == "reset" then
-        devbox.offsetX = 0
-        devbox.offsetY = 0
-        devbox.zOffset = 1.5
-        devbox.text = "DevBox Test"
-        devbox.padding = 8
-        devbox.cornerRounding = 4
-        chat("All settings reset to defaults")
-
+-- ============================================================================
+-- COMMAND: /devbox - toggle config window open/close
+-- ============================================================================
+sampRegisterChatCommand("devbox", function()
+    showConfigWindow[0] = not showConfigWindow[0]
+    if showConfigWindow[0] then
+        chat("Config window opened")
     else
-        chat("Usage:")
-        chat("  /devbox - toggle on/off")
-        chat("  /devbox text <text> - set display text")
-        chat("  /devbox x <pixels> - set X pixel offset")
-        chat("  /devbox y <pixels> - set Y pixel offset")
-        chat("  /devbox z <value> - set Z world offset")
-        chat("  /devbox reset - reset all to defaults")
+        chat("Config window closed")
     end
 end)
 
 -- ============================================================================
 -- INITIALIZATION
 -- ============================================================================
-chat("Loaded! Default: ON, text=\"DevBox Test\"")
-chat("  /devbox - toggle | /devbox text <msg> | /devbox reset")
+chat("v2.0 Loaded! Type /devbox to open settings")
