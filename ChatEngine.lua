@@ -363,8 +363,15 @@ function main()
         end
     end)
 
-    -- Startup message
-    sampAddChatMessage("{00FFFF}[ChatEngine] {FFFFFF}Loaded! Use {FFFF00}/chatcfg{FFFFFF} to configure, {FFFF00}/ceoff{FFFFFF} to toggle.", -1)
+    -- Clear default chat with blank lines
+    for i = 1, 20 do
+        sampAddChatMessage(" ", -1)
+    end
+
+    -- Add startup message to our custom chat buffer instead of default chat
+    if chatlib then
+        chatlib.addMessage("{00FFFF}[ChatEngine] {FFFFFF}Loaded! Use {FFFF00}/chatcfg{FFFFFF} to configure, {FFFF00}/ceoff{FFFFFF} to toggle.", -1)
+    end
 
     -- Initialize last message time
     lastMessageTime = os.clock()
