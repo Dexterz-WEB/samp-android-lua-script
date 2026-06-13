@@ -1,6 +1,6 @@
 -- ============================================================================
--- CHAT ENGINE v1.0
--- Custom chat window with message filtering, auto-hide, and config panel
+-- CHAT ENGINE v2.0 - Style 4: Bottom Fade Gradient + Auto-hide
+-- Pure floating text with gradient opacity, colored accent bars, auto-hide
 -- Compatible with MonetLoader Android
 -- ============================================================================
 
@@ -36,9 +36,9 @@ local defaultConfig = {
     Settings = {
         enabled = true,
         fontSize = 14,
-        opacity = 0.55,
         autoHideDelay = 10,
-        showTimestamp = true
+        showTimestamp = true,
+        showAccentBar = true
     }
 }
 
@@ -49,26 +49,62 @@ if not iniData then
     iniData = defaultConfig
 end
 
+-- Ensure all settings exist (backwards compat)
+if iniData.Settings.showAccentBar == nil then
+    iniData.Settings.showAccentBar = true
+end
+
 -- ============================================================================
 -- STATE VARIABLES
 -- ============================================================================
-local chatInterceptEnabled = (iniData.Settings.enabled ~= false) -- Read from config at startup
-local lastMessageTime = 0
-local currentFilter = "All"
-local showConfigWindow = imgui.new.bool(false)
-local chatMinimized = false
-local lastInsertionCount = 0 -- Track insertion count for auto-scroll (monotonic)
-local chatForceVisible = false
+local chatInterceptEnabled = (iniData.Settings.enabled ~= false)
 
--- Filter options
-local filterOptions = {"All", "PM", "Server", "IC", "OOC"}
+-- Auto-hide state machine
+local STATE_HIDDEN = 0
+local STATE_FADE_IN = 1
+local STATE_VISIBLE = 2
+local STATE_FADE_OUT = 3
+
+local chatState = STATE_HIDDEN
+local stateStartTime = os.clock()
+local lastInsertionCount = 0
+
+-- Fade durations
+local FADE_IN_DURATION = 0.5
+local FADE_OUT_DURATION = 2.0
+
+-- Max visible messages
+local MAX_VISIBLE_MESSAGES = 15
+
+-- Config panel state
+local showConfigWindow = imgui.new.bool(false)
 
 -- Config imgui bindings
 local cfgFontSize = imgui.new.float(iniData.Settings.fontSize or 14)
-local cfgOpacity = imgui.new.float(iniData.Settings.opacity or 0.55)
 local cfgAutoHide = imgui.new.float(iniData.Settings.autoHideDelay or 10)
 local cfgEnabled = imgui.new.bool(iniData.Settings.enabled ~= false)
 local cfgTimestamp = imgui.new.bool(iniData.Settings.showTimestamp ~= false)
+local cfgAccentBar = imgui.new.bool(iniData.Settings.showAccentBar ~= false)
+
+-- ============================================================================
+-- CATEGORY COLORS (for accent bars and prefixes)
+-- ============================================================================
+local categoryColors = {
+    PM     = { 0.2, 0.9, 0.4 },
+    OOC    = { 0.6, 0.6, 0.6 },
+    IC     = { 0.9, 0.9, 1.0 },
+    Ad     = { 1.0, 0.85, 0.2 },
+    Action = { 0.8, 0.4, 0.9 },
+    Server = { 0.3, 0.3, 0.3 }
+}
+
+local categoryPrefixes = {
+    PM     = "[PM] ",
+    OOC    = "[OOC] ",
+    IC     = "[IC] ",
+    Ad     = "[AD] ",
+    Action = "[ACT] "
+}
 
 -- ============================================================================
 -- HELPER FUNCTIONS
@@ -77,32 +113,89 @@ local cfgTimestamp = imgui.new.bool(iniData.Settings.showTimestamp ~= false)
 local function saveConfig()
     iniData.Settings.enabled = cfgEnabled[0]
     iniData.Settings.fontSize = cfgFontSize[0]
-    iniData.Settings.opacity = cfgOpacity[0]
     iniData.Settings.autoHideDelay = cfgAutoHide[0]
     iniData.Settings.showTimestamp = cfgTimestamp[0]
-    -- Wire cfgEnabled toggle to runtime interception state
+    iniData.Settings.showAccentBar = cfgAccentBar[0]
     chatInterceptEnabled = cfgEnabled[0]
     inicfg.save(iniData, iniFileName)
 end
 
-local function isChatVisible()
-    if not chatInterceptEnabled then return false end
-    -- Auto-hide disabled: chat always visible when intercept is on
-    return true
+-- Calculate master alpha based on current state
+local function getMasterAlpha()
+    local now = os.clock()
+    local elapsed = now - stateStartTime
+
+    if chatState == STATE_HIDDEN then
+        return 0.0
+    elseif chatState == STATE_FADE_IN then
+        local progress = elapsed / FADE_IN_DURATION
+        if progress >= 1.0 then
+            progress = 1.0
+        end
+        return progress
+    elseif chatState == STATE_VISIBLE then
+        return 1.0
+    elseif chatState == STATE_FADE_OUT then
+        local progress = elapsed / FADE_OUT_DURATION
+        if progress >= 1.0 then
+            progress = 1.0
+        end
+        return 1.0 - progress
+    end
+    return 0.0
 end
 
-local function calculateFadeAlpha()
-    -- No fade, always full opacity
-    return 1.0
+-- Update state machine transitions based on time
+local function updateStateMachine()
+    local now = os.clock()
+    local elapsed = now - stateStartTime
+
+    if chatState == STATE_FADE_IN then
+        if elapsed >= FADE_IN_DURATION then
+            chatState = STATE_VISIBLE
+            stateStartTime = now
+        end
+    elseif chatState == STATE_VISIBLE then
+        local hideDelay = cfgAutoHide[0]
+        if hideDelay > 0 and elapsed >= hideDelay then
+            chatState = STATE_FADE_OUT
+            stateStartTime = now
+        end
+    elseif chatState == STATE_FADE_OUT then
+        if elapsed >= FADE_OUT_DURATION then
+            chatState = STATE_HIDDEN
+            stateStartTime = now
+        end
+    end
 end
 
--- Map filter name to chatlib category
--- Note: "IC" filter maps to "IC" category. Player chat from onChatMessage is
--- explicitly categorized as "IC". Ad messages appear only in "All" tab (Phase 1).
-local function mapFilterToCategory(filter)
-    if filter == "All" then return "All" end
-    if filter == "IC" then return "IC" end
-    return filter
+-- Handle new message arrival - trigger state transitions
+local function onNewMessage()
+    local now = os.clock()
+
+    if chatState == STATE_HIDDEN then
+        chatState = STATE_FADE_IN
+        stateStartTime = now
+    elseif chatState == STATE_FADE_OUT then
+        -- Cancel fade out, go directly to visible
+        chatState = STATE_VISIBLE
+        stateStartTime = now
+    elseif chatState == STATE_VISIBLE then
+        -- Reset visible timer
+        stateStartTime = now
+    elseif chatState == STATE_FADE_IN then
+        -- Already fading in, keep going
+    end
+end
+
+-- Check for new messages from the library
+local function checkNewMessages()
+    if not chatlib then return end
+    local currentCount = chatlib.getInsertionCount()
+    if currentCount > lastInsertionCount then
+        lastInsertionCount = currentCount
+        onNewMessage()
+    end
 end
 
 -- ============================================================================
@@ -112,14 +205,12 @@ if sampev_loaded then
     function sampev.onServerMessage(color, text)
         if chatInterceptEnabled and chatlib then
             chatlib.addMessage(text, color)
-            lastMessageTime = os.clock()
             return false
         end
     end
 
     function sampev.onChatMessage(playerId, text)
         if chatInterceptEnabled and chatlib then
-            -- Format player message with ID
             local playerName = nil
             pcall(function()
                 playerName = sampGetPlayerNickname(playerId)
@@ -130,139 +221,163 @@ if sampev_loaded then
             else
                 formatted = "ID " .. playerId .. ": " .. text
             end
-            -- Pass explicit "IC" category to avoid misclassification from text patterns
             chatlib.addMessage(formatted, 0xFFFFFFFF, "IC")
-            lastMessageTime = os.clock()
             return false
         end
     end
 end
 
 -- ============================================================================
--- CHAT WINDOW (imgui.OnFrame)
+-- CHAT WINDOW (imgui.OnFrame) - Style 4: Floating text with gradient
 -- ============================================================================
 imgui.OnFrame(
     function()
-        return chatInterceptEnabled and isChatVisible()
+        if not chatInterceptEnabled then return false end
+        -- Check for new messages and update state
+        checkNewMessages()
+        updateStateMachine()
+        -- Render when not hidden
+        return chatState ~= STATE_HIDDEN
     end,
     function(self)
         self.HideCursor = true
 
-        local sw, sh = getScreenResolution()
-        local opacity = cfgOpacity[0] * calculateFadeAlpha()
-        if opacity <= 0.01 then return end
+        local masterAlpha = getMasterAlpha()
+        if masterAlpha <= 0.01 then return end
 
-        local winW = sw * 0.45
-        local winH = sh * 0.35
         local posX = 10 * DPI_SCALE
         local posY = 10 * DPI_SCALE
 
-        -- Push styles
-        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 8 * DPI_SCALE)
-        imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 4 * DPI_SCALE)
-        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(10 * DPI_SCALE, 8 * DPI_SCALE))
-        imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(6 * DPI_SCALE, 4 * DPI_SCALE))
-        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.08, 0.09, 0.14, 0.5))
-        imgui.PushStyleColor(imgui.Col.ChildBg, imgui.ImVec4(0.06, 0.07, 0.11, 0.5))
-        imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.9, 0.9, 0.9, opacity))
-        imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.15, 0.15, 0.2, opacity))
-        imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.25, 0.25, 0.35, opacity))
-        imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.2, 0.4, 0.8, opacity))
+        -- Calculate window size based on content
+        local lineHeight = (cfgFontSize[0] + 4) * DPI_SCALE
+        local winW = 600 * DPI_SCALE
+        local winH = (MAX_VISIBLE_MESSAGES + 2) * lineHeight + 20 * DPI_SCALE
+
+        -- Push invisible window styles (no background, no border)
+        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 0)
+        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(4 * DPI_SCALE, 4 * DPI_SCALE))
+        imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(2 * DPI_SCALE, 2 * DPI_SCALE))
+        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0))
+        imgui.PushStyleColor(imgui.Col.Border, imgui.ImVec4(0, 0, 0, 0))
 
         imgui.SetNextWindowPos(imgui.ImVec2(posX, posY), imgui.Cond.Always)
         imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
 
-        local flags = imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar
-        imgui.Begin("##ChatEngineWindow", nil, flags)
+        local flags = imgui.WindowFlags.NoTitleBar
+            + imgui.WindowFlags.NoResize
+            + imgui.WindowFlags.NoMove
+            + imgui.WindowFlags.NoScrollbar
+            + imgui.WindowFlags.NoInputs
+            + imgui.WindowFlags.NoBackground
 
-        -- Apply font size scaling from config
+        imgui.Begin("##ChatEngineFloating", nil, flags)
+
+        -- Apply font size scaling
         imgui.SetWindowFontScale(cfgFontSize[0] / 14.0)
 
-        -- Header bar
-        imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.9, 1.0), "Chat Engine")
-        imgui.Spacing()
-        imgui.Separator()
+        -- CE badge (tiny, semi-transparent)
+        imgui.TextColored(imgui.ImVec4(0.5, 0.7, 0.9, 0.3 * masterAlpha), "CE")
 
-        -- Message area
-        local headerHeight = imgui.GetCursorPosY()
-        local childHeight = winH - headerHeight - 10 * DPI_SCALE
-        if childHeight < 50 then childHeight = 50 end
-
-        imgui.BeginChild("##chatmessages", imgui.ImVec2(-1, childHeight), false)
-
+        -- Get messages
         if chatlib then
-            local messages = chatlib.getMessages()
+            local allMessages = chatlib.getMessages()
 
-            for i = 1, #messages do
-                local msg = messages[i]
+            -- Get last MAX_VISIBLE_MESSAGES
+            local startIdx = #allMessages - MAX_VISIBLE_MESSAGES + 1
+            if startIdx < 1 then startIdx = 1 end
+            local visibleMessages = {}
+            for i = startIdx, #allMessages do
+                visibleMessages[#visibleMessages + 1] = allMessages[i]
+            end
 
-                -- Timestamp
-                if cfgTimestamp[0] and msg.timestamp then
-                    imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.6, opacity), msg.timestamp)
-                    imgui.SameLine()
+            local totalVisible = #visibleMessages
+            local drawList = imgui.GetWindowDrawList()
+            local windowPos = imgui.GetWindowPos()
+
+            for idx = 1, totalVisible do
+                local msg = visibleMessages[idx]
+
+                -- Gradient opacity: older (top) = transparent, newer (bottom) = solid
+                local gradientAlpha = masterAlpha * (idx / totalVisible)
+
+                -- Get cursor position for this line
+                local cursorPos = imgui.GetCursorPos()
+                local screenX = windowPos.x + cursorPos.x
+                local screenY = windowPos.y + cursorPos.y
+
+                -- Draw accent bar (thin colored bar on the left)
+                if cfgAccentBar[0] and msg.category then
+                    local barColor = categoryColors[msg.category]
+                    if barColor and msg.category ~= "Server" then
+                        local barWidth = 3 * DPI_SCALE
+                        local barHeight = lineHeight - 2 * DPI_SCALE
+                        drawList:AddRectFilled(
+                            imgui.ImVec2(screenX, screenY),
+                            imgui.ImVec2(screenX + barWidth, screenY + barHeight),
+                            imgui.ColorConvertFloat4ToU32(imgui.ImVec4(
+                                barColor[1], barColor[2], barColor[3], gradientAlpha
+                            ))
+                        )
+                    end
                 end
 
-                -- Category prefix with color
+                -- Offset text after accent bar
+                local textOffsetX = 0
+                if cfgAccentBar[0] then
+                    textOffsetX = 6 * DPI_SCALE
+                end
+                imgui.SetCursorPosX(cursorPos.x + textOffsetX)
+
+                -- Timestamp [HH:MM]
+                if cfgTimestamp[0] and msg.timestamp then
+                    imgui.TextColored(
+                        imgui.ImVec4(0.5, 0.5, 0.6, gradientAlpha * 0.7),
+                        msg.timestamp
+                    )
+                    imgui.SameLine(0, 4 * DPI_SCALE)
+                end
+
+                -- Category prefix
                 if msg.category and msg.category ~= "Server" then
-                    local prefixColors = {
-                        PM = imgui.ImVec4(0.2, 0.9, 0.4, opacity),
-                        OOC = imgui.ImVec4(0.6, 0.6, 0.6, opacity),
-                        IC = imgui.ImVec4(0.9, 0.9, 1.0, opacity),
-                        Ad = imgui.ImVec4(1.0, 0.85, 0.2, opacity),
-                        Action = imgui.ImVec4(0.8, 0.4, 0.9, opacity)
-                    }
-                    local prefixLabels = {
-                        PM = "[PM] ",
-                        OOC = "[OOC] ",
-                        IC = "[IC] ",
-                        Ad = "[AD] ",
-                        Action = "[ACT] "
-                    }
-                    local color = prefixColors[msg.category]
-                    local label = prefixLabels[msg.category]
-                    if color and label then
-                        imgui.TextColored(color, label)
+                    local catColor = categoryColors[msg.category]
+                    local catPrefix = categoryPrefixes[msg.category]
+                    if catColor and catPrefix then
+                        imgui.TextColored(
+                            imgui.ImVec4(catColor[1], catColor[2], catColor[3], gradientAlpha),
+                            catPrefix
+                        )
                         imgui.SameLine(0, 0)
                     end
                 end
 
-                -- Render color segments
-                if msg.parsed_segments then
+                -- Render message text with color segments
+                if msg.parsed_segments and #msg.parsed_segments > 0 then
                     for j = 1, #msg.parsed_segments do
                         local seg = msg.parsed_segments[j]
-                        if j > 1 then imgui.SameLine(0, 0) end
+                        if j > 1 then
+                            imgui.SameLine(0, 0)
+                        end
                         imgui.TextColored(
-                            imgui.ImVec4(seg.r, seg.g, seg.b, opacity),
+                            imgui.ImVec4(seg.r, seg.g, seg.b, gradientAlpha),
                             seg.text
                         )
                     end
                 else
                     -- Fallback: plain text
-                    imgui.TextColored(imgui.ImVec4(0.9, 0.9, 0.9, opacity), msg.text or "")
+                    imgui.TextColored(
+                        imgui.ImVec4(0.9, 0.9, 0.9, gradientAlpha),
+                        msg.text or ""
+                    )
                 end
             end
-
-            -- Bottom padding so last message isn't clipped
-            imgui.Spacing()
-            imgui.Spacing()
-            imgui.Spacing()
-
-            -- Auto-scroll to bottom on new messages (uses monotonic insertion count)
-            local currentCount = chatlib.getInsertionCount()
-            if currentCount > lastInsertionCount then
-                imgui.SetScrollHereY(1.0)
-                lastInsertionCount = currentCount
-            end
         end
-
-        imgui.EndChild()
 
         -- Reset font scale
         imgui.SetWindowFontScale(1.0)
 
         imgui.End()
-        imgui.PopStyleColor(6)
-        imgui.PopStyleVar(4)
+        imgui.PopStyleColor(2)
+        imgui.PopStyleVar(3)
     end
 )
 
@@ -276,7 +391,7 @@ imgui.OnFrame(
 
         local sw, sh = getScreenResolution()
         local winW = 380 * DPI_SCALE
-        local winH = 360 * DPI_SCALE
+        local winH = 400 * DPI_SCALE
 
         imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12 * DPI_SCALE)
         imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 6 * DPI_SCALE)
@@ -287,7 +402,6 @@ imgui.OnFrame(
         imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.2, 0.3, 1.0))
         imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.3, 0.5, 1.0))
         imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
-        imgui.PushStyleColor(imgui.Col.CheckMark, imgui.ImVec4(0.2, 0.8, 0.4, 1.0))
         imgui.PushStyleColor(imgui.Col.SliderGrab, imgui.ImVec4(0.3, 0.6, 0.9, 1.0))
         imgui.PushStyleColor(imgui.Col.SliderGrabActive, imgui.ImVec4(0.4, 0.7, 1.0, 1.0))
 
@@ -299,10 +413,12 @@ imgui.OnFrame(
         -- Title
         imgui.TextColored(imgui.ImVec4(0.2, 0.9, 0.6, 1), "CHATENGINE SETTINGS")
         imgui.SameLine()
-        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "v1.0")
-        imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "v2.0")
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
 
-        -- Toggle enabled (use Button instead of Checkbox for MonetLoader compat)
+        -- Toggle enabled (Button, NOT Checkbox)
         imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1, 1), "GENERAL")
         imgui.Spacing()
 
@@ -316,19 +432,32 @@ imgui.OnFrame(
             cfgTimestamp[0] = not cfgTimestamp[0]
         end
 
-        imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+        local barLabel = cfgAccentBar[0] and "[ON] Accent Bar" or "[OFF] Accent Bar"
+        if imgui.Button(barLabel, imgui.ImVec2(-1, 30 * DPI_SCALE)) then
+            cfgAccentBar[0] = not cfgAccentBar[0]
+        end
+
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
 
         -- Sliders
         imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1, 1), "APPEARANCE")
         imgui.Spacing()
 
-        imgui.Text("Font Size:"); imgui.SetNextItemWidth(-1)
+        imgui.Text("Font Size:")
+        imgui.SetNextItemWidth(-1)
         imgui.SliderFloat("##fontSize", cfgFontSize, 10.0, 24.0, "%.0f")
 
-        imgui.Text("Opacity:"); imgui.SetNextItemWidth(-1)
-        imgui.SliderFloat("##opacity", cfgOpacity, 0.3, 1.0, "%.2f")
+        imgui.Spacing()
 
-        imgui.Spacing(); imgui.Separator(); imgui.Spacing()
+        imgui.Text("Auto-hide Delay (seconds):")
+        imgui.SetNextItemWidth(-1)
+        imgui.SliderFloat("##autoHide", cfgAutoHide, 3.0, 30.0, "%.0f")
+
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
 
         -- Save button
         if imgui.Button("SAVE CONFIG", imgui.ImVec2(-1, 35 * DPI_SCALE)) then
@@ -337,7 +466,7 @@ imgui.OnFrame(
         end
 
         imgui.End()
-        imgui.PopStyleColor(8)
+        imgui.PopStyleColor(7)
         imgui.PopStyleVar(4)
     end
 )
@@ -353,7 +482,7 @@ function main()
         showConfigWindow[0] = not showConfigWindow[0]
     end)
 
-    -- Register /ceoff command: toggle interception (safety fallback)
+    -- Register /ceoff command: toggle interception on/off
     sampRegisterChatCommand("ceoff", function()
         chatInterceptEnabled = not chatInterceptEnabled
         if chatInterceptEnabled then
@@ -363,22 +492,19 @@ function main()
         end
     end)
 
-    -- Add startup message to our custom chat buffer
+    -- Add startup message to custom chat buffer
     if chatlib then
         chatlib.addMessage("{00FFFF}[ChatEngine] {FFFFFF}Loaded! Use {FFFF00}/chatcfg{FFFFFF} to configure, {FFFF00}/ceoff{FFFFFF} to toggle.", -1)
     end
 
-    -- Clear chat: first time after connecting (1 second delay)
+    -- Clear default chat after connecting (1 second delay)
     wait(1000)
     for i = 1, 15 do sampAddChatMessage("", -1) end
 
-    -- Clear chat: second time after spawning
+    -- Wait for spawn then clear again
     while not sampIsLocalPlayerSpawned() do wait(100) end
     wait(1000)
     for i = 1, 15 do sampAddChatMessage("", -1) end
-
-    -- Initialize last message time
-    lastMessageTime = os.clock()
 
     -- Keep script alive
     while true do wait(100) end
