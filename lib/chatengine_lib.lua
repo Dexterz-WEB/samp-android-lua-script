@@ -137,37 +137,25 @@ function M.detectCategory(text)
         return 'Server'
     end
 
-    -- Wrap in pcall to prevent crash from unexpected text patterns
-    local ok, result = pcall(function()
-        -- Strip color codes first for cleaner pattern matching
-        local cleanText = string.gsub(text, '{%x%x%x%x%x%x}', '')
+    -- PM: contains "Message from" or starts with PM-like format
+    if string.find(text, 'Message from') then
+        return 'PM'
+    end
 
-        -- PM: contains "Message from" or starts with PM-like format
-        if string.find(cleanText, 'Message from') then
-            return 'PM'
-        end
+    -- OOC: starts with "((" or "[OOC]"
+    if string.sub(text, 1, 2) == '((' or string.find(text, '^%[OOC%]') then
+        return 'OOC'
+    end
 
-        -- OOC: starts with "((" or "[OOC]" or contains "((" pattern (common /b format)
-        if string.sub(cleanText, 1, 2) == '((' or string.find(cleanText, '^%[OOC%]') or string.find(cleanText, '%(%(.+%)%)') then
-            return 'OOC'
-        end
+    -- Action: starts with "* " but NOT "** "
+    if string.sub(text, 1, 2) == '* ' and string.sub(text, 1, 3) ~= '** ' then
+        return 'Action'
+    end
 
-        -- Action: starts with "* " but NOT "** "
-        if string.sub(cleanText, 1, 2) == '* ' and string.sub(cleanText, 1, 3) ~= '** ' then
-            return 'Action'
-        end
-
-        -- Ad: starts with "[Advertisement]" or "[AD]"
-        if string.find(cleanText, '^%[Advertisement%]') or string.find(cleanText, '^%[AD%]') then
-            return 'Ad'
-        end
-
-        return 'Server'
-    end)
-
-    if ok then return result end
-    return 'Server'
-end
+    -- Ad: starts with "[Advertisement]" or "[AD]"
+    if string.find(text, '^%[Advertisement%]') or string.find(text, '^%[AD%]') then
+        return 'Ad'
+    end
 
     -- Default: Server
     return 'Server'
@@ -178,10 +166,6 @@ end
 -- ============================================================================
 
 function M.addMessage(text, color, explicitCategory)
-    -- Safety: ensure text is a string
-    if text == nil then text = "" end
-    if type(text) ~= "string" then text = tostring(text) end
-
     local timestamp = formatTimestamp()
     -- If explicitCategory is provided, use it directly; otherwise auto-detect
     local category = explicitCategory or M.detectCategory(text)
