@@ -181,29 +181,6 @@ imgui.OnFrame(
         -- Header bar
         imgui.TextColored(imgui.ImVec4(0.2, 0.8, 0.9, opacity), "ChatEngine")
 
-        imgui.Spacing()
-
-        -- Filter tabs row
-        for i = 1, #filterOptions do
-            local filter = filterOptions[i]
-            if i > 1 then imgui.SameLine() end
-
-            -- Highlight active tab
-            if currentFilter == filter then
-                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.5, 0.9, opacity))
-                imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.6, 1.0, opacity))
-            end
-
-            if imgui.SmallButton(filter) then
-                currentFilter = filter
-            end
-
-            if currentFilter == filter then
-                imgui.PopStyleColor(2)
-            end
-        end
-
-        imgui.Spacing()
         imgui.Separator()
 
         -- Message area
@@ -214,8 +191,7 @@ imgui.OnFrame(
         imgui.BeginChild("##chatmessages", imgui.ImVec2(-1, childHeight), false)
 
         if chatlib then
-            local category = mapFilterToCategory(currentFilter)
-            local messages = chatlib.getFilteredMessages(category)
+            local messages = chatlib.getMessages()
 
             for i = 1, #messages do
                 local msg = messages[i]
