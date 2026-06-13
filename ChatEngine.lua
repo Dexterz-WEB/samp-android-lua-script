@@ -301,6 +301,9 @@ imgui.OnFrame(
         -- Scrollable child region for messages
         imgui.BeginChild("##ChatScroll", imgui.ImVec2(0, -1), false, 0)
 
+        -- Enable text wrapping so long messages don't get cut off
+        imgui.PushTextWrapPos(0)
+
         -- Get messages and render
         if chatlib then
             local allMessages = chatlib.getMessages()
@@ -406,6 +409,7 @@ imgui.OnFrame(
             end
         end
 
+        imgui.PopTextWrapPos()
         imgui.EndChild()
 
         -- Reset font scale
