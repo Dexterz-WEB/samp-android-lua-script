@@ -202,6 +202,30 @@ imgui.OnFrame(
                     imgui.SameLine()
                 end
 
+                -- Category prefix with color
+                if msg.category and msg.category ~= "Server" then
+                    local prefixColors = {
+                        PM = imgui.ImVec4(0.2, 0.9, 0.4, opacity),
+                        OOC = imgui.ImVec4(0.6, 0.6, 0.6, opacity),
+                        IC = imgui.ImVec4(0.9, 0.9, 1.0, opacity),
+                        Ad = imgui.ImVec4(1.0, 0.85, 0.2, opacity),
+                        Action = imgui.ImVec4(0.8, 0.4, 0.9, opacity)
+                    }
+                    local prefixLabels = {
+                        PM = "[PM] ",
+                        OOC = "[OOC] ",
+                        IC = "[IC] ",
+                        Ad = "[AD] ",
+                        Action = "[ACT] "
+                    }
+                    local color = prefixColors[msg.category]
+                    local label = prefixLabels[msg.category]
+                    if color and label then
+                        imgui.TextColored(color, label)
+                        imgui.SameLine(0, 0)
+                    end
+                end
+
                 -- Render color segments
                 if msg.parsed_segments then
                     for j = 1, #msg.parsed_segments do
