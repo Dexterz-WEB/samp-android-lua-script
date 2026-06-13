@@ -89,6 +89,13 @@ local cfgAccentBar = imgui.new.bool(iniData.Settings.showAccentBar ~= false)
 -- Auto-scroll flag
 local shouldAutoScroll = false
 
+-- Chat mode: "NEWEST" or "NEARBY"
+local chatMode = "NEWEST"
+local NEARBY_MAX_DISTANCE = 50
+
+-- Debug mode
+local cfgDebug = imgui.new.bool(false)
+
 -- ============================================================================
 -- CATEGORY COLORS (for accent bars and prefixes)
 -- ============================================================================
@@ -112,6 +119,98 @@ local categoryPrefixes = {
 -- ============================================================================
 -- HELPER FUNCTIONS
 -- ============================================================================
+
+-- Check if a message is from a nearby player (within NEARBY_MAX_DISTANCE)
+-- Pattern: "playername (ID): message"
+-- Returns true if nearby or if can't determine (fallback show)
+local function isMessageNearby(msg)
+    if not msg or not msg.text then return false end
+
+    local text = msg.text
+    -- Pattern: "Name (ID): message"
+    local pName, pIdStr = text:match("^(%S+)%s*%((%d+)%):")
+
+    if not pName or not pIdStr then
+        if cfgDebug[0] then
+            sampAddChatMessage("{FF8800}[CE Debug] Pattern failed: " .. text:sub(1, 40), -1)
+        end
+        return false
+    end
+
+    local playerId = tonumber(pIdStr)
+    if not playerId then
+        if cfgDebug[0] then
+            sampAddChatMessage("{FF8800}[CE Debug] Invalid ID: " .. tostring(pIdStr), -1)
+        end
+        return false
+    end
+
+    -- Skip self
+    local localId = nil
+    pcall(function()
+        local _, lid = sampGetPlayerIdByCharHandle(PLAYER_PED)
+        localId = lid
+    end)
+    if localId and playerId == localId then
+        return true -- own messages always show
+    end
+
+    -- Get player handle
+    local handle = nil
+    local connected = false
+    pcall(function()
+        connected = sampIsPlayerConnected(playerId)
+    end)
+    if not connected then
+        if cfgDebug[0] then
+            sampAddChatMessage("{FF8800}[CE Debug] Player " .. playerId .. " not connected", -1)
+        end
+        return false
+    end
+
+    local gotHandle = false
+    pcall(function()
+        local result, h = sampGetCharHandleBySampPlayerId(playerId)
+        if result and h then
+            handle = h
+            gotHandle = true
+        end
+    end)
+    if not gotHandle then
+        if cfgDebug[0] then
+            sampAddChatMessage("{FF8800}[CE Debug] No handle for ID " .. playerId, -1)
+        end
+        return false
+    end
+
+    -- Get positions
+    local myX, myY, myZ = 0, 0, 0
+    local otherX, otherY, otherZ = 0, 0, 0
+    local gotPos = false
+    pcall(function()
+        myX, myY, myZ = getCharCoordinates(PLAYER_PED)
+        otherX, otherY, otherZ = getCharCoordinates(handle)
+        gotPos = true
+    end)
+    if not gotPos then
+        if cfgDebug[0] then
+            sampAddChatMessage("{FF8800}[CE Debug] Can't get coords for ID " .. playerId, -1)
+        end
+        return false
+    end
+
+    -- Distance check
+    local dx = otherX - myX
+    local dy = otherY - myY
+    local dz = otherZ - myZ
+    local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    if cfgDebug[0] then
+        sampAddChatMessage("{00FF00}[CE Debug] " .. pName .. " (ID:" .. playerId .. ") dist=" .. string.format("%.1f", dist) .. "m", -1)
+    end
+
+    return dist <= NEARBY_MAX_DISTANCE
+end
 
 local function saveConfig()
     iniData.Settings.enabled = cfgEnabled[0]
@@ -294,8 +393,17 @@ imgui.OnFrame(
         -- Apply font size scaling
         imgui.SetWindowFontScale(cfgFontSize[0] / 14.0)
 
-        -- Header: "Chat Engine" text + separator
+        -- Header: "Chat Engine" text + mode toggle + separator
         imgui.TextColored(imgui.ImVec4(0.4, 0.7, 1.0, masterAlpha), "Chat Engine")
+        imgui.SameLine()
+        local modeLabel = chatMode == "NEWEST" and "[NEWEST]" or "[NEARBY]"
+        if imgui.SmallButton(modeLabel) then
+            if chatMode == "NEWEST" then
+                chatMode = "NEARBY"
+            else
+                chatMode = "NEWEST"
+            end
+        end
         imgui.Separator()
 
         -- Scrollable child region for messages
@@ -310,6 +418,13 @@ imgui.OnFrame(
 
             for idx = 1, totalMessages do
                 local msg = allMessages[idx]
+
+                -- NEARBY mode: skip messages not from nearby players
+                if chatMode == "NEARBY" then
+                    if not isMessageNearby(msg) then
+                        goto continue_msg
+                    end
+                end
 
                 -- Gradient opacity: older = floor 0.5, newer = full opacity
                 local gradientAlpha = masterAlpha * math.max(0.5, idx / totalMessages)
@@ -397,6 +512,8 @@ imgui.OnFrame(
                         msg.text or ""
                     )
                 end
+
+                ::continue_msg::
             end
 
             -- Auto-scroll to bottom when new messages arrive
@@ -490,6 +607,19 @@ imgui.OnFrame(
         imgui.Text("Auto-hide Delay (seconds):")
         imgui.SetNextItemWidth(-1)
         imgui.SliderFloat("##autoHide", cfgAutoHide, 3.0, 30.0, "%.0f")
+
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
+
+        -- Debug
+        imgui.TextColored(imgui.ImVec4(1, 0.5, 0.2, 1), "DEBUG")
+        imgui.Spacing()
+
+        local debugLabel = cfgDebug[0] and "[ON] Debug Nearby" or "[OFF] Debug Nearby"
+        if imgui.Button(debugLabel, imgui.ImVec2(-1, 30 * DPI_SCALE)) then
+            cfgDebug[0] = not cfgDebug[0]
+        end
 
         imgui.Spacing()
         imgui.Separator()
