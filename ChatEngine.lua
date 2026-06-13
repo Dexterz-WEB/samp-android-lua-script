@@ -306,7 +306,20 @@ if sampev_loaded then
                 sampAddChatMessage("{00FFFF}[CE Debug] onPlayerChatBubble ID:" .. playerId .. " dist:" .. string.format("%.0f", distance) .. " msg:" .. message:sub(1, 30), -1)
             end
         end
-        -- Don't return false — let the game render its own bubble too (or return false to hide default)
+    end
+
+    -- Intercept our own outgoing chat — add to nearby buffer too
+    function sampev.onSendChat(message)
+        if chatInterceptEnabled then
+            local myId = nil
+            local myName = nil
+            pcall(function()
+                local _, lid = sampGetPlayerIdByCharHandle(PLAYER_PED)
+                myId = lid
+                myName = sampGetPlayerNickname(lid)
+            end)
+            addNearbyMessage(myId or 0, message, 0xFFFFFFFF)
+        end
     end
 end
 
