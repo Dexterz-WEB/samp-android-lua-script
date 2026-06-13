@@ -90,6 +90,15 @@ local cfgAccentBar = imgui.new.bool(iniData.Settings.showAccentBar ~= false)
 local shouldAutoScroll = false
 
 -- ============================================================================
+-- BUBBLE SYSTEM STATE
+-- ============================================================================
+local activeBubbles = {}           -- Array of active bubble objects
+local MAX_BUBBLES_PER_PLAYER = 3
+local BUBBLE_MAX_DISTANCE = 10
+local BUBBLE_MAX_WIDTH_RATIO = 0.6
+local BUBBLE_MAX_LINES = 4
+
+-- ============================================================================
 -- CATEGORY COLORS (for accent bars and prefixes)
 -- ============================================================================
 local categoryColors = {
@@ -112,6 +121,223 @@ local categoryPrefixes = {
 -- ============================================================================
 -- HELPER FUNCTIONS
 -- ============================================================================
+
+-- ============================================================================
+-- BUBBLE SYSTEM HELPERS
+-- ============================================================================
+
+-- 3D distance between two points
+local function getDistance3D(x1, y1, z1, x2, y2, z2)
+    local dx = x2 - x1
+    local dy = y2 - y1
+    local dz = z2 - z1
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+-- Project world coordinates to screen using manual camera projection
+-- Same math as DevBox3D (3DRenderTest.lua) - proven working on MonetLoader
+local function projectWorldToScreen(worldX, worldY, worldZ)
+    -- Get camera position and look-at point
+    local camX, camY, camZ, lookX, lookY, lookZ
+    local ok1 = pcall(function()
+        camX, camY, camZ = getActiveCameraCoordinates()
+    end)
+    local ok2 = pcall(function()
+        lookX, lookY, lookZ = getActiveCameraPointAt()
+    end)
+
+    if not ok1 or not ok2 or not camX or not lookX then
+        return 0, 0, false
+    end
+
+    local screenW, screenH = 800, 600
+    pcall(function()
+        screenW, screenH = getScreenResolution()
+    end)
+
+    -- Build camera forward vector
+    local fwdX = lookX - camX
+    local fwdY = lookY - camY
+    local fwdZ = lookZ - camZ
+    local fwdLen = math.sqrt(fwdX * fwdX + fwdY * fwdY + fwdZ * fwdZ)
+    if fwdLen < 0.001 then return 0, 0, false end
+    fwdX = fwdX / fwdLen
+    fwdY = fwdY / fwdLen
+    fwdZ = fwdZ / fwdLen
+
+    -- Calculate camera pitch angle
+    local fwdLen2D = math.sqrt(fwdX * fwdX + fwdY * fwdY)
+    local camPitch = math.deg(math.atan2(fwdZ, fwdLen2D))
+
+    -- Tilt angle limit: if abs(pitch) exceeds 30 degrees, hide
+    if math.abs(camPitch) > 30 then
+        return 0, 0, false
+    end
+
+    -- World up
+    local wupX, wupY, wupZ = 0, 0, 1
+
+    -- Right = forward x world_up (normalize)
+    local rightX = fwdY * wupZ - fwdZ * wupY
+    local rightY = fwdZ * wupX - fwdX * wupZ
+    local rightZ = fwdX * wupY - fwdY * wupX
+    local rightLen = math.sqrt(rightX * rightX + rightY * rightY + rightZ * rightZ)
+    if rightLen < 0.001 then return 0, 0, false end
+    rightX = rightX / rightLen
+    rightY = rightY / rightLen
+    rightZ = rightZ / rightLen
+
+    -- Up = right x forward
+    local upX = rightY * fwdZ - rightZ * fwdY
+    local upY = rightZ * fwdX - rightX * fwdZ
+    local upZ = rightX * fwdY - rightY * fwdX
+
+    -- Vector from camera to target
+    local dx = worldX - camX
+    local dy = worldY - camY
+    local dz = worldZ - camZ
+
+    -- Project onto camera axes
+    local dotFwd   = dx * fwdX   + dy * fwdY   + dz * fwdZ
+    local dotRight = dx * rightX + dy * rightY + dz * rightZ
+    local dotUp    = dx * upX    + dy * upY    + dz * upZ
+
+    -- Behind camera check
+    if dotFwd <= 0.1 then return 0, 0, false end
+
+    -- Perspective projection (GTA SA uses ~70 degree FOV)
+    local fov = 70.0
+    local aspect = screenW / screenH
+    local tanHalfFov = math.tan(math.rad(fov * 0.5))
+
+    local ndcX = (dotRight / dotFwd) / (tanHalfFov * aspect)
+    local ndcY = (dotUp / dotFwd) / tanHalfFov
+
+    -- NDC to screen (Y is flipped - screen Y goes down)
+    local sx = (ndcX * 0.5 + 0.5) * screenW + 9
+    local sy = (-ndcY * 0.5 + 0.5) * screenH + 4
+
+    -- Check if on screen (with margin)
+    if sx >= -200 and sx <= screenW + 200 and sy >= -200 and sy <= screenH + 200 then
+        return sx, sy, true
+    end
+
+    return 0, 0, false
+end
+
+-- Wrap text to fit within maxWidth pixels, max BUBBLE_MAX_LINES lines
+local function wrapBubbleText(text, maxWidth)
+    local lines = {}
+    local words = {}
+
+    -- Split text into words
+    for word in text:gmatch("%S+") do
+        words[#words + 1] = word
+    end
+
+    if #words == 0 then
+        return {""}
+    end
+
+    local currentLine = ""
+    for i = 1, #words do
+        local testLine
+        if currentLine == "" then
+            testLine = words[i]
+        else
+            testLine = currentLine .. " " .. words[i]
+        end
+
+        local textSize = imgui.CalcTextSize(testLine)
+        if textSize.x > maxWidth and currentLine ~= "" then
+            -- Current line is full, push it
+            lines[#lines + 1] = currentLine
+            currentLine = words[i]
+
+            -- Check max lines
+            if #lines >= BUBBLE_MAX_LINES then
+                -- Truncate last line with "..."
+                local lastLine = lines[#lines]
+                local truncSize = imgui.CalcTextSize(lastLine .. "...")
+                if truncSize.x <= maxWidth then
+                    lines[#lines] = lastLine .. "..."
+                else
+                    -- Try to shorten last line to fit "..."
+                    lines[#lines] = lastLine .. "..."
+                end
+                return lines
+            end
+        else
+            currentLine = testLine
+        end
+    end
+
+    -- Push remaining line
+    if currentLine ~= "" then
+        lines[#lines + 1] = currentLine
+    end
+
+    -- If over max lines, truncate
+    if #lines > BUBBLE_MAX_LINES then
+        lines[BUBBLE_MAX_LINES] = lines[BUBBLE_MAX_LINES] .. "..."
+        -- Remove extra lines
+        for i = #lines, BUBBLE_MAX_LINES + 1, -1 do
+            lines[i] = nil
+        end
+    end
+
+    if #lines == 0 then
+        lines[1] = text
+    end
+
+    return lines
+end
+
+-- Create a new chat bubble for a player
+local function createBubble(playerId, playerName, text)
+    -- Calculate word count for duration
+    local wordCount = 0
+    for _ in text:gmatch("%S+") do
+        wordCount = wordCount + 1
+    end
+
+    -- Duration: word_count * 0.5, clamped [3, 8]
+    local duration = wordCount * 0.5
+    if duration < 3 then duration = 3 end
+    if duration > 8 then duration = 8 end
+
+    -- Create bubble object
+    local bubble = {
+        playerId = playerId,
+        playerName = playerName or ("ID " .. playerId),
+        text = text,
+        startTime = os.clock(),
+        duration = duration,
+        alpha = 1.0
+    }
+
+    -- Count existing bubbles for this player and enforce max
+    local playerBubbleCount = 0
+    for i = 1, #activeBubbles do
+        if activeBubbles[i].playerId == playerId then
+            playerBubbleCount = playerBubbleCount + 1
+        end
+    end
+
+    -- Remove oldest bubbles for this player if at max
+    while playerBubbleCount >= MAX_BUBBLES_PER_PLAYER do
+        for i = 1, #activeBubbles do
+            if activeBubbles[i].playerId == playerId then
+                table.remove(activeBubbles, i)
+                playerBubbleCount = playerBubbleCount - 1
+                break
+            end
+        end
+    end
+
+    -- Add new bubble
+    activeBubbles[#activeBubbles + 1] = bubble
+end
 
 local function saveConfig()
     iniData.Settings.enabled = cfgEnabled[0]
@@ -226,6 +452,30 @@ if sampev_loaded then
                 formatted = "ID " .. playerId .. ": " .. text
             end
             chatlib.addMessage(formatted, 0xFFFFFFFF, "IC")
+
+            -- Create chat bubble for other players (not self) within distance
+            pcall(function()
+                -- Get local player ID
+                local _, localId = sampGetPlayerIdByCharHandle(PLAYER_PED)
+                if localId and playerId ~= localId then
+                    -- Check if player is connected
+                    if sampIsPlayerConnected(playerId) then
+                        -- Get other player's character handle
+                        local result, handle = sampGetCharHandleBySampPlayerId(playerId)
+                        if result and handle then
+                            -- Get positions
+                            local myX, myY, myZ = getCharCoordinates(PLAYER_PED)
+                            local otherX, otherY, otherZ = getCharCoordinates(handle)
+                            -- Distance check
+                            local dist = getDistance3D(myX, myY, myZ, otherX, otherY, otherZ)
+                            if dist <= BUBBLE_MAX_DISTANCE then
+                                createBubble(playerId, playerName or ("ID " .. playerId), text)
+                            end
+                        end
+                    end
+                end
+            end)
+
             return false
         end
     end
@@ -508,6 +758,209 @@ imgui.OnFrame(
         imgui.End()
         imgui.PopStyleColor(7)
         imgui.PopStyleVar(4)
+    end
+)
+
+-- ============================================================================
+-- BUBBLE RENDERING (imgui.OnFrame) - Separate from chat window
+-- Uses GetBackgroundDrawList for overlay rendering
+-- ============================================================================
+imgui.OnFrame(
+    function()
+        return true
+    end,
+    function(self)
+        self.HideCursor = true
+
+        -- Skip if no active bubbles
+        if #activeBubbles == 0 then return end
+
+        local now = os.clock()
+
+        -- Get screen resolution
+        local screenW, screenH = 800, 600
+        pcall(function()
+            screenW, screenH = getScreenResolution()
+        end)
+
+        -- Get local player position
+        local myX, myY, myZ = 0, 0, 0
+        local gotMyPos = pcall(function()
+            myX, myY, myZ = getCharCoordinates(PLAYER_PED)
+        end)
+        if not gotMyPos then return end
+
+        local drawList = imgui.GetBackgroundDrawList()
+
+        -- Track cumulative Y offset per player for stacking
+        local playerStackOffset = {}
+
+        -- Remove expired bubbles (iterate backward for safe removal)
+        local i = #activeBubbles
+        while i >= 1 do
+            local bubble = activeBubbles[i]
+            local elapsed = now - bubble.startTime
+            if elapsed >= bubble.duration then
+                table.remove(activeBubbles, i)
+            end
+            i = i - 1
+        end
+
+        -- Render bubbles (newer bubbles are at end of array, render them first at bottom)
+        -- Iterate from newest to oldest so newer bubbles are at anchor, older ones stack above
+        for idx = #activeBubbles, 1, -1 do
+            local bubble = activeBubbles[idx]
+            local elapsed = now - bubble.startTime
+
+            -- Calculate alpha with fade out in last 1 second
+            local bubbleAlpha = 1.0
+            local timeRemaining = bubble.duration - elapsed
+            if timeRemaining <= 1.0 then
+                bubbleAlpha = math.max(0.0, timeRemaining)
+            end
+
+            if bubbleAlpha <= 0.01 then
+                -- Skip rendering if fully transparent
+            else
+                -- Get other player handle and position
+                local otherX, otherY, otherZ = 0, 0, 0
+                local gotOther = false
+                pcall(function()
+                    if sampIsPlayerConnected(bubble.playerId) then
+                        local result, handle = sampGetCharHandleBySampPlayerId(bubble.playerId)
+                        if result and handle then
+                            otherX, otherY, otherZ = getCharCoordinates(handle)
+                            gotOther = true
+                        end
+                    end
+                end)
+
+                if gotOther then
+                    -- Distance check (hide if > 10 but don't remove)
+                    local dist = getDistance3D(myX, myY, myZ, otherX, otherY, otherZ)
+                    if dist <= BUBBLE_MAX_DISTANCE then
+                        -- Apply world offsets
+                        local projX = otherX + 0.1
+                        local projY = otherY
+                        local projZ = otherZ + 1.3
+
+                        -- Project to screen
+                        local sx, sy, valid = projectWorldToScreen(projX, projY, projZ)
+
+                        if valid then
+                            -- Initialize stack offset for this player
+                            if not playerStackOffset[bubble.playerId] then
+                                playerStackOffset[bubble.playerId] = 0
+                            end
+
+                            local scale = DPI_SCALE
+                            local pad = 8 * scale
+                            local maxWidth = screenW * BUBBLE_MAX_WIDTH_RATIO
+                            local rounding = 4 * scale
+
+                            -- Wrap text
+                            local lines = wrapBubbleText(bubble.text, maxWidth - pad * 2)
+
+                            -- Measure text dimensions
+                            local maxLineWidth = 0
+                            local lineHeight = 0
+                            for li = 1, #lines do
+                                local ts = imgui.CalcTextSize(lines[li])
+                                if ts.x > maxLineWidth then
+                                    maxLineWidth = ts.x
+                                end
+                                if ts.y > lineHeight then
+                                    lineHeight = ts.y
+                                end
+                            end
+
+                            -- Player name measurement
+                            local nameText = bubble.playerName
+                            local nameSize = imgui.CalcTextSize(nameText)
+                            local nameHeight = nameSize.y * 0.85  -- slightly smaller
+                            if nameSize.x > maxLineWidth then
+                                maxLineWidth = nameSize.x
+                            end
+
+                            -- Box dimensions
+                            local boxW = maxLineWidth + pad * 2
+                            local totalTextH = nameHeight + 2 * scale + lineHeight * #lines
+                            local boxH = totalTextH + pad * 2
+
+                            -- Anchor at bottom-center, box expands upward
+                            local anchorX = sx
+                            local anchorY = sy - playerStackOffset[bubble.playerId]
+
+                            local boxX = anchorX - boxW * 0.5
+                            local boxY = anchorY - boxH
+
+                            -- Draw background rectangle
+                            local bgColor = imgui.ColorConvertFloat4ToU32(
+                                imgui.ImVec4(0.0, 0.0, 0.0, 0.85 * bubbleAlpha)
+                            )
+                            drawList:AddRectFilled(
+                                imgui.ImVec2(boxX, boxY),
+                                imgui.ImVec2(boxX + boxW, boxY + boxH),
+                                bgColor,
+                                rounding
+                            )
+
+                            -- Draw player name (colored, dimmer)
+                            local nameX = boxX + pad
+                            local nameY = boxY + pad
+                            local nameColor = imgui.ColorConvertFloat4ToU32(
+                                imgui.ImVec4(0.4, 0.8, 1.0, 0.7 * bubbleAlpha)
+                            )
+                            local nameShadowColor = imgui.ColorConvertFloat4ToU32(
+                                imgui.ImVec4(0.0, 0.0, 0.0, 0.7 * bubbleAlpha)
+                            )
+                            -- Name shadow
+                            drawList:AddText(
+                                imgui.ImVec2(nameX + 1 * scale, nameY + 1 * scale),
+                                nameShadowColor,
+                                nameText
+                            )
+                            -- Name text
+                            drawList:AddText(
+                                imgui.ImVec2(nameX, nameY),
+                                nameColor,
+                                nameText
+                            )
+
+                            -- Draw message lines
+                            local textStartY = nameY + nameHeight + 2 * scale
+                            local textColor = imgui.ColorConvertFloat4ToU32(
+                                imgui.ImVec4(1.0, 1.0, 1.0, bubbleAlpha)
+                            )
+                            local shadowColor = imgui.ColorConvertFloat4ToU32(
+                                imgui.ImVec4(0.0, 0.0, 0.0, 0.8 * bubbleAlpha)
+                            )
+
+                            for li = 1, #lines do
+                                local lineY = textStartY + (li - 1) * lineHeight
+                                local lineX = boxX + pad
+
+                                -- Shadow (1px offset)
+                                drawList:AddText(
+                                    imgui.ImVec2(lineX + 1 * scale, lineY + 1 * scale),
+                                    shadowColor,
+                                    lines[li]
+                                )
+                                -- Main text
+                                drawList:AddText(
+                                    imgui.ImVec2(lineX, lineY),
+                                    textColor,
+                                    lines[li]
+                                )
+                            end
+
+                            -- Update stack offset for this player (next bubble renders above)
+                            playerStackOffset[bubble.playerId] = playerStackOffset[bubble.playerId] + boxH + 4 * scale
+                        end
+                    end
+                end
+            end
+        end
     end
 )
 
