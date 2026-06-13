@@ -1,6 +1,6 @@
 -- ============================================================================
--- CHAT ENGINE v2.0 - Style 4: Bottom Fade Gradient + Auto-hide
--- Pure floating text with gradient opacity, colored accent bars, auto-hide
+-- CHAT ENGINE v3.0 - Scrollable BeginChild + Auto-hide + Discord Dark Theme
+-- Combines v1.0 proven scrollable structure with v2.0 visual improvements
 -- Compatible with MonetLoader Android
 -- ============================================================================
 
@@ -53,6 +53,9 @@ end
 if iniData.Settings.showAccentBar == nil then
     iniData.Settings.showAccentBar = true
 end
+if iniData.Settings.showTimestamp == nil then
+    iniData.Settings.showTimestamp = true
+end
 
 -- ============================================================================
 -- STATE VARIABLES
@@ -68,13 +71,11 @@ local STATE_FADE_OUT = 3
 local chatState = STATE_HIDDEN
 local stateStartTime = os.clock()
 local lastInsertionCount = 0
+local prevInsertionCount = 0 -- for auto-scroll detection
 
 -- Fade durations
 local FADE_IN_DURATION = 0.5
 local FADE_OUT_DURATION = 2.0
-
--- Max visible messages
-local MAX_VISIBLE_MESSAGES = 15
 
 -- Config panel state
 local showConfigWindow = imgui.new.bool(false)
@@ -85,6 +86,9 @@ local cfgAutoHide = imgui.new.float(iniData.Settings.autoHideDelay or 10)
 local cfgEnabled = imgui.new.bool(iniData.Settings.enabled ~= false)
 local cfgTimestamp = imgui.new.bool(iniData.Settings.showTimestamp ~= false)
 local cfgAccentBar = imgui.new.bool(iniData.Settings.showAccentBar ~= false)
+
+-- Auto-scroll flag
+local shouldAutoScroll = false
 
 -- ============================================================================
 -- CATEGORY COLORS (for accent bars and prefixes)
@@ -194,6 +198,7 @@ local function checkNewMessages()
     local currentCount = chatlib.getInsertionCount()
     if currentCount > lastInsertionCount then
         lastInsertionCount = currentCount
+        shouldAutoScroll = true
         onNewMessage()
     end
 end
@@ -229,27 +234,24 @@ end
 
 -- ============================================================================
 -- SHADOW TEXT HELPER
--- Renders black shadow text offset by 1px, then colored text on top
+-- Renders black shadow text offset by 1px via DrawList:AddText
 -- ============================================================================
-local shadowOffset = 1
-
 local function renderTextWithShadow(drawList, screenX, screenY, text, r, g, b, alpha)
     -- Shadow (black, offset 1px right and down)
+    local offsetPx = 1 * DPI_SCALE
     drawList:AddText(
-        imgui.ImVec2(screenX + shadowOffset * DPI_SCALE, screenY + shadowOffset * DPI_SCALE),
+        imgui.ImVec2(screenX + offsetPx, screenY + offsetPx),
         imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0, 0, 0, alpha * 0.8)),
         text
     )
 end
 
 -- ============================================================================
--- CHAT WINDOW (imgui.OnFrame) - Style 4: Floating text with gradient
+-- CHAT WINDOW (imgui.OnFrame) - Scrollable BeginChild + Discord Dark Theme
 -- ============================================================================
 imgui.OnFrame(
     function()
-        -- Always run detection and state update every frame regardless of visibility.
-        -- Returning true unconditionally ensures MonetLoader never skips evaluation,
-        -- so messages arriving in HIDDEN state are never missed.
+        -- Always run state polling every frame
         checkNewMessages()
         updateStateMachine()
         return true
@@ -262,21 +264,22 @@ imgui.OnFrame(
         local masterAlpha = getMasterAlpha()
         if masterAlpha <= 0.01 then return end
 
+        -- Position and size
         local posX = 10 * DPI_SCALE
         local posY = 10 * DPI_SCALE
+        local sw, sh = getScreenResolution()
+        local winW = sw * 0.45
+        local winH = sh * 0.35
 
-        -- Calculate window size based on screen width (responsive)
-        local sw, _ = getScreenResolution()
-        local lineHeight = (cfgFontSize[0] + 4) * DPI_SCALE
-        local winW = sw * 0.5
-        local winH = (MAX_VISIBLE_MESSAGES + 2) * lineHeight + 20 * DPI_SCALE
-
-        -- Push invisible window styles (no background, no border)
-        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 0)
-        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(4 * DPI_SCALE, 4 * DPI_SCALE))
+        -- Push window styles - Discord dark blue-grey theme
+        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 8 * DPI_SCALE)
+        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(8 * DPI_SCALE, 8 * DPI_SCALE))
         imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(2 * DPI_SCALE, 2 * DPI_SCALE))
-        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0))
+        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.08, 0.09, 0.14, 0.5 * masterAlpha))
+        imgui.PushStyleColor(imgui.Col.ChildBg, imgui.ImVec4(0.06, 0.07, 0.11, 0.4 * masterAlpha))
         imgui.PushStyleColor(imgui.Col.Border, imgui.ImVec4(0, 0, 0, 0))
+        imgui.PushStyleColor(imgui.Col.ScrollbarBg, imgui.ImVec4(0.05, 0.05, 0.08, 0.3 * masterAlpha))
+        imgui.PushStyleColor(imgui.Col.ScrollbarGrab, imgui.ImVec4(0.2, 0.2, 0.3, 0.4 * masterAlpha))
 
         imgui.SetNextWindowPos(imgui.ImVec2(posX, posY), imgui.Cond.Always)
         imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
@@ -286,48 +289,42 @@ imgui.OnFrame(
             + imgui.WindowFlags.NoMove
             + imgui.WindowFlags.NoScrollbar
             + imgui.WindowFlags.NoInputs
-            + imgui.WindowFlags.NoBackground
 
-        imgui.Begin("##ChatEngineFloating", nil, flags)
+        imgui.Begin("##ChatEngineWindow", nil, flags)
 
         -- Apply font size scaling
         imgui.SetWindowFontScale(cfgFontSize[0] / 14.0)
 
-        -- CE badge (tiny, semi-transparent)
-        imgui.TextColored(imgui.ImVec4(0.5, 0.7, 0.9, 0.3 * masterAlpha), "CE")
+        -- Header: "Chat Engine" text + separator
+        imgui.TextColored(imgui.ImVec4(0.4, 0.7, 1.0, masterAlpha), "Chat Engine")
+        imgui.Separator()
 
-        -- Get messages
+        -- Scrollable child region for messages
+        imgui.BeginChild("##ChatScroll", imgui.ImVec2(0, -1), false, 0)
+
+        -- Get messages and render
         if chatlib then
             local allMessages = chatlib.getMessages()
-
-            -- Get last MAX_VISIBLE_MESSAGES
-            local startIdx = #allMessages - MAX_VISIBLE_MESSAGES + 1
-            if startIdx < 1 then startIdx = 1 end
-            local visibleMessages = {}
-            for i = startIdx, #allMessages do
-                visibleMessages[#visibleMessages + 1] = allMessages[i]
-            end
-
-            local totalVisible = #visibleMessages
+            local totalMessages = #allMessages
             local drawList = imgui.GetWindowDrawList()
-            local windowPos = imgui.GetWindowPos()
+            local lineHeight = (cfgFontSize[0] + 4) * DPI_SCALE
 
-            for idx = 1, totalVisible do
-                local msg = visibleMessages[idx]
+            for idx = 1, totalMessages do
+                local msg = allMessages[idx]
 
-                -- Gradient opacity: older (top) = transparent, newer (bottom) = solid
-                -- Floor at 0.5 so oldest message stays clearly readable
-                local gradientAlpha = masterAlpha * math.max(0.5, idx / totalVisible)
+                -- Gradient opacity: older = floor 0.5, newer = full opacity
+                local gradientAlpha = masterAlpha * math.max(0.5, idx / totalMessages)
 
-                -- Get cursor position for this line
+                -- Get cursor/window positions for DrawList operations
                 local cursorPos = imgui.GetCursorPos()
+                local windowPos = imgui.GetWindowPos()
                 local screenX = windowPos.x + cursorPos.x
                 local screenY = windowPos.y + cursorPos.y
 
-                -- Draw accent bar (thin colored bar on the left)
-                if cfgAccentBar[0] and msg.category then
+                -- Draw accent bar (thin colored bar 3px on the left)
+                if cfgAccentBar[0] and msg.category and msg.category ~= "Server" then
                     local barColor = categoryColors[msg.category]
-                    if barColor and msg.category ~= "Server" then
+                    if barColor then
                         local barWidth = 3 * DPI_SCALE
                         local barHeight = lineHeight - 2 * DPI_SCALE
                         drawList:AddRectFilled(
@@ -349,7 +346,6 @@ imgui.OnFrame(
 
                 -- Timestamp [HH:MM]
                 if cfgTimestamp[0] and msg.timestamp then
-                    -- Shadow for timestamp
                     local tsCurPos = imgui.GetCursorPos()
                     local tsScreenX = windowPos.x + tsCurPos.x
                     local tsScreenY = windowPos.y + tsCurPos.y
@@ -361,12 +357,11 @@ imgui.OnFrame(
                     imgui.SameLine(0, 4 * DPI_SCALE)
                 end
 
-                -- Category prefix
+                -- Category prefix (not for Server)
                 if msg.category and msg.category ~= "Server" then
                     local catColor = categoryColors[msg.category]
                     local catPrefix = categoryPrefixes[msg.category]
                     if catColor and catPrefix then
-                        -- Shadow for prefix
                         local pfxCurPos = imgui.GetCursorPos()
                         local pfxScreenX = windowPos.x + pfxCurPos.x
                         local pfxScreenY = windowPos.y + pfxCurPos.y
@@ -390,7 +385,7 @@ imgui.OnFrame(
                         local segCurPos = imgui.GetCursorPos()
                         local segScreenX = windowPos.x + segCurPos.x
                         local segScreenY = windowPos.y + segCurPos.y
-                        -- Brighten colors (D) - boost by 20%
+                        -- Brighten colors by 20%, capped at 1.0
                         local br = math.min(1.0, seg.r * 1.2)
                         local bg = math.min(1.0, seg.g * 1.2)
                         local bb = math.min(1.0, seg.b * 1.2)
@@ -412,13 +407,21 @@ imgui.OnFrame(
                     )
                 end
             end
+
+            -- Auto-scroll to bottom when new messages arrive
+            if shouldAutoScroll then
+                imgui.SetScrollHereY(1.0)
+                shouldAutoScroll = false
+            end
         end
+
+        imgui.EndChild()
 
         -- Reset font scale
         imgui.SetWindowFontScale(1.0)
 
         imgui.End()
-        imgui.PopStyleColor(2)
+        imgui.PopStyleColor(5)
         imgui.PopStyleVar(3)
     end
 )
@@ -455,7 +458,7 @@ imgui.OnFrame(
         -- Title
         imgui.TextColored(imgui.ImVec4(0.2, 0.9, 0.6, 1), "CHATENGINE SETTINGS")
         imgui.SameLine()
-        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "v2.0")
+        imgui.TextColored(imgui.ImVec4(0.5, 0.5, 0.5, 1), "v3.0")
         imgui.Spacing()
         imgui.Separator()
         imgui.Spacing()
@@ -535,7 +538,7 @@ function main()
         end
     end)
 
-    -- Add startup message to custom chat buffer
+    -- Add startup message to custom chat buffer (not sampAddChatMessage)
     if chatlib then
         chatlib.addMessage("{00FFFF}[ChatEngine] {FFFFFF}Loaded! Use {FFFF00}/chatcfg{FFFFFF} to configure, {FFFF00}/ceoff{FFFFFF} to toggle.", -1)
     end
