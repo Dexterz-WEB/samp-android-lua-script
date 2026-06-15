@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Create lib/vehiclehud_lib.lua - the reusable gauge rendering library with all drawing functions, vehicle database, color utilities, and vehicle type detection",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create lib/vehiclehud_lib.lua with module table M = {} and return M at end, following the pattern from lib/chatengine_lib.lua and lib/worldtoscreen_lib.lua",
     "Implement VEHICLE_DATABASE table containing all SA-MP vehicle model IDs (400-611) with fields: name (string), maxSpeed (number in km/h), type (string: 'Car', 'Bike', 'Boat', 'Plane', 'Helicopter', 'Bicycle', 'Trailer'). Include all 212 vehicles.",
@@ -33,5 +33,5 @@
     "Verify VEHICLE_DATABASE has entries for IDs 400-611 by grepping for key model IDs like 411 (Infernus), 560 (Sultan), 481 (BMX)"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "LuaJIT was not pre-installed; installed via dnf. Syntax validation passes (luajit -bl returns 0). All 212 vehicle entries (400-611) verified present. All 13 public functions defined on M table. No pcall in drawing functions."
 }
