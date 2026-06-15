@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-004",
+  "type": "fix",
+  "description": "Fix ABGR color format for DrawList colors (needle shows dark blue instead of red) and add auto-scaling based on screen resolution",
+  "status": "in_progress",
+  "steps": [
+    "Fix COLORS table in VehicleHUD.lua to use correct ABGR format for red/colored values",
+    "Fix default colors in lib/vehiclehud_lib.lua drawHealthBar function (yellow and red)",
+    "Fix default tick color in lib/vehiclehud_lib.lua drawTickMarks function (red zone)",
+    "Add auto-scaling based on screen resolution in VehicleHUD.lua main() function"
+  ],
+  "acceptance_criteria": [
+    "COLORS.needle uses ABGR format so it renders as bright red (not blue)",
+    "COLORS.tickRed uses ABGR format for red ticks",
+    "COLORS.engineOff uses ABGR format for red indicator",
+    "Health bar default colors use ABGR format for yellow and red",
+    "Tick marks default red zone uses ABGR format",
+    "Auto-scaling computes scale factor from screen width (base 1080px)",
+    "DPI is updated in main() after isSampAvailable()",
+    "Both files pass luajit -bl syntax validation"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/samp-android-lua-script && luajit -bl VehicleHUD.lua > /dev/null 2>&1; echo $?  (should output 0)",
+    "Run: cd /projects/sandbox/samp-android-lua-script && luajit -bl lib/vehiclehud_lib.lua > /dev/null 2>&1; echo $?  (should output 0)",
+    "Grep for needle color 0xFF0000EE to verify ABGR red",
+    "Grep for autoScale to verify auto-scaling implementation"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}

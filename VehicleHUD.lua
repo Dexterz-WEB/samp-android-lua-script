@@ -15,7 +15,7 @@ local jsoncfg = require 'jsoncfg'
 local vhud_lib = require 'vehiclehud_lib'
 
 -- ============================================================================
--- DPI SCALING
+-- DPI SCALING (auto-scale based on screen resolution)
 -- ============================================================================
 local DPI = MONET_DPI_SCALE or 1.0
 
@@ -76,18 +76,19 @@ local cfgPosYFloat = imgui.new.float(config.posY or 0)
 
 -- ============================================================================
 -- COLORS (muted, classic SA feel)
+-- NOTE: MonetLoader DrawList uses ABGR format: 0xAABBGGRR
 -- ============================================================================
 local COLORS = {
-    text = 0xFFEEEEEE,
-    textDim = 0xFFAAAAAA,
-    needle = 0xFFEE1111,
-    tickWhite = 0xFFDDDDDD,
-    tickRed = 0xFFCC4444,
-    arcBg = 0x55FFFFFF,
-    speedText = 0xFFFFFFFF,
-    engineOn = 0xFF33FF66,
-    engineOff = 0xFFFF3333,
-    pivotCenter = 0xFFCCCCCC,
+    text = 0xFFEEEEEE,       -- white/light gray (symmetric, same in ABGR)
+    textDim = 0xFFAAAAAA,    -- gray (symmetric, same in ABGR)
+    needle = 0xFF0000EE,     -- Bright RED in ABGR (A=FF, B=00, G=00, R=EE)
+    tickWhite = 0xFFDDDDDD,  -- white (symmetric, same in ABGR)
+    tickRed = 0xFF4444CC,    -- Muted red in ABGR (A=FF, B=44, G=44, R=CC)
+    arcBg = 0x55FFFFFF,      -- faint white (symmetric, same in ABGR)
+    speedText = 0xFFFFFFFF,  -- white (symmetric, same in ABGR)
+    engineOn = 0xFF33FF66,   -- GREEN in ABGR (keep as-is, green is middle byte)
+    engineOff = 0xFF3333FF,  -- RED in ABGR (A=FF, B=33, G=33, R=FF)
+    pivotCenter = 0xFFCCCCCC, -- gray (symmetric, same in ABGR)
 }
 
 -- ============================================================================
@@ -361,10 +362,10 @@ local function renderStyleDigital(dl, posX, posY, alpha)
         imgui.ImVec2(barX + barW, barY + barH),
         applyAlpha(0xFF222233, alpha), 3 * s
     )
-    -- Bar fill
-    local barColor = 0xFF33FF66
-    if speedPercent > 0.8 then barColor = 0xFFFF3333
-    elseif speedPercent > 0.6 then barColor = 0xFFFFCC33 end
+    -- Bar fill (colors in ABGR format)
+    local barColor = 0xFF33FF66  -- green in ABGR
+    if speedPercent > 0.8 then barColor = 0xFF3333FF       -- red in ABGR
+    elseif speedPercent > 0.6 then barColor = 0xFF33CCFF end  -- yellow/amber in ABGR
 
     if speedPercent > 0 then
         dl:AddRectFilled(
@@ -438,9 +439,9 @@ local function renderStyleMinimal(dl, posX, posY, alpha)
         applyAlpha(0xFF222233, alpha), 2 * s
     )
 
-    local healthColor = 0xFF33CC33
-    if cachedHealth < 0.3 then healthColor = 0xFFCC3333
-    elseif cachedHealth < 0.6 then healthColor = 0xFFCCCC33 end
+    local healthColor = 0xFF33CC33  -- green in ABGR
+    if cachedHealth < 0.3 then healthColor = 0xFF3333CC       -- red in ABGR
+    elseif cachedHealth < 0.6 then healthColor = 0xFF33CCCC end  -- yellow in ABGR
 
     if cachedHealth > 0 then
         dl:AddRectFilled(
@@ -831,6 +832,17 @@ end
 function main()
     -- Wait for SA-MP to be available
     while not isSampAvailable() do wait(100) end
+
+    -- Auto-adjust DPI based on screen resolution
+    local screenW, screenH = 800, 600
+    pcall(function()
+        screenW, screenH = getScreenResolution()
+    end)
+    -- Base design for 1080px width. Scale proportionally.
+    local autoScale = screenW / 1080.0
+    if autoScale < 0.6 then autoScale = 0.6 end
+    if autoScale > 2.5 then autoScale = 2.5 end
+    DPI = (MONET_DPI_SCALE or 1.0) * autoScale
 
     -- Register chat command
     sampRegisterChatCommand("vhud", handleCommand)

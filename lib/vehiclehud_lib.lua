@@ -461,7 +461,7 @@ function M.drawTickMarks(dl, cx, cy, radius, count, options)
         else
             -- Classic SA style: white ticks, subtle red only at the very end
             if t >= redZoneStart then
-                tickColor = 0xFFCC4444  -- subtle red for danger zone
+                tickColor = 0xFF4444CC  -- subtle red in ABGR for danger zone
             else
                 tickColor = defaultColor  -- white/light gray
             end
@@ -541,18 +541,19 @@ function M.drawHealthBar(dl, x, y, width, height, percent, options)
     if percent > 1 then percent = 1 end
 
     -- Determine fill color based on health percent (green -> yellow -> red)
+    -- NOTE: Colors in ABGR format (0xAABBGGRR) for MonetLoader DrawList
     local fillColor = options.fillColor
     if not fillColor then
         if percent > 0.6 then
-            fillColor = 0xFF44CC44  -- green
+            fillColor = 0xFF44CC44  -- green (symmetric in ABGR, G is middle byte)
         elseif percent > 0.3 then
             -- Interpolate green to yellow
             local t = (0.6 - percent) / 0.3
-            fillColor = M.lerpColor(0xFF44CC44, 0xFFCCCC44, t)
+            fillColor = M.lerpColor(0xFF44CC44, 0xFF44CCCC, t)
         else
             -- Interpolate yellow to red
             local t = (0.3 - percent) / 0.3
-            fillColor = M.lerpColor(0xFFCCCC44, 0xFFCC4444, t)
+            fillColor = M.lerpColor(0xFF44CCCC, 0xFF4444CC, t)
         end
     end
 
