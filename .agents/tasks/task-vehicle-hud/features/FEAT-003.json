@@ -1,0 +1,39 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Add imgui config window to VehicleHUD.lua with dark theme, button-based toggles, style/unit selectors, sliders, and /vhud command update",
+  "status": "in_progress",
+  "steps": [
+    "Add showConfigWindow state variable for controlling config window visibility",
+    "Add a second imgui.OnFrame for config window rendering with dark theme styling matching PlayerStatsWidget.lua",
+    "Implement toggle buttons (not Checkbox) for Enable/Disable using imgui.Button with color push",
+    "Implement style selector with 3 buttons (Classic/Digital/Minimal) with active highlight",
+    "Implement unit selector with 2 buttons (km/h / mph) with active highlight",
+    "Implement Scale slider (0.5 - 2.0) and Opacity slider (0.3 - 1.0)",
+    "Implement Reset Position and Reset All buttons",
+    "Implement Close/Save button",
+    "Update /vhud command to toggle config window, add /vhud toggle for quick enable/disable",
+    "Set self.HideCursor = false when config window is open"
+  ],
+  "acceptance_criteria": [
+    "Config window opens/closes via /vhud command",
+    "/vhud toggle provides quick enable/disable without opening window",
+    "All existing subcommands still work (style, unit, scale, opacity, reset)",
+    "Window uses Button-based toggles (no imgui.Checkbox)",
+    "Window uses PushStyleVarFloat/PushStyleVarVec2 (not plain PushStyleVar)",
+    "Window flags combined with + (not bitwise OR)",
+    "Dark theme with WindowRounding 12, FrameRounding 6, WindowPadding 15/12, ItemSpacing 8/6",
+    "Config window is a SEPARATE imgui.OnFrame from HUD rendering",
+    "HideCursor set to false when config window is open",
+    "No pcall inside imgui render functions",
+    "File passes luajit -bl syntax validation"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/samp-android-lua-script && luajit -bl VehicleHUD.lua > /dev/null 2>&1; echo $?  (should output 0)",
+    "Grep for second imgui.OnFrame to verify separate render loop",
+    "Grep for showConfigWindow to verify state variable",
+    "Verify no imgui.Checkbox usage in the file"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}

@@ -70,6 +70,13 @@ local isDragging = false
 local dragOffsetX = 0
 local dragOffsetY = 0
 
+-- Config window state
+local showConfigWindow = false
+
+-- Config window imgui float buffers
+local cfgScaleFloat = imgui.new.float(config.scale)
+local cfgOpacityFloat = imgui.new.float(config.opacity)
+
 -- ============================================================================
 -- COLORS
 -- ============================================================================
@@ -472,8 +479,8 @@ imgui.OnFrame(
             posX, posY = getDefaultPos(screenW, screenH)
         end
 
-        -- Hide cursor unless dragging
-        self.HideCursor = not isDragging
+        -- Hide cursor unless dragging or config window is open
+        self.HideCursor = not isDragging and not showConfigWindow
 
         -- Drag window - separate small window for input handling
         imgui.SetNextWindowPos(imgui.ImVec2(posX, posY))
@@ -542,15 +549,228 @@ imgui.OnFrame(
 )
 
 -- ============================================================================
+-- CONFIG WINDOW (separate imgui.OnFrame)
+-- ============================================================================
+imgui.OnFrame(
+    function() return showConfigWindow end,
+    function(self)
+        self.HideCursor = false
+
+        local io = imgui.GetIO()
+        local screenW = io.DisplaySize.x
+        local screenH = io.DisplaySize.y
+        local winW = 340
+        local winH = 460
+
+        -- Push dark theme styles
+        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12)
+        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(15, 12))
+        imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 6)
+        imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(8, 6))
+
+        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.08, 0.08, 0.1, 0.95))
+        imgui.PushStyleColor(imgui.Col.FrameBg, imgui.ImVec4(0.15, 0.15, 0.2, 1.0))
+        imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.2, 0.3, 1.0))
+        imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.3, 0.5, 1.0))
+        imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
+        imgui.PushStyleColor(imgui.Col.SliderGrab, imgui.ImVec4(0.3, 0.6, 0.9, 1.0))
+        imgui.PushStyleColor(imgui.Col.SliderGrabActive, imgui.ImVec4(0.4, 0.7, 1.0, 1.0))
+
+        imgui.SetNextWindowPos(imgui.ImVec2((screenW - winW) / 2, (screenH - winH) / 2), imgui.Cond.FirstUseEver)
+        imgui.SetNextWindowSize(imgui.ImVec2(winW, winH))
+
+        if imgui.Begin("VehicleHUD Config", nil,
+            imgui.WindowFlags.NoResize +
+            imgui.WindowFlags.NoCollapse +
+            imgui.WindowFlags.NoSavedSettings) then
+
+            -- Title
+            imgui.TextColored(imgui.ImVec4(0.0, 1.0, 0.67, 1.0), "VEHICLE HUD")
+            imgui.SameLine()
+            imgui.TextDisabled("v1.0")
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+
+            -- Enable/Disable Toggle (Button-based, no Checkbox)
+            imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "GENERAL")
+            imgui.Spacing()
+
+            if config.enabled then
+                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.6, 0.3, 1.0))
+                imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.15, 0.7, 0.4, 1.0))
+                imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.1, 0.5, 0.25, 1.0))
+                if imgui.Button("HUD: ENABLED", imgui.ImVec2(-1, 30)) then
+                    config.enabled = false
+                    saveConfig()
+                end
+                imgui.PopStyleColor(3)
+            else
+                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.6, 0.15, 0.15, 1.0))
+                imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.7, 0.2, 0.2, 1.0))
+                imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.5, 0.1, 0.1, 1.0))
+                if imgui.Button("HUD: DISABLED", imgui.ImVec2(-1, 30)) then
+                    config.enabled = true
+                    saveConfig()
+                end
+                imgui.PopStyleColor(3)
+            end
+
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+
+            -- Style Selector
+            imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "STYLE")
+            imgui.Spacing()
+
+            local styleNames = { "Classic", "Digital", "Minimal" }
+            local btnWidth = (imgui.GetContentRegionAvail().x - 16) / 3
+
+            for i = 1, 3 do
+                if i > 1 then imgui.SameLine() end
+                if config.style == i then
+                    imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
+                    imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.2, 0.5, 0.9, 1.0))
+                    imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.1, 0.35, 0.7, 1.0))
+                    if imgui.Button(styleNames[i], imgui.ImVec2(btnWidth, 28)) then end
+                    imgui.PopStyleColor(3)
+                else
+                    if imgui.Button(styleNames[i], imgui.ImVec2(btnWidth, 28)) then
+                        config.style = i
+                        saveConfig()
+                    end
+                end
+            end
+
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+
+            -- Unit Selector
+            imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "UNIT")
+            imgui.Spacing()
+
+            local unitBtnWidth = (imgui.GetContentRegionAvail().x - 8) / 2
+
+            -- km/h button
+            if config.unit == "kmh" then
+                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
+                imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.2, 0.5, 0.9, 1.0))
+                imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.1, 0.35, 0.7, 1.0))
+                if imgui.Button("km/h", imgui.ImVec2(unitBtnWidth, 28)) then end
+                imgui.PopStyleColor(3)
+            else
+                if imgui.Button("km/h", imgui.ImVec2(unitBtnWidth, 28)) then
+                    config.unit = "kmh"
+                    saveConfig()
+                end
+            end
+
+            imgui.SameLine()
+
+            -- mph button
+            if config.unit == "mph" then
+                imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
+                imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.2, 0.5, 0.9, 1.0))
+                imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.1, 0.35, 0.7, 1.0))
+                if imgui.Button("mph", imgui.ImVec2(unitBtnWidth, 28)) then end
+                imgui.PopStyleColor(3)
+            else
+                if imgui.Button("mph", imgui.ImVec2(unitBtnWidth, 28)) then
+                    config.unit = "mph"
+                    saveConfig()
+                end
+            end
+
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+
+            -- Scale Slider
+            imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "SCALE & OPACITY")
+            imgui.Spacing()
+
+            imgui.Text("Scale:")
+            imgui.SetNextItemWidth(-1)
+            cfgScaleFloat[0] = config.scale
+            if imgui.SliderFloat("##scale", cfgScaleFloat, 0.5, 2.0, "%.2f") then
+                config.scale = cfgScaleFloat[0]
+            end
+
+            imgui.Text("Opacity:")
+            imgui.SetNextItemWidth(-1)
+            cfgOpacityFloat[0] = config.opacity
+            if imgui.SliderFloat("##opacity", cfgOpacityFloat, 0.3, 1.0, "%.2f") then
+                config.opacity = cfgOpacityFloat[0]
+            end
+
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+
+            -- Reset buttons
+            imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "RESET")
+            imgui.Spacing()
+
+            local resetBtnWidth = (imgui.GetContentRegionAvail().x - 8) / 2
+
+            imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.5, 0.3, 0.1, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.6, 0.4, 0.15, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.4, 0.25, 0.08, 1.0))
+            if imgui.Button("Reset Position", imgui.ImVec2(resetBtnWidth, 28)) then
+                config.posX = nil
+                config.posY = nil
+                saveConfig()
+                sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Position reset", 0xFFFFFF)
+            end
+            imgui.PopStyleColor(3)
+
+            imgui.SameLine()
+
+            imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.6, 0.15, 0.15, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.7, 0.2, 0.2, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.5, 0.1, 0.1, 1.0))
+            if imgui.Button("Reset All", imgui.ImVec2(resetBtnWidth, 28)) then
+                config.enabled = defaultConfig.enabled
+                config.style = defaultConfig.style
+                config.unit = defaultConfig.unit
+                config.scale = defaultConfig.scale
+                config.opacity = defaultConfig.opacity
+                config.posX = nil
+                config.posY = nil
+                saveConfig()
+                sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} All settings reset to defaults", 0xFFFFFF)
+            end
+            imgui.PopStyleColor(3)
+
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+
+            -- Close / Save button
+            imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.1, 0.5, 0.3, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.15, 0.6, 0.4, 1.0))
+            imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.08, 0.4, 0.25, 1.0))
+            if imgui.Button("SAVE & CLOSE", imgui.ImVec2(-1, 35)) then
+                saveConfig()
+                showConfigWindow = false
+            end
+            imgui.PopStyleColor(3)
+        end
+        imgui.End()
+        imgui.PopStyleColor(7)
+        imgui.PopStyleVar(4)
+    end
+)
+
+-- ============================================================================
 -- COMMAND HANDLER
 -- ============================================================================
 local function handleCommand(args)
     if args == "" then
-        -- Toggle enabled
-        config.enabled = not config.enabled
-        saveConfig()
-        local state = config.enabled and "ON" or "OFF"
-        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} HUD " .. state, 0xFFFFFF)
+        -- Toggle config window open/close
+        showConfigWindow = not showConfigWindow
         return
     end
 
@@ -559,7 +779,14 @@ local function handleCommand(args)
     if not cmd then return end
     cmd = cmd:lower()
 
-    if cmd == "style" then
+    if cmd == "toggle" then
+        -- Quick enable/disable without opening window
+        config.enabled = not config.enabled
+        saveConfig()
+        local state = config.enabled and "ON" or "OFF"
+        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} HUD " .. state, 0xFFFFFF)
+
+    elseif cmd == "style" then
         local n = tonumber(val)
         if n and n >= 1 and n <= 3 then
             config.style = math.floor(n)
@@ -611,7 +838,7 @@ local function handleCommand(args)
         sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Settings reset to defaults", 0xFFFFFF)
 
     else
-        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Commands: /vhud [style|unit|scale|opacity|reset]", 0xFFFFFF)
+        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Commands: /vhud [toggle|style|unit|scale|opacity|reset]", 0xFFFFFF)
     end
 end
 
@@ -626,7 +853,7 @@ function main()
     sampRegisterChatCommand("vhud", handleCommand)
 
     -- Load message
-    sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Loaded! Use /vhud to toggle", 0xFFFFFF)
+    sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Loaded! Use /vhud to open config", 0xFFFFFF)
 
     -- Main loop: update data outside render
     while true do
