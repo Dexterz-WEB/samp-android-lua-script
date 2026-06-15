@@ -124,12 +124,47 @@ local categoryPrefixes = {
 -- HELPER FUNCTIONS
 -- ============================================================================
 
+-- Detect nearby message type: "IC", "ACT" (/me), or "DO" (/do)
+local function detectNearbyType(message, playerName)
+    if not message or message == "" then return "IC" end
+    if not playerName then return "IC" end
+
+    -- /me format: "* PlayerName ..." (name at front after "* ")
+    if message:sub(1, 2) == "* " then
+        local afterStar = message:sub(3)
+        if afterStar:sub(1, #playerName) == playerName then
+            return "ACT"
+        end
+        -- /do format: "* ... PlayerName" (name at end)
+        if afterStar:sub(-#playerName) == playerName then
+            return "DO"
+        end
+        -- Starts with * but can't determine — default ACT
+        return "ACT"
+    end
+
+    return "IC"
+end
+
+-- Nearby category colors
+local nearbyPrefixes = {
+    IC  = nil,           -- no prefix for normal chat
+    ACT = "[ACT] ",
+    DO  = "[DO] "
+}
+local nearbyPrefixColors = {
+    ACT = imgui.ImVec4(0.8, 0.4, 0.9, 1.0),    -- purple
+    DO  = imgui.ImVec4(0.4, 0.8, 1.0, 1.0)      -- light blue
+}
+
 -- Add message to nearby buffer
 local function addNearbyMessage(playerId, message, color)
     local playerName = nil
     pcall(function()
         playerName = sampGetPlayerNickname(playerId)
     end)
+
+    local nearbyType = detectNearbyType(message, playerName)
 
     local formatted = ""
     if playerName then
@@ -145,7 +180,8 @@ local function addNearbyMessage(playerId, message, color)
         timestamp = timestamp,
         color = color,
         playerId = playerId,
-        playerName = playerName
+        playerName = playerName,
+        nearbyType = nearbyType
     }
 
     nearbyMessages[#nearbyMessages + 1] = entry
@@ -156,7 +192,7 @@ local function addNearbyMessage(playerId, message, color)
     end
 
     if cfgDebug[0] then
-        sampAddChatMessage("{00FF00}[CE Debug] Nearby bubble: " .. (playerName or "?") .. " (ID:" .. playerId .. "): " .. message:sub(1, 30), -1)
+        sampAddChatMessage("{00FF00}[CE Debug] Nearby [" .. nearbyType .. "]: " .. (playerName or "?") .. " (ID:" .. playerId .. "): " .. message:sub(1, 30), -1)
     end
 end
 
@@ -458,8 +494,22 @@ imgui.OnFrame(
                     imgui.SameLine(0, 4 * DPI_SCALE)
                 end
 
-                -- Category prefix (not for Server)
-                if msg.category and msg.category ~= "Server" then
+                -- Category prefix (not for Server) / Nearby type prefix
+                if msg.nearbyType and msg.nearbyType ~= "IC" then
+                    -- Nearby mode prefix (ACT/DO)
+                    local nPrefix = nearbyPrefixes[msg.nearbyType]
+                    local nColor = nearbyPrefixColors[msg.nearbyType]
+                    if nPrefix and nColor then
+                        local pfxScreenPos = imgui.GetCursorScreenPos()
+                        renderTextWithShadow(drawList, pfxScreenPos.x, pfxScreenPos.y, nPrefix, nColor.x, nColor.y, nColor.z, gradientAlpha)
+                        imgui.TextColored(
+                            imgui.ImVec4(nColor.x, nColor.y, nColor.z, gradientAlpha),
+                            nPrefix
+                        )
+                        imgui.SameLine(0, 0)
+                    end
+                elseif msg.category and msg.category ~= "Server" then
+                    -- Newest mode prefix (PM/OOC/IC/AD/ACT)
                     local catColor = categoryColors[msg.category]
                     local catPrefix = categoryPrefixes[msg.category]
                     if catColor and catPrefix then
