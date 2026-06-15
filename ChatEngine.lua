@@ -620,7 +620,7 @@ imgui.OnFrame(
 )
 
 -- ============================================================================
--- MODE TOGGLE BUTTON (positioned at top-right corner of chat window)
+-- MODE TOGGLE (invisible overlay on chat header area)
 -- ============================================================================
 imgui.OnFrame(
     function()
@@ -629,29 +629,23 @@ imgui.OnFrame(
     function(self)
         self.HideCursor = false
 
-        local sw, sh = getScreenResolution()
-        local chatWinW = sw * 0.45
         local chatPosX = 10 * DPI_SCALE
         local chatPosY = 10 * DPI_SCALE
 
-        -- Button size
-        local btnW = 80 * DPI_SCALE
-        local btnH = 25 * DPI_SCALE
+        -- Overlay covers the header area of chat window
+        local overlayW = 200 * DPI_SCALE
+        local overlayH = 25 * DPI_SCALE
 
-        -- Position: top-right of chat window (nempel di samping header)
-        local btnX = chatPosX + chatWinW - btnW - 5 * DPI_SCALE
-        local btnY = chatPosY + 2 * DPI_SCALE
-
-        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 6 * DPI_SCALE)
-        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(2 * DPI_SCALE, 2 * DPI_SCALE))
-        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.0, 0.0, 0.0, 0.0))
+        imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 0)
+        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
+        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0, 0, 0, 0))
         imgui.PushStyleColor(imgui.Col.Border, imgui.ImVec4(0, 0, 0, 0))
-        imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.15, 0.2, 0.35, 0.9))
-        imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.25, 0.35, 0.55, 1.0))
-        imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.2, 0.4, 0.8, 1.0))
+        imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0, 0, 0, 0))
+        imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(1, 1, 1, 0.05))
+        imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(1, 1, 1, 0.1))
 
-        imgui.SetNextWindowPos(imgui.ImVec2(btnX, btnY), imgui.Cond.Always)
-        imgui.SetNextWindowSize(imgui.ImVec2(btnW, btnH))
+        imgui.SetNextWindowPos(imgui.ImVec2(chatPosX + 8 * DPI_SCALE, chatPosY + 8 * DPI_SCALE), imgui.Cond.Always)
+        imgui.SetNextWindowSize(imgui.ImVec2(overlayW, overlayH))
 
         local flags = imgui.WindowFlags.NoTitleBar
             + imgui.WindowFlags.NoResize
@@ -659,10 +653,9 @@ imgui.OnFrame(
             + imgui.WindowFlags.NoScrollbar
             + imgui.WindowFlags.NoBackground
 
-        imgui.Begin("##ChatModeToggle", nil, flags)
+        imgui.Begin("##ChatModeOverlay", nil, flags)
 
-        local modeLabel = chatMode == "NEWEST" and "NEWEST" or "NEARBY"
-        if imgui.SmallButton(modeLabel) then
+        if imgui.InvisibleButton("##modeToggle", imgui.ImVec2(overlayW, overlayH)) then
             if chatMode == "NEWEST" then
                 chatMode = "NEARBY"
             else
