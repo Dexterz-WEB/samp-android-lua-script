@@ -80,7 +80,7 @@ local cfgPosYFloat = imgui.new.float(config.posY or 0)
 local COLORS = {
     text = 0xFFEEEEEE,
     textDim = 0xFFAAAAAA,
-    needle = 0xFFDD2222,
+    needle = 0xFFEE1111,
     tickWhite = 0xFFDDDDDD,
     tickRed = 0xFFCC4444,
     arcBg = 0x55FFFFFF,
@@ -103,7 +103,7 @@ end
 local function getHudSize()
     local s = config.scale * DPI
     if config.style == 1 then
-        return 240 * s, 200 * s
+        return 240 * s, 230 * s
     elseif config.style == 2 then
         return 200 * s, 180 * s
     else
@@ -189,14 +189,13 @@ end
 local function updateStateMachine()
     local nowInVehicle = isPlayerInVehicle()
 
-    -- State transitions
-    if nowInVehicle and not inVehicle then
-        -- Just entered vehicle
+    if nowInVehicle then
+        -- Player in vehicle: should be visible
         if currentState == "HIDDEN" or currentState == "FADE_OUT" then
             currentState = "FADE_IN"
         end
-    elseif not nowInVehicle and inVehicle then
-        -- Just exited vehicle
+    else
+        -- Player not in vehicle: should be hidden
         if currentState == "VISIBLE" or currentState == "FADE_IN" then
             currentState = "FADE_OUT"
         end
@@ -229,7 +228,7 @@ end
 local function renderStyleClassic(dl, posX, posY, alpha)
     local s = config.scale * DPI
     local w = 240 * s
-    local h = 200 * s
+    local h = 230 * s
 
     -- NO background panel - transparent, gauge floats directly on game
 
@@ -298,30 +297,30 @@ local function renderStyleClassic(dl, posX, posY, alpha)
     -- Digital speed display below gauge center
     local speedStr = tostring(math.floor(displaySpeed))
     local unitStr = config.unit == "kmh" and "km/h" or "mph"
-    dl:AddText(imgui.ImVec2(cx - 14 * s, cy + 14 * s), applyAlpha(COLORS.speedText, alpha), speedStr)
-    dl:AddText(imgui.ImVec2(cx - 10 * s, cy + 30 * s), applyAlpha(COLORS.textDim, alpha), unitStr)
+    dl:AddText(imgui.ImVec2(cx - 14 * s, cy + 18 * s), applyAlpha(COLORS.speedText, alpha), speedStr)
+    dl:AddText(imgui.ImVec2(cx - 10 * s, cy + 36 * s), applyAlpha(COLORS.textDim, alpha), unitStr)
 
     -- Vehicle info below gauge (subtle text)
-    local infoY = posY + 145 * s
+    local infoY = posY + 155 * s
 
     -- Vehicle name
     dl:AddText(imgui.ImVec2(posX + 10 * s, infoY), applyAlpha(COLORS.text, alpha), cachedVehicleName)
 
     -- Gear
     local gearStr = "Gear: " .. tostring(cachedGear)
-    dl:AddText(imgui.ImVec2(posX + 10 * s, infoY + 16 * s), applyAlpha(COLORS.textDim, alpha), gearStr)
+    dl:AddText(imgui.ImVec2(posX + 10 * s, infoY + 20 * s), applyAlpha(COLORS.textDim, alpha), gearStr)
 
     -- Engine status
     local engineStr = "ENG: " .. (cachedEngineOn and "ON" or "OFF")
     local engineColor = cachedEngineOn and COLORS.engineOn or COLORS.engineOff
-    dl:AddText(imgui.ImVec2(posX + 10 * s, infoY + 32 * s), applyAlpha(engineColor, alpha), engineStr)
+    dl:AddText(imgui.ImVec2(posX + 10 * s, infoY + 40 * s), applyAlpha(engineColor, alpha), engineStr)
 
     -- Direction/heading
     local dirStr = cachedDirection .. " (" .. tostring(math.floor(cachedHeading)) .. ")"
-    dl:AddText(imgui.ImVec2(posX + w - 90 * s, infoY + 16 * s), applyAlpha(COLORS.textDim, alpha), dirStr)
+    dl:AddText(imgui.ImVec2(posX + w - 90 * s, infoY + 20 * s), applyAlpha(COLORS.textDim, alpha), dirStr)
 
     -- Health bar at bottom of gauge area
-    vhud_lib.drawHealthBar(dl, posX + 10 * s, posY + h - 16 * s, w - 20 * s, 10 * s, cachedHealth, {
+    vhud_lib.drawHealthBar(dl, posX + 10 * s, posY + h - 10 * s, w - 20 * s, 10 * s, cachedHealth, {
         bgColor = applyAlpha(0x44000000, alpha),
         rounding = 3 * s,
     })
