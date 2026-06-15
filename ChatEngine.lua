@@ -632,9 +632,9 @@ imgui.OnFrame(
         local chatPosX = 10 * DPI_SCALE
         local chatPosY = 10 * DPI_SCALE
 
-        -- Overlay covers the header area of chat window
-        local overlayW = 200 * DPI_SCALE
-        local overlayH = 25 * DPI_SCALE
+        -- Overlay covers just the [NEWEST]/[NEARBY] text
+        local overlayW = 80 * DPI_SCALE
+        local overlayH = 22 * DPI_SCALE
 
         imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 0)
         imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
@@ -644,7 +644,9 @@ imgui.OnFrame(
         imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(1, 1, 1, 0.05))
         imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(1, 1, 1, 0.1))
 
-        imgui.SetNextWindowPos(imgui.ImVec2(chatPosX + 8 * DPI_SCALE, chatPosY + 8 * DPI_SCALE), imgui.Cond.Always)
+        -- "Chat Engine " is ~100px wide, mode text starts after
+        local textOffset = 100 * DPI_SCALE
+        imgui.SetNextWindowPos(imgui.ImVec2(chatPosX + 8 * DPI_SCALE + textOffset, chatPosY + 8 * DPI_SCALE), imgui.Cond.Always)
         imgui.SetNextWindowSize(imgui.ImVec2(overlayW, overlayH))
 
         local flags = imgui.WindowFlags.NoTitleBar
