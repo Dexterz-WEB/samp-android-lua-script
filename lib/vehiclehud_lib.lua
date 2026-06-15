@@ -324,7 +324,7 @@ local DEFAULT_MAX_ANGLE = math.rad(0)
 function M.drawSemicircleBackground(dl, cx, cy, radius, color, segments)
     -- Approximate semicircle using a series of horizontal filled rects
     -- from top of semicircle down to center line
-    segments = segments or 20
+    segments = segments or 60
     local step = radius / segments
 
     for i = 0, segments - 1 do

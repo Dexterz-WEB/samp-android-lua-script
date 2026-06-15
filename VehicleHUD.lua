@@ -248,7 +248,7 @@ local function renderStyleClassic(dl, posX, posY, colors)
     local maxAngle = math.rad(0)
 
     -- Draw dark semicircle background shape (pie/fan)
-    vhud_lib.drawSemicircleBackground(dl, cx, cy, radius + 18 * s, colors.bgDark, 40)
+    vhud_lib.drawSemicircleBackground(dl, cx, cy, radius + 18 * s, colors.bgDark, 80)
 
     -- Draw tick marks - white with subtle red at end (last 18%)
     local tickCount = 27
@@ -315,25 +315,25 @@ local function renderStyleClassic(dl, posX, posY, colors)
         rounding = 3 * s,
     })
 
-    -- Vehicle info to the RIGHT of semicircle (more right, higher up)
+    -- Vehicle info to the RIGHT of semicircle
     local infoX = cx + radius + 25 * s
-    local infoStartY = cy - 55 * s
+    local infoStartY = cy - 70 * s
+
+    -- Direction/heading (at top)
+    local dirStr = cachedDirection .. " " .. tostring(math.floor(cachedHeading))
+    dl:AddText(imgui.ImVec2(infoX, infoStartY), colors.textDim, dirStr)
 
     -- Vehicle name
-    dl:AddText(imgui.ImVec2(infoX, infoStartY), colors.text, cachedVehicleName)
+    dl:AddText(imgui.ImVec2(infoX, infoStartY + 16 * s), colors.text, cachedVehicleName)
 
     -- Engine status
     local engineStr = cachedEngineOn and "ENG ON" or "ENG OFF"
     local engineColor = cachedEngineOn and colors.engineOn or colors.engineOff
-    dl:AddText(imgui.ImVec2(infoX, infoStartY + 16 * s), engineColor, engineStr)
+    dl:AddText(imgui.ImVec2(infoX, infoStartY + 32 * s), engineColor, engineStr)
 
     -- Gear
     local gearStr = "G" .. tostring(cachedGear)
-    dl:AddText(imgui.ImVec2(infoX, infoStartY + 32 * s), colors.textDim, gearStr)
-
-    -- Direction/heading
-    local dirStr = cachedDirection .. " " .. tostring(math.floor(cachedHeading))
-    dl:AddText(imgui.ImVec2(infoX, infoStartY + 48 * s), colors.textDim, dirStr)
+    dl:AddText(imgui.ImVec2(infoX, infoStartY + 48 * s), colors.textDim, gearStr)
 end
 
 -- ============================================================================
