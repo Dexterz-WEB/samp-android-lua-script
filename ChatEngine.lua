@@ -365,11 +365,28 @@ if sampev_loaded then
     -- Intercept chat bubble RPC — this gives us playerId + message + distance
     function sampev.onPlayerChatBubble(playerId, color, distance, duration, message)
         if chatInterceptEnabled then
-            -- Add to nearby buffer
-            addNearbyMessage(playerId, message, color)
+            -- Distance check: only add to nearby if player within 5 meters
+            local isNearby = false
+            pcall(function()
+                local result, handle = sampGetCharHandleBySampPlayerId(playerId)
+                if result and handle then
+                    local myX, myY, myZ = getCharCoordinates(PLAYER_PED)
+                    local otherX, otherY, otherZ = getCharCoordinates(handle)
+                    local dx = otherX - myX
+                    local dy = otherY - myY
+                    local dz = otherZ - myZ
+                    local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+                    if dist <= 5 then
+                        isNearby = true
+                    end
+                    if cfgDebug[0] then
+                        sampAddChatMessage("{00FFFF}[CE Debug] Bubble ID:" .. playerId .. " dist:" .. string.format("%.1f", dist) .. "m " .. (isNearby and "NEAR" or "FAR"), -1)
+                    end
+                end
+            end)
 
-            if cfgDebug[0] then
-                sampAddChatMessage("{00FFFF}[CE Debug] onPlayerChatBubble ID:" .. playerId .. " dist:" .. string.format("%.0f", distance) .. " msg:" .. message:sub(1, 30), -1)
+            if isNearby then
+                addNearbyMessage(playerId, message, color)
             end
         end
     end
