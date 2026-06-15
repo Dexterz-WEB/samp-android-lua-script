@@ -290,15 +290,15 @@ local function renderStyleClassic(dl, posX, posY, colors)
     dl:AddCircleFilled(imgui.ImVec2(cx, cy), 7 * s, colors.pivotCenter)
     dl:AddCircleFilled(imgui.ImVec2(cx, cy), 3.5 * s, colors.needle)
 
-    -- Digital speed display below center (centered)
+    -- Digital speed + unit INSIDE semicircle (above center, centered)
     local speedStr = tostring(math.floor(displaySpeed))
     local unitStr = config.unit == "kmh" and "km/h" or "mph"
     local speedTextW = #speedStr * 7 * s
-    dl:AddText(imgui.ImVec2(cx - speedTextW * 0.5, cy + 12 * s), colors.speedText, speedStr)
+    dl:AddText(imgui.ImVec2(cx - speedTextW * 0.5, cy - 38 * s), colors.speedText, speedStr)
     local unitTextW = #unitStr * 5.5 * s
-    dl:AddText(imgui.ImVec2(cx - unitTextW * 0.5, cy + 30 * s), colors.textDim, unitStr)
+    dl:AddText(imgui.ImVec2(cx - unitTextW * 0.5, cy - 22 * s), colors.textDim, unitStr)
 
-    -- Health bar directly below semicircle center line
+    -- Health bar directly below semicircle (at center line)
     local healthColor = colors.healthGreen
     if cachedHealth < 0.3 then
         healthColor = colors.healthRed
@@ -306,18 +306,18 @@ local function renderStyleClassic(dl, posX, posY, colors)
         healthColor = colors.healthYellow
     end
 
-    local healthBarY = cy + 4 * s
-    local healthBarW = radius * 2
-    local healthBarX = cx - radius
-    vhud_lib.drawHealthBar(dl, healthBarX, healthBarY, healthBarW, 8 * s, cachedHealth, {
+    local healthBarY = cy + 3 * s
+    local healthBarW = radius * 1.8
+    local healthBarX = cx - healthBarW * 0.5
+    vhud_lib.drawHealthBar(dl, healthBarX, healthBarY, healthBarW, 7 * s, cachedHealth, {
         bgColor = colors.barBg,
         fillColor = healthColor,
         rounding = 3 * s,
     })
 
-    -- Vehicle info to the RIGHT of semicircle
-    local infoX = cx + radius + 15 * s
-    local infoStartY = cy - 30 * s
+    -- Vehicle info to the RIGHT of semicircle (more right, higher up)
+    local infoX = cx + radius + 25 * s
+    local infoStartY = cy - 55 * s
 
     -- Vehicle name
     dl:AddText(imgui.ImVec2(infoX, infoStartY), colors.text, cachedVehicleName)
