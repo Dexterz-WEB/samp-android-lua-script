@@ -1,14 +1,14 @@
 {
   "task_id": "task-vehicle-hud",
-  "task_description": "Create VehicleHUD plugin for SA-MP Android MonetLoader with classic semicircle gauge speedometer, vehicle info display, drag positioning, state machine visibility, /vhud command system, and reusable gauge rendering library",
+  "task_description": "Create VehicleHUD plugin for SA-MP Android MonetLoader with classic SA-styled speedometer, transparent background, config-based positioning, state machine visibility, /vhud command system, and reusable gauge rendering library",
   "status": "completed",
-  "feature_order": ["FEAT-001", "FEAT-002"],
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004"],
   "blocked_reason": null,
   "verification": {
     "build": "pass",
     "tests": "pass",
     "test_quality": "pass",
     "docker_build": "skipped",
-    "summary": "Both files pass luajit bytecode compilation (syntax validation). Review fixes applied: DPI scaling, colorZones support, single fade location, simplified pcall, division-by-zero guard, dead code removal. All MonetLoader patterns followed correctly."
+    "summary": "Both files pass luajit bytecode compilation. SA-style refactor applied: 180-degree semicircle arc, transparent background (no RectFilled in Classic style), white/muted tick marks with subtle red zone at end only, thicker red needle (3.2*s) with larger pivot hub (7.5*s), speed numbers outside arc, drag system removed entirely, position via config sliders and /vhud pos command, HUD renders directly to BackgroundDrawList without imgui window, HideCursor=true for non-interactive HUD."
   }
 }

@@ -2,7 +2,7 @@
   "id": "FEAT-004",
   "type": "fix",
   "description": "Fix ABGR color format for DrawList colors (needle shows dark blue instead of red) and add auto-scaling based on screen resolution",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Fix COLORS table in VehicleHUD.lua to use correct ABGR format for red/colored values",
     "Fix default colors in lib/vehiclehud_lib.lua drawHealthBar function (yellow and red)",
@@ -26,5 +26,5 @@
     "Grep for autoScale to verify auto-scaling implementation"
   ],
   "blocked_reason": null,
-  "findings": null
+  "findings": "All syntax checks pass (luajit -bl returns 0 for both files). Fixed ABGR colors: needle 0xFFEE1111->0xFF0000EE, tickRed 0xFFCC4444->0xFF4444CC, engineOff 0xFFFF3333->0xFF3333FF. Fixed health bar interpolation colors (yellow 0xFFCCCC44->0xFF44CCCC, red 0xFFCC4444->0xFF4444CC). Also fixed inline speed bar colors in Digital style and health colors in Minimal style. Auto-scaling uses getScreenResolution() with pcall, base 1080px width, clamped 0.6-2.5."
 }
