@@ -106,7 +106,7 @@ end
 local function getHudSize()
     local s = config.scale * DPI
     if config.style == 1 then
-        return 260 * s, 240 * s
+        return 360 * s, 200 * s
     elseif config.style == 2 then
         return 200 * s, 160 * s
     else
@@ -234,12 +234,12 @@ end
 -- ============================================================================
 local function renderStyleClassic(dl, posX, posY, colors)
     local s = config.scale * DPI
-    local w = 260 * s
-    local h = 240 * s
+    local w = 360 * s
+    local h = 200 * s
 
     -- Arc gauge center
     local cx = posX + w * 0.5
-    local cy = posY + h * 0.48
+    local cy = posY + h * 0.55
     local radius = 90 * s
 
     -- 180-degree semicircle: from left (-180 deg) to right (0 deg)
@@ -290,33 +290,15 @@ local function renderStyleClassic(dl, posX, posY, colors)
     dl:AddCircleFilled(imgui.ImVec2(cx, cy), 7 * s, colors.pivotCenter)
     dl:AddCircleFilled(imgui.ImVec2(cx, cy), 3.5 * s, colors.needle)
 
-    -- Digital speed display below center
+    -- Digital speed display below center (centered)
     local speedStr = tostring(math.floor(displaySpeed))
     local unitStr = config.unit == "kmh" and "km/h" or "mph"
     local speedTextW = #speedStr * 7 * s
-    dl:AddText(imgui.ImVec2(cx - speedTextW * 0.5, cy + 14 * s), colors.speedText, speedStr)
-    dl:AddText(imgui.ImVec2(cx - 10 * s, cy + 30 * s), colors.textDim, unitStr)
+    dl:AddText(imgui.ImVec2(cx - speedTextW * 0.5, cy + 12 * s), colors.speedText, speedStr)
+    local unitTextW = #unitStr * 5.5 * s
+    dl:AddText(imgui.ImVec2(cx - unitTextW * 0.5, cy + 30 * s), colors.textDim, unitStr)
 
-    -- Vehicle info below gauge
-    local infoY = cy + 48 * s
-
-    -- Vehicle name centered
-    local nameW = #cachedVehicleName * 5.5 * s
-    dl:AddText(imgui.ImVec2(cx - nameW * 0.5, infoY), colors.text, cachedVehicleName)
-
-    -- Gear and direction line
-    local gearStr = "G" .. tostring(cachedGear)
-    local dirStr = cachedDirection .. " " .. tostring(math.floor(cachedHeading))
-
-    -- Engine indicator
-    local engineStr = cachedEngineOn and "ENG" or "OFF"
-    local engineColor = cachedEngineOn and colors.engineOn or colors.engineOff
-
-    dl:AddText(imgui.ImVec2(posX + 20 * s, infoY + 16 * s), colors.textDim, gearStr)
-    dl:AddText(imgui.ImVec2(cx - 15 * s, infoY + 16 * s), engineColor, engineStr)
-    dl:AddText(imgui.ImVec2(posX + w - 70 * s, infoY + 16 * s), colors.textDim, dirStr)
-
-    -- Health bar at bottom
+    -- Health bar directly below semicircle center line
     local healthColor = colors.healthGreen
     if cachedHealth < 0.3 then
         healthColor = colors.healthRed
@@ -324,11 +306,34 @@ local function renderStyleClassic(dl, posX, posY, colors)
         healthColor = colors.healthYellow
     end
 
-    vhud_lib.drawHealthBar(dl, posX + 20 * s, infoY + 36 * s, w - 40 * s, 8 * s, cachedHealth, {
+    local healthBarY = cy + 4 * s
+    local healthBarW = radius * 2
+    local healthBarX = cx - radius
+    vhud_lib.drawHealthBar(dl, healthBarX, healthBarY, healthBarW, 8 * s, cachedHealth, {
         bgColor = colors.barBg,
         fillColor = healthColor,
         rounding = 3 * s,
     })
+
+    -- Vehicle info to the RIGHT of semicircle
+    local infoX = cx + radius + 15 * s
+    local infoStartY = cy - 30 * s
+
+    -- Vehicle name
+    dl:AddText(imgui.ImVec2(infoX, infoStartY), colors.text, cachedVehicleName)
+
+    -- Engine status
+    local engineStr = cachedEngineOn and "ENG ON" or "ENG OFF"
+    local engineColor = cachedEngineOn and colors.engineOn or colors.engineOff
+    dl:AddText(imgui.ImVec2(infoX, infoStartY + 16 * s), engineColor, engineStr)
+
+    -- Gear
+    local gearStr = "G" .. tostring(cachedGear)
+    dl:AddText(imgui.ImVec2(infoX, infoStartY + 32 * s), colors.textDim, gearStr)
+
+    -- Direction/heading
+    local dirStr = cachedDirection .. " " .. tostring(math.floor(cachedHeading))
+    dl:AddText(imgui.ImVec2(infoX, infoStartY + 48 * s), colors.textDim, dirStr)
 end
 
 -- ============================================================================
