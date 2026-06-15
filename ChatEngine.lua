@@ -150,10 +150,12 @@ end
 local nearbyPrefixes = {
     IC  = nil,           -- no prefix for normal chat
     ACT = "[ACT] ",
+    ME  = "[ME] ",
     DO  = "[DO] "
 }
 local nearbyPrefixColors = {
     ACT = imgui.ImVec4(0.8, 0.4, 0.9, 1.0),    -- purple
+    ME  = imgui.ImVec4(0.8, 0.4, 0.9, 1.0),    -- purple
     DO  = imgui.ImVec4(0.4, 0.8, 1.0, 1.0)      -- light blue
 }
 
@@ -311,6 +313,34 @@ if sampev_loaded then
     function sampev.onServerMessage(color, text)
         if chatInterceptEnabled and chatlib then
             chatlib.addMessage(text, color)
+
+            -- Detect /me and /do messages → add to nearby buffer
+            -- Server only sends these to nearby players, so no distance check needed
+            local cleanText = text:gsub("{%x%x%x%x%x%x}", "")
+            if cleanText:sub(1, 2) == "* " then
+                local nearbyType = "ME"
+                local afterStar = cleanText:sub(3)
+                -- /do usually contains (( )) pattern
+                if afterStar:find("%(%(") then
+                    nearbyType = "DO"
+                end
+
+                local timestamp = os.date('[%H:%M]')
+                nearbyMessages[#nearbyMessages + 1] = {
+                    text = cleanText,
+                    timestamp = timestamp,
+                    color = color,
+                    nearbyType = nearbyType
+                }
+                if #nearbyMessages > MAX_NEARBY_MESSAGES then
+                    table.remove(nearbyMessages, 1)
+                end
+
+                if cfgDebug[0] then
+                    sampAddChatMessage("{00FF00}[CE Debug] Nearby [" .. nearbyType .. "] from server: " .. cleanText:sub(1, 40), -1)
+                end
+            end
+
             return false
         end
     end
