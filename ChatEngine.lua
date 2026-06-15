@@ -663,6 +663,7 @@ imgui.OnFrame(
             else
                 chatMode = "NEWEST"
             end
+            shouldAutoScroll = true
         end
 
         imgui.End()
