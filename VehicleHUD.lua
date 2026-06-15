@@ -1,6 +1,6 @@
 -- ============================================================================
--- VEHICLE HUD v1.0
--- Speedometer gauge with vehicle info display for SA-MP Android (MonetLoader)
+-- VEHICLE HUD v1.1
+-- SA-Styled Speedometer with transparent background for SA-MP Android (MonetLoader)
 -- Author: OnlyDexterZ
 -- ============================================================================
 
@@ -65,36 +65,29 @@ local inVehicle = false
 -- Smooth display values (interpolated every render frame)
 local displaySpeed = 0
 
--- Drag state
-local isDragging = false
-local dragOffsetX = 0
-local dragOffsetY = 0
-
 -- Config window state
 local showConfigWindow = false
 
 -- Config window imgui float buffers
 local cfgScaleFloat = imgui.new.float(config.scale)
 local cfgOpacityFloat = imgui.new.float(config.opacity)
+local cfgPosXFloat = imgui.new.float(config.posX or 0)
+local cfgPosYFloat = imgui.new.float(config.posY or 0)
 
 -- ============================================================================
--- COLORS
+-- COLORS (muted, classic SA feel)
 -- ============================================================================
 local COLORS = {
-    bg = 0xCC1A1A2E,
     text = 0xFFEEEEEE,
-    textDim = 0xFF999999,
-    accent = 0xFF00FFAA,
-    needle = 0xFFFF3333,
-    gaugeGreen = 0xFF33FF66,
-    gaugeYellow = 0xFFFFCC33,
-    gaugeRed = 0xFFFF3333,
-    healthGreen = 0xFF33CC33,
-    healthYellow = 0xFFCCCC33,
-    healthRed = 0xFFCC3333,
+    textDim = 0xFFAAAAAA,
+    needle = 0xFFDD2222,
+    tickWhite = 0xFFDDDDDD,
+    tickRed = 0xFFCC4444,
+    arcBg = 0x55FFFFFF,
     speedText = 0xFFFFFFFF,
     engineOn = 0xFF33FF66,
     engineOff = 0xFFFF3333,
+    pivotCenter = 0xFFCCCCCC,
 }
 
 -- ============================================================================
@@ -110,7 +103,7 @@ end
 local function getHudSize()
     local s = config.scale * DPI
     if config.style == 1 then
-        return 220 * s, 260 * s
+        return 240 * s, 200 * s
     elseif config.style == 2 then
         return 200 * s, 180 * s
     else
@@ -231,82 +224,85 @@ local function updateFade()
 end
 
 -- ============================================================================
--- STYLE 1: Classic Gauge (semicircle arc speedometer)
+-- STYLE 1: Classic SA Gauge (180-degree semicircle, transparent background)
 -- ============================================================================
 local function renderStyleClassic(dl, posX, posY, alpha)
     local s = config.scale * DPI
-    local w = 220 * s
-    local h = 260 * s
+    local w = 240 * s
+    local h = 200 * s
 
-    -- Background panel
-    local bgColor = applyAlpha(COLORS.bg, alpha * (config.opacity or 0.85))
-    dl:AddRectFilled(
-        imgui.ImVec2(posX, posY),
-        imgui.ImVec2(posX + w, posY + h),
-        bgColor, 10 * s
-    )
+    -- NO background panel - transparent, gauge floats directly on game
 
-    -- Arc gauge center
+    -- Arc gauge center (positioned within the allocated area)
     local cx = posX + w * 0.5
-    local cy = posY + 120 * s
-    local radius = 80 * s
-    local minAngle = math.rad(-225)
-    local maxAngle = math.rad(45)
+    local cy = posY + 110 * s
+    local radius = 85 * s
 
-    -- Draw arc gauge background
-    vhud_lib.drawArcGauge(dl, cx, cy, radius, minAngle, maxAngle, displaySpeed, cachedMaxSpeed, {
-        thickness = 6 * s,
-        bgColor = applyAlpha(0xFF333344, alpha),
-        fgColor = applyAlpha(COLORS.accent, alpha),
+    -- 180-degree semicircle: from left to right
+    local minAngle = math.rad(-180)
+    local maxAngle = math.rad(0)
+
+    -- Draw subtle arc background (thin, faint)
+    vhud_lib.drawArcGauge(dl, cx, cy, radius, minAngle, maxAngle, 0, cachedMaxSpeed, {
+        thickness = 2.5 * s,
+        bgColor = applyAlpha(0x44FFFFFF, alpha),
+        fgColor = 0x00000000,
         segments = 60,
     })
 
-    -- Draw tick marks with color zones
-    vhud_lib.drawTickMarks(dl, cx, cy, radius, 27, {
+    -- Draw tick marks - classic SA style: white with subtle red at end
+    local tickCount = 27
+    local redStartTick = math.floor(tickCount * 0.82)
+    vhud_lib.drawTickMarks(dl, cx, cy, radius, tickCount, {
         minAngle = minAngle,
         maxAngle = maxAngle,
-        innerRadius = radius - 12 * s,
-        outerRadius = radius - 4 * s,
-        color = applyAlpha(0xFFAAAAAA, alpha),
+        innerRadius = radius - 14 * s,
+        outerRadius = radius - 2 * s,
+        color = applyAlpha(COLORS.tickWhite, alpha),
         majorEvery = 3,
+        thickness = 1.5 * s,
         colorZones = {
-            { startTick = 0, endTick = 15, color = applyAlpha(COLORS.gaugeGreen, alpha) },
-            { startTick = 15, endTick = 21, color = applyAlpha(COLORS.gaugeYellow, alpha) },
-            { startTick = 21, endTick = 27, color = applyAlpha(COLORS.gaugeRed, alpha) },
+            { startTick = 0, endTick = redStartTick, color = applyAlpha(COLORS.tickWhite, alpha) },
+            { startTick = redStartTick, endTick = tickCount, color = applyAlpha(COLORS.tickRed, alpha) },
         },
     })
 
-    -- Draw speed numbers along arc
+    -- Draw speed numbers along arc (outside, classic positioning)
+    -- Auto-adjust interval based on max speed
     local interval = 20
-    if cachedMaxSpeed > 200 then interval = 40
-    elseif cachedMaxSpeed > 100 then interval = 20
+    if cachedMaxSpeed >= 300 then interval = 50
+    elseif cachedMaxSpeed >= 200 then interval = 40
+    elseif cachedMaxSpeed >= 150 then interval = 20
+    elseif cachedMaxSpeed >= 80 then interval = 20
     else interval = 10 end
 
     vhud_lib.drawSpeedNumbers(dl, cx, cy, radius, cachedMaxSpeed, interval, nil, {
         minAngle = minAngle,
         maxAngle = maxAngle,
-        color = applyAlpha(COLORS.textDim, alpha),
+        color = applyAlpha(COLORS.text, alpha),
+        offset = 12 * s,
     })
 
-    -- Draw needle
+    -- Draw needle - thicker, bold red, prominent
     local needleAngle = vhud_lib.angleForValue(displaySpeed, cachedMaxSpeed, minAngle, maxAngle)
-    vhud_lib.drawNeedle(dl, cx, cy, radius - 16 * s, needleAngle, {
+    vhud_lib.drawNeedle(dl, cx, cy, radius - 18 * s, needleAngle, {
         color = applyAlpha(COLORS.needle, alpha),
-        thickness = 2.5 * s,
+        thickness = 3.2 * s,
         length = radius - 20 * s,
     })
 
-    -- Center dot
-    dl:AddCircleFilled(imgui.ImVec2(cx, cy), 5 * s, applyAlpha(0xFFDDDDDD, alpha))
+    -- Center pivot hub circle - larger and prominent
+    dl:AddCircleFilled(imgui.ImVec2(cx, cy), 7.5 * s, applyAlpha(COLORS.pivotCenter, alpha))
+    dl:AddCircleFilled(imgui.ImVec2(cx, cy), 4 * s, applyAlpha(COLORS.needle, alpha))
 
-    -- Digital speed display below gauge
+    -- Digital speed display below gauge center
     local speedStr = tostring(math.floor(displaySpeed))
     local unitStr = config.unit == "kmh" and "km/h" or "mph"
-    dl:AddText(imgui.ImVec2(cx - 20 * s, cy + 20 * s), applyAlpha(COLORS.speedText, alpha), speedStr)
-    dl:AddText(imgui.ImVec2(cx - 12 * s, cy + 36 * s), applyAlpha(COLORS.textDim, alpha), unitStr)
+    dl:AddText(imgui.ImVec2(cx - 14 * s, cy + 14 * s), applyAlpha(COLORS.speedText, alpha), speedStr)
+    dl:AddText(imgui.ImVec2(cx - 10 * s, cy + 30 * s), applyAlpha(COLORS.textDim, alpha), unitStr)
 
-    -- Vehicle info below
-    local infoY = posY + 180 * s
+    -- Vehicle info below gauge (subtle text)
+    local infoY = posY + 145 * s
 
     -- Vehicle name
     dl:AddText(imgui.ImVec2(posX + 10 * s, infoY), applyAlpha(COLORS.text, alpha), cachedVehicleName)
@@ -322,12 +318,12 @@ local function renderStyleClassic(dl, posX, posY, alpha)
 
     -- Direction/heading
     local dirStr = cachedDirection .. " (" .. tostring(math.floor(cachedHeading)) .. ")"
-    dl:AddText(imgui.ImVec2(posX + w - 80 * s, infoY + 16 * s), applyAlpha(COLORS.textDim, alpha), dirStr)
+    dl:AddText(imgui.ImVec2(posX + w - 90 * s, infoY + 16 * s), applyAlpha(COLORS.textDim, alpha), dirStr)
 
-    -- Health bar at bottom
-    vhud_lib.drawHealthBar(dl, posX + 10 * s, posY + h - 22 * s, w - 20 * s, 12 * s, cachedHealth, {
-        bgColor = applyAlpha(0xFF222233, alpha),
-        rounding = 4 * s,
+    -- Health bar at bottom of gauge area
+    vhud_lib.drawHealthBar(dl, posX + 10 * s, posY + h - 16 * s, w - 20 * s, 10 * s, cachedHealth, {
+        bgColor = applyAlpha(0x44000000, alpha),
+        rounding = 3 * s,
     })
 end
 
@@ -339,8 +335,8 @@ local function renderStyleDigital(dl, posX, posY, alpha)
     local w = 200 * s
     local h = 180 * s
 
-    -- Background panel
-    local bgColor = applyAlpha(COLORS.bg, alpha * (config.opacity or 0.85))
+    -- Background panel (digital style keeps a subtle dark panel)
+    local bgColor = applyAlpha(0xCC1A1A2E, alpha * (config.opacity or 0.85))
     dl:AddRectFilled(
         imgui.ImVec2(posX, posY),
         imgui.ImVec2(posX + w, posY + h),
@@ -367,9 +363,9 @@ local function renderStyleDigital(dl, posX, posY, alpha)
         applyAlpha(0xFF222233, alpha), 3 * s
     )
     -- Bar fill
-    local barColor = COLORS.gaugeGreen
-    if speedPercent > 0.8 then barColor = COLORS.gaugeRed
-    elseif speedPercent > 0.6 then barColor = COLORS.gaugeYellow end
+    local barColor = 0xFF33FF66
+    if speedPercent > 0.8 then barColor = 0xFFFF3333
+    elseif speedPercent > 0.6 then barColor = 0xFFFFCC33 end
 
     if speedPercent > 0 then
         dl:AddRectFilled(
@@ -410,8 +406,8 @@ local function renderStyleMinimal(dl, posX, posY, alpha)
     local w = 180 * s
     local h = 50 * s
 
-    -- Background
-    local bgColor = applyAlpha(COLORS.bg, alpha * (config.opacity or 0.85))
+    -- Subtle background
+    local bgColor = applyAlpha(0xCC1A1A2E, alpha * (config.opacity or 0.85))
     dl:AddRectFilled(
         imgui.ImVec2(posX, posY),
         imgui.ImVec2(posX + w, posY + h),
@@ -443,9 +439,9 @@ local function renderStyleMinimal(dl, posX, posY, alpha)
         applyAlpha(0xFF222233, alpha), 2 * s
     )
 
-    local healthColor = COLORS.healthGreen
-    if cachedHealth < 0.3 then healthColor = COLORS.healthRed
-    elseif cachedHealth < 0.6 then healthColor = COLORS.healthYellow end
+    local healthColor = 0xFF33CC33
+    if cachedHealth < 0.3 then healthColor = 0xFFCC3333
+    elseif cachedHealth < 0.6 then healthColor = 0xFFCCCC33 end
 
     if cachedHealth > 0 then
         dl:AddRectFilled(
@@ -457,11 +453,13 @@ local function renderStyleMinimal(dl, posX, posY, alpha)
 end
 
 -- ============================================================================
--- IMGUI RENDERING - Drag Window (separate interactable window for drag)
+-- IMGUI RENDERING - Direct BackgroundDrawList (no window, non-interactive)
 -- ============================================================================
 imgui.OnFrame(
     function() return config.enabled and currentState ~= "HIDDEN" end,
     function(self)
+        self.HideCursor = true
+
         -- Smooth needle interpolation every render frame
         displaySpeed = displaySpeed + (cachedSpeed - displaySpeed) * 0.12
 
@@ -471,7 +469,6 @@ imgui.OnFrame(
         -- Determine position
         local screenW = imgui.GetIO().DisplaySize.x
         local screenH = imgui.GetIO().DisplaySize.y
-        local hudW, hudH = getHudSize()
 
         local posX = config.posX
         local posY = config.posY
@@ -479,63 +476,7 @@ imgui.OnFrame(
             posX, posY = getDefaultPos(screenW, screenH)
         end
 
-        -- Hide cursor unless dragging or config window is open
-        self.HideCursor = not isDragging and not showConfigWindow
-
-        -- Drag window - separate small window for input handling
-        imgui.SetNextWindowPos(imgui.ImVec2(posX, posY))
-        imgui.SetNextWindowSize(imgui.ImVec2(hudW, hudH))
-        imgui.PushStyleVarFloat(imgui.StyleVar.WindowBorderSize, 0)
-        imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
-
-        if imgui.Begin("##VehicleHUDDrag", nil,
-            imgui.WindowFlags.NoTitleBar +
-            imgui.WindowFlags.NoResize +
-            imgui.WindowFlags.NoScrollbar +
-            imgui.WindowFlags.NoBackground +
-            imgui.WindowFlags.NoSavedSettings) then
-
-            -- Invisible button for drag detection
-            imgui.InvisibleButton("##vhud_drag", imgui.ImVec2(hudW, hudH))
-            local dragActive = imgui.IsItemActive()
-
-            if dragActive then
-                local mousePos = imgui.GetIO().MousePos
-                if not isDragging then
-                    -- Starting drag - calculate offset
-                    isDragging = true
-                    dragOffsetX = mousePos.x - posX
-                    dragOffsetY = mousePos.y - posY
-                end
-                -- Update position while dragging
-                local newX = mousePos.x - dragOffsetX
-                local newY = mousePos.y - dragOffsetY
-                -- Clamp to screen
-                if newX < 0 then newX = 0 end
-                if newY < 0 then newY = 0 end
-                if newX + hudW > screenW then newX = screenW - hudW end
-                if newY + hudH > screenH then newY = screenH - hudH end
-                config.posX = newX
-                config.posY = newY
-            else
-                if isDragging then
-                    -- Drag ended - save config
-                    isDragging = false
-                    saveConfig()
-                end
-            end
-        end
-        imgui.End()
-        imgui.PopStyleVar(2)
-
-        -- Recalculate position after possible drag update
-        posX = config.posX
-        posY = config.posY
-        if posX == nil or posY == nil then
-            posX, posY = getDefaultPos(screenW, screenH)
-        end
-
-        -- Draw HUD on background draw list
+        -- Draw HUD directly on background draw list (no window needed)
         local dl = imgui.GetBackgroundDrawList()
 
         if config.style == 1 then
@@ -560,7 +501,7 @@ imgui.OnFrame(
         local screenW = io.DisplaySize.x
         local screenH = io.DisplaySize.y
         local winW = 340
-        local winH = 460
+        local winH = 520
 
         -- Push dark theme styles
         imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12)
@@ -587,7 +528,7 @@ imgui.OnFrame(
             -- Title
             imgui.TextColored(imgui.ImVec4(0.0, 1.0, 0.67, 1.0), "VEHICLE HUD")
             imgui.SameLine()
-            imgui.TextDisabled("v1.0")
+            imgui.TextDisabled("v1.1 SA-Style")
             imgui.Spacing()
             imgui.Separator()
             imgui.Spacing()
@@ -687,7 +628,7 @@ imgui.OnFrame(
             imgui.Separator()
             imgui.Spacing()
 
-            -- Scale Slider
+            -- Scale & Opacity Sliders
             imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "SCALE & OPACITY")
             imgui.Spacing()
 
@@ -703,6 +644,35 @@ imgui.OnFrame(
             cfgOpacityFloat[0] = config.opacity
             if imgui.SliderFloat("##opacity", cfgOpacityFloat, 0.3, 1.0, "%.2f") then
                 config.opacity = cfgOpacityFloat[0]
+            end
+
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+
+            -- Position Sliders
+            imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "POSITION")
+            imgui.Spacing()
+
+            -- Initialize position float buffers with current values
+            local curPosX = config.posX
+            local curPosY = config.posY
+            if curPosX == nil or curPosY == nil then
+                curPosX, curPosY = getDefaultPos(screenW, screenH)
+            end
+
+            imgui.Text("Position X:")
+            imgui.SetNextItemWidth(-1)
+            cfgPosXFloat[0] = curPosX
+            if imgui.SliderFloat("##posX", cfgPosXFloat, 0, screenW, "%.0f") then
+                config.posX = cfgPosXFloat[0]
+            end
+
+            imgui.Text("Position Y:")
+            imgui.SetNextItemWidth(-1)
+            cfgPosYFloat[0] = curPosY
+            if imgui.SliderFloat("##posY", cfgPosYFloat, 0, screenH, "%.0f") then
+                config.posY = cfgPosYFloat[0]
             end
 
             imgui.Spacing()
@@ -826,6 +796,20 @@ local function handleCommand(args)
             sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Usage: /vhud opacity 0.3-1.0", 0xFFFFFF)
         end
 
+    elseif cmd == "pos" then
+        -- Set position via command: /vhud pos <x> <y>
+        local x, y = val:match("^(%S+)%s+(%S+)$")
+        x = tonumber(x)
+        y = tonumber(y)
+        if x and y then
+            config.posX = x
+            config.posY = y
+            saveConfig()
+            sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Position set to " .. tostring(math.floor(x)) .. ", " .. tostring(math.floor(y)), 0xFFFFFF)
+        else
+            sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Usage: /vhud pos <x> <y>", 0xFFFFFF)
+        end
+
     elseif cmd == "reset" then
         config.enabled = defaultConfig.enabled
         config.style = defaultConfig.style
@@ -838,7 +822,7 @@ local function handleCommand(args)
         sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Settings reset to defaults", 0xFFFFFF)
 
     else
-        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Commands: /vhud [toggle|style|unit|scale|opacity|reset]", 0xFFFFFF)
+        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Commands: /vhud [toggle|style|unit|scale|opacity|pos|reset]", 0xFFFFFF)
     end
 end
 

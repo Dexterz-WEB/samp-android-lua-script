@@ -345,10 +345,11 @@ end
 -- All angles are in radians for math.sin/math.cos
 -- ============================================================================
 
--- Default arc angles: -225 degrees to 45 degrees (270-degree sweep)
+-- Default arc angles: 180-degree semicircle sweep (classic SA-style)
+-- From left (-90 deg) to right (90 deg) forming a half-circle
 -- 0-degree reference is at the top (12 o'clock position)
-local DEFAULT_MIN_ANGLE = math.rad(-225)
-local DEFAULT_MAX_ANGLE = math.rad(45)
+local DEFAULT_MIN_ANGLE = math.rad(-180)
+local DEFAULT_MAX_ANGLE = math.rad(0)
 
 --- Draw a semicircle arc gauge background using dl:AddLine segments
 -- @param dl - ImGui DrawList
@@ -422,28 +423,24 @@ function M.drawNeedle(dl, cx, cy, radius, angle, options)
 end
 
 --- Draw tick marks along the arc with color zones
--- Color zones: uses colorZones option if provided, otherwise defaults to 60%/25%/15% green/yellow/red
+-- Classic SA style: mostly white/light ticks with subtle red zone at the top end only
 -- @param dl - ImGui DrawList
 -- @param cx number - center X position
 -- @param cy number - center Y position
 -- @param radius number - radius of the arc
 -- @param count number - number of tick marks
--- @param options table - {minAngle, maxAngle, innerRadius, outerRadius, color, majorEvery, thickness, colorZones}
+-- @param options table - {minAngle, maxAngle, innerRadius, outerRadius, color, majorEvery, thickness, colorZones, redZoneStart}
 function M.drawTickMarks(dl, cx, cy, radius, count, options)
     options = options or {}
     local minAngle = options.minAngle or DEFAULT_MIN_ANGLE
     local maxAngle = options.maxAngle or DEFAULT_MAX_ANGLE
     local innerRadius = options.innerRadius or (radius * 0.85)
     local outerRadius = options.outerRadius or radius
-    local defaultColor = options.color or 0xFFCCCCCC
+    local defaultColor = options.color or 0xFFDDDDDD
     local majorEvery = options.majorEvery or 5
     local thickness = options.thickness or 1.5
     local colorZones = options.colorZones
-
-    -- Default color zone definitions: green (60%), yellow (25%), red (15%)
-    local greenColor = 0xFF44CC44
-    local yellowColor = 0xFFCCCC44
-    local redColor = 0xFFCC4444
+    local redZoneStart = options.redZoneStart or 0.82  -- last ~18% is subtle red
 
     local angleRange = maxAngle - minAngle
 
@@ -452,7 +449,7 @@ function M.drawTickMarks(dl, cx, cy, radius, count, options)
         local angle = minAngle + angleRange * t
         local isMajor = (i % majorEvery == 0)
 
-        -- Determine tick color based on colorZones or fallback to default zones
+        -- Determine tick color: classic SA = white/light, subtle red at end
         local tickColor = defaultColor
         if colorZones then
             for _, zone in ipairs(colorZones) do
@@ -462,12 +459,11 @@ function M.drawTickMarks(dl, cx, cy, radius, count, options)
                 end
             end
         else
-            if t <= 0.60 then
-                tickColor = greenColor
-            elseif t <= 0.85 then
-                tickColor = yellowColor
+            -- Classic SA style: white ticks, subtle red only at the very end
+            if t >= redZoneStart then
+                tickColor = 0xFFCC4444  -- subtle red for danger zone
             else
-                tickColor = redColor
+                tickColor = defaultColor  -- white/light gray
             end
         end
 
@@ -497,7 +493,7 @@ function M.drawSpeedNumbers(dl, cx, cy, radius, maxSpeed, interval, currentAngle
     options = options or {}
     local minAngle = options.minAngle or DEFAULT_MIN_ANGLE
     local maxAngle = options.maxAngle or DEFAULT_MAX_ANGLE
-    local color = options.color or 0xFFCCCCCC
+    local color = options.color or 0xFFDDDDDD
     local offset = options.offset or 0
 
     local textRadius = radius + offset
