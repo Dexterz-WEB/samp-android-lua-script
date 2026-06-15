@@ -1,0 +1,37 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Create lib/vehiclehud_lib.lua - the reusable gauge rendering library with all drawing functions, vehicle database, color utilities, and vehicle type detection",
+  "status": "in_progress",
+  "steps": [
+    "Create lib/vehiclehud_lib.lua with module table M = {} and return M at end, following the pattern from lib/chatengine_lib.lua and lib/worldtoscreen_lib.lua",
+    "Implement VEHICLE_DATABASE table containing all SA-MP vehicle model IDs (400-611) with fields: name (string), maxSpeed (number in km/h), type (string: 'Car', 'Bike', 'Boat', 'Plane', 'Helicopter', 'Bicycle', 'Trailer'). Include all 212 vehicles.",
+    "Implement M.getVehicleName(modelId) - returns vehicle name from VEHICLE_DATABASE or 'Unknown' if not found",
+    "Implement M.getVehicleType(modelId) - returns vehicle type string from VEHICLE_DATABASE or 'Car' as default",
+    "Implement M.getMaxSpeed(modelId) - returns max speed for gauge scaling based on vehicle type",
+    "Implement M.lerpColor(color1, color2, t) - linearly interpolate between two ARGB uint32 colors, decompose channels, lerp each, recompose",
+    "Implement M.smoothValue(current, target, speed) - returns current + (target - current) * speed, for needle interpolation",
+    "Implement M.drawArcGauge(dl, cx, cy, radius, minAngle, maxAngle, value, maxValue, options) - draws a semicircle arc gauge background using dl:AddLine segments. Options: thickness, bgColor, fgColor, segments (default 60)",
+    "Implement M.drawNeedle(dl, cx, cy, radius, angle, options) - draws a solid red needle line from center to arc edge at given angle. Options: color (default red 0xFFFF3333), thickness, length",
+    "Implement M.drawTickMarks(dl, cx, cy, radius, count, options) - draws evenly spaced tick marks along the arc. Options: minAngle, maxAngle, innerRadius, outerRadius, color, majorEvery (for longer ticks), colorZones (table of {startTick, endTick, color} for green/yellow/red zones)",
+    "Implement M.drawSpeedNumbers(dl, cx, cy, radius, maxSpeed, interval, currentAngle, options) - draws speed labels (0, 20, 40... maxSpeed) along the arc at the correct angles. Options: minAngle, maxAngle, color, fontSize offset",
+    "Implement M.drawHealthBar(dl, x, y, width, height, percent, options) - draws a horizontal health bar with background and fill. Options: bgColor, fillColor, borderColor, rounding. Color shifts green->yellow->red based on percent.",
+    "Implement M.angleForValue(value, maxValue, minAngle, maxAngle) - utility to convert a speed value to the corresponding angle on the arc",
+    "Implement M.getGearFromSpeed(speedKmh, vehicleType) - estimate gear (1-6) from speed and vehicle type using speed thresholds",
+    "Implement M.getHeadingDirection(heading) - convert heading degrees (0-360) to cardinal direction string (N, NE, E, SE, S, SW, W, NW)"
+  ],
+  "acceptance_criteria": [
+    "lib/vehiclehud_lib.lua exists and has valid Lua syntax (passes luajit -bl)",
+    "VEHICLE_DATABASE contains entries for model IDs 400 through 611 with name, maxSpeed, and type fields",
+    "All public functions (drawArcGauge, drawNeedle, drawTickMarks, drawSpeedNumbers, drawHealthBar, lerpColor, smoothValue, getVehicleType, getVehicleName, getMaxSpeed, getGearFromSpeed, getHeadingDirection, angleForValue) are defined on the module table M",
+    "Drawing functions use dl:AddLine and dl:AddText patterns consistent with PlayerStatsWidget.lua DrawList usage",
+    "No pcall used inside any drawing function (MonetLoader constraint)",
+    "Module returns M table at the end"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/samp-android-lua-script && luajit -bl lib/vehiclehud_lib.lua > /dev/null 2>&1; echo $?  (should output 0)",
+    "Verify VEHICLE_DATABASE has entries for IDs 400-611 by grepping for key model IDs like 411 (Infernus), 560 (Sultan), 481 (BMX)"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
