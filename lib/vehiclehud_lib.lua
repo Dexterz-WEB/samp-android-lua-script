@@ -312,33 +312,29 @@ end
 local DEFAULT_MIN_ANGLE = math.rad(-180)
 local DEFAULT_MAX_ANGLE = math.rad(0)
 
---- Draw a filled semicircle background (pie/fan shape) using triangles
+--- Draw a filled semicircle background using horizontal rect strips
 -- Creates a dark backdrop matching the gauge arc shape
+-- Uses AddRectFilled for MonetLoader compatibility (AddTriangleFilled not available)
 -- @param dl - ImGui DrawList
 -- @param cx number - center X position
 -- @param cy number - center Y position
 -- @param radius number - radius of the semicircle
 -- @param color number - fill color (uint32)
--- @param segments number - number of triangle segments (higher = smoother)
+-- @param segments number - number of horizontal strips (higher = smoother)
 function M.drawSemicircleBackground(dl, cx, cy, radius, color, segments)
-    segments = segments or 32
-    local minAngle = math.rad(-180)
-    local maxAngle = math.rad(0)
-    local angleStep = (maxAngle - minAngle) / segments
+    -- Approximate semicircle using a series of horizontal filled rects
+    -- from top of semicircle down to center line
+    segments = segments or 20
+    local step = radius / segments
 
     for i = 0, segments - 1 do
-        local a1 = minAngle + angleStep * i
-        local a2 = minAngle + angleStep * (i + 1)
+        local yOff = -radius + step * i
+        -- Width at this Y level using circle equation: x = sqrt(r^2 - y^2)
+        local halfWidth = math.sqrt(radius * radius - yOff * yOff)
 
-        local x1 = cx + radius * math.cos(a1)
-        local y1 = cy + radius * math.sin(a1)
-        local x2 = cx + radius * math.cos(a2)
-        local y2 = cy + radius * math.sin(a2)
-
-        dl:AddTriangleFilled(
-            imgui.ImVec2(cx, cy),
-            imgui.ImVec2(x1, y1),
-            imgui.ImVec2(x2, y2),
+        dl:AddRectFilled(
+            imgui.ImVec2(cx - halfWidth, cy + yOff),
+            imgui.ImVec2(cx + halfWidth, cy + yOff + step),
             color
         )
     end
