@@ -261,13 +261,13 @@ end
 
 --- Get max speed for gauge scaling
 -- @param modelId number - SA-MP vehicle model ID (400-611)
--- @return number - max speed in km/h
+-- @return number - max speed in km/h (minimum 180 for safe gauge scaling)
 function M.getMaxSpeed(modelId)
     local entry = M.VEHICLE_DATABASE[modelId]
-    if entry then
+    if entry and entry.maxSpeed > 0 then
         return entry.maxSpeed
     end
-    return 180
+    return 180  -- safe default
 end
 
 -- ============================================================================
@@ -422,13 +422,13 @@ function M.drawNeedle(dl, cx, cy, radius, angle, options)
 end
 
 --- Draw tick marks along the arc with color zones
--- Color zones: first 60% green, next 25% yellow, last 15% red
+-- Color zones: uses colorZones option if provided, otherwise defaults to 60%/25%/15% green/yellow/red
 -- @param dl - ImGui DrawList
 -- @param cx number - center X position
 -- @param cy number - center Y position
 -- @param radius number - radius of the arc
 -- @param count number - number of tick marks
--- @param options table - {minAngle, maxAngle, innerRadius, outerRadius, color, majorEvery, thickness}
+-- @param options table - {minAngle, maxAngle, innerRadius, outerRadius, color, majorEvery, thickness, colorZones}
 function M.drawTickMarks(dl, cx, cy, radius, count, options)
     options = options or {}
     local minAngle = options.minAngle or DEFAULT_MIN_ANGLE
@@ -438,8 +438,9 @@ function M.drawTickMarks(dl, cx, cy, radius, count, options)
     local defaultColor = options.color or 0xFFCCCCCC
     local majorEvery = options.majorEvery or 5
     local thickness = options.thickness or 1.5
+    local colorZones = options.colorZones
 
-    -- Color zone definitions: green (60%), yellow (25%), red (15%)
+    -- Default color zone definitions: green (60%), yellow (25%), red (15%)
     local greenColor = 0xFF44CC44
     local yellowColor = 0xFFCCCC44
     local redColor = 0xFFCC4444
@@ -451,14 +452,23 @@ function M.drawTickMarks(dl, cx, cy, radius, count, options)
         local angle = minAngle + angleRange * t
         local isMajor = (i % majorEvery == 0)
 
-        -- Determine tick color based on zone
-        local tickColor
-        if t <= 0.60 then
-            tickColor = greenColor
-        elseif t <= 0.85 then
-            tickColor = yellowColor
+        -- Determine tick color based on colorZones or fallback to default zones
+        local tickColor = defaultColor
+        if colorZones then
+            for _, zone in ipairs(colorZones) do
+                if i >= zone.startTick and i < zone.endTick then
+                    tickColor = zone.color
+                    break
+                end
+            end
         else
-            tickColor = redColor
+            if t <= 0.60 then
+                tickColor = greenColor
+            elseif t <= 0.85 then
+                tickColor = yellowColor
+            else
+                tickColor = redColor
+            end
         end
 
         -- Major ticks are longer

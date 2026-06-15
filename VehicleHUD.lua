@@ -15,6 +15,11 @@ local jsoncfg = require 'jsoncfg'
 local vhud_lib = require 'vehiclehud_lib'
 
 -- ============================================================================
+-- DPI SCALING
+-- ============================================================================
+local DPI = MONET_DPI_SCALE or 1.0
+
+-- ============================================================================
 -- CONFIG
 -- ============================================================================
 local defaultConfig = {
@@ -64,15 +69,12 @@ local displaySpeed = 0
 local isDragging = false
 local dragOffsetX = 0
 local dragOffsetY = 0
-local wasDragActive = false
 
 -- ============================================================================
 -- COLORS
 -- ============================================================================
 local COLORS = {
     bg = 0xCC1A1A2E,
-    bgPanel = 0xE6141428,
-    border = 0xFF333355,
     text = 0xFFEEEEEE,
     textDim = 0xFF999999,
     accent = 0xFF00FFAA,
@@ -99,7 +101,7 @@ local function applyAlpha(color, alpha)
 end
 
 local function getHudSize()
-    local s = config.scale or 1.0
+    local s = config.scale * DPI
     if config.style == 1 then
         return 220 * s, 260 * s
     elseif config.style == 2 then
@@ -111,7 +113,7 @@ end
 
 local function getDefaultPos(screenW, screenH)
     local w, h = getHudSize()
-    local padding = 20
+    local padding = 20 * DPI
     return screenW - w - padding, screenH - h - padding
 end
 
@@ -131,12 +133,10 @@ end
 -- ============================================================================
 local function updateVehicleData()
     local veh = nil
-    pcall(function()
-        local ok, handle = pcall(storeCarCharIsInNoSave, PLAYER_PED)
-        if ok and handle then
-            veh = handle
-        end
-    end)
+    local ok, handle = pcall(storeCarCharIsInNoSave, PLAYER_PED)
+    if ok and handle then
+        veh = handle
+    end
 
     if not veh then return end
 
@@ -203,27 +203,6 @@ local function updateStateMachine()
     end
 
     inVehicle = nowInVehicle
-
-    -- Fade logic
-    if currentState == "FADE_IN" then
-        fadeAlpha = fadeAlpha + fadeSpeed
-        if fadeAlpha >= 1.0 then
-            fadeAlpha = 1.0
-            currentState = "VISIBLE"
-        end
-    elseif currentState == "FADE_OUT" then
-        fadeAlpha = fadeAlpha - fadeSpeed
-        if fadeAlpha <= 0.0 then
-            fadeAlpha = 0.0
-            currentState = "HIDDEN"
-            -- Reset display speed when hidden
-            displaySpeed = 0
-        end
-    elseif currentState == "VISIBLE" then
-        fadeAlpha = 1.0
-    elseif currentState == "HIDDEN" then
-        fadeAlpha = 0.0
-    end
 end
 
 -- Fade-only update (safe to call from render, no pcall)
@@ -248,7 +227,7 @@ end
 -- STYLE 1: Classic Gauge (semicircle arc speedometer)
 -- ============================================================================
 local function renderStyleClassic(dl, posX, posY, alpha)
-    local s = config.scale or 1.0
+    local s = config.scale * DPI
     local w = 220 * s
     local h = 260 * s
 
@@ -349,7 +328,7 @@ end
 -- STYLE 2: Flat Digital
 -- ============================================================================
 local function renderStyleDigital(dl, posX, posY, alpha)
-    local s = config.scale or 1.0
+    local s = config.scale * DPI
     local w = 200 * s
     local h = 180 * s
 
@@ -372,7 +351,7 @@ local function renderStyleDigital(dl, posX, posY, alpha)
     local barY = posY + 58 * s
     local barW = w - 20 * s
     local barH = 8 * s
-    local speedPercent = math.min(displaySpeed / cachedMaxSpeed, 1.0)
+    local speedPercent = cachedMaxSpeed > 0 and math.min(displaySpeed / cachedMaxSpeed, 1.0) or 0
 
     -- Bar background
     dl:AddRectFilled(
@@ -420,7 +399,7 @@ end
 -- STYLE 3: Minimal Bar
 -- ============================================================================
 local function renderStyleMinimal(dl, posX, posY, alpha)
-    local s = config.scale or 1.0
+    local s = config.scale * DPI
     local w = 180 * s
     local h = 50 * s
 
