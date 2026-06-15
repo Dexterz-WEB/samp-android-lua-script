@@ -1,6 +1,7 @@
 -- ============================================================================
--- VEHICLE HUD v1.1
--- SA-Styled Speedometer with transparent background for SA-MP Android (MonetLoader)
+-- VEHICLE HUD v2.0
+-- SA-Styled Speedometer with proper colors and fixed state machine
+-- for SA-MP Android (MonetLoader)
 -- Author: OnlyDexterZ
 -- ============================================================================
 
@@ -12,7 +13,7 @@ script_author("OnlyDexterZ")
 -- ============================================================================
 local imgui = require 'mimgui'
 local jsoncfg = require 'jsoncfg'
-local vhud_lib = require 'vehiclehud_lib'
+local vhud_lib = require 'lib.vehiclehud_lib'
 
 -- ============================================================================
 -- DPI SCALING (auto-scale based on screen resolution)
@@ -39,12 +40,13 @@ local function saveConfig()
 end
 
 -- ============================================================================
--- STATE MACHINE
--- States: HIDDEN, FADE_IN, VISIBLE, FADE_OUT
+-- FADE SYSTEM (simple direction-based, no complex state machine)
+-- fadeDirection: -1 = fading out, 0 = idle, 1 = fading in
 -- ============================================================================
-local currentState = "HIDDEN"
 local fadeAlpha = 0.0
+local fadeDirection = 0
 local fadeSpeed = 0.08
+local inVehicle = false
 
 -- ============================================================================
 -- VEHICLE DATA CACHE (updated outside render)
@@ -60,7 +62,6 @@ local cachedMaxSpeed = 240
 local cachedGear = 1
 local cachedDirection = "N"
 local frameCounter = 0
-local inVehicle = false
 
 -- Smooth display values (interpolated every render frame)
 local displaySpeed = 0
@@ -75,40 +76,41 @@ local cfgPosXFloat = imgui.new.float(config.posX or 0)
 local cfgPosYFloat = imgui.new.float(config.posY or 0)
 
 -- ============================================================================
--- COLORS (muted, classic SA feel)
--- NOTE: MonetLoader DrawList uses ABGR format: 0xAABBGGRR
+-- COLOR HELPER - must be called INSIDE imgui.OnFrame callback only
+-- Uses imgui.ColorConvertFloat4ToU32 for platform-correct color conversion
 -- ============================================================================
-local COLORS = {
-    text = 0xFFEEEEEE,       -- white/light gray (symmetric, same in ABGR)
-    textDim = 0xFFAAAAAA,    -- gray (symmetric, same in ABGR)
-    needle = 0xFF0000EE,     -- Bright RED in ABGR (A=FF, B=00, G=00, R=EE)
-    tickWhite = 0xFFDDDDDD,  -- white (symmetric, same in ABGR)
-    tickRed = 0xFF4444CC,    -- Muted red in ABGR (A=FF, B=44, G=44, R=CC)
-    arcBg = 0x55FFFFFF,      -- faint white (symmetric, same in ABGR)
-    speedText = 0xFFFFFFFF,  -- white (symmetric, same in ABGR)
-    engineOn = 0xFF33FF66,   -- GREEN in ABGR (keep as-is, green is middle byte)
-    engineOff = 0xFF3333FF,  -- RED in ABGR (A=FF, B=33, G=33, R=FF)
-    pivotCenter = 0xFFCCCCCC, -- gray (symmetric, same in ABGR)
-}
+local function getColors(alpha)
+    local a = alpha
+    return {
+        needle = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.93, 0.07, 0.07, a)),
+        text = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.93, 0.93, 0.93, a)),
+        textDim = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.67, 0.67, 0.67, a)),
+        tickWhite = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.87, 0.87, 0.87, a)),
+        tickRed = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.8, 0.27, 0.27, a)),
+        speedText = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 1.0, 1.0, a)),
+        engineOn = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.2, 1.0, 0.4, a)),
+        engineOff = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(1.0, 0.2, 0.2, a)),
+        pivotCenter = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.8, 0.8, 0.8, a)),
+        healthGreen = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.27, 0.8, 0.27, a)),
+        healthYellow = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.8, 0.8, 0.27, a)),
+        healthRed = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.8, 0.27, 0.27, a)),
+        bgDark = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.1, 0.1, 0.12, 0.8 * a)),
+        barBg = imgui.ColorConvertFloat4ToU32(imgui.ImVec4(0.13, 0.13, 0.18, 0.6 * a)),
+    }
+end
 
 -- ============================================================================
 -- UTILITY FUNCTIONS
 -- ============================================================================
-local bit = require 'bit'
-
-local function applyAlpha(color, alpha)
-    local a = math.floor(bit.band(bit.rshift(color, 24), 0xFF) * alpha)
-    return bit.bor(bit.lshift(a, 24), bit.band(color, 0x00FFFFFF))
-end
 
 local function getHudSize()
     local s = config.scale * DPI
     if config.style == 1 then
-        return 240 * s, 230 * s
+        return 260 * s, 240 * s
     elseif config.style == 2 then
-        return 200 * s, 180 * s
+        return 200 * s, 160 * s
     else
-        return 180 * s, 50 * s
+        return 220 * s, 48 * s
     end
 end
 
@@ -127,6 +129,48 @@ local function isPlayerInVehicle()
         result = isCharInAnyCar(PLAYER_PED)
     end)
     return result
+end
+
+-- ============================================================================
+-- FADE UPDATE (safe to call from render, no pcall)
+-- ============================================================================
+local function updateFade()
+    if fadeDirection == 1 then
+        fadeAlpha = fadeAlpha + fadeSpeed
+        if fadeAlpha >= 1.0 then
+            fadeAlpha = 1.0
+            fadeDirection = 0
+        end
+    elseif fadeDirection == -1 then
+        fadeAlpha = fadeAlpha - fadeSpeed
+        if fadeAlpha <= 0 then
+            fadeAlpha = 0
+            fadeDirection = 0
+            displaySpeed = 0
+        end
+    end
+end
+
+-- ============================================================================
+-- STATE MACHINE UPDATE (called from main loop, NOT inside render)
+-- Simple fade direction approach - no complex state enum
+-- ============================================================================
+local function updateStateMachine()
+    local nowInVehicle = isPlayerInVehicle()
+    if nowInVehicle and not inVehicle then
+        -- Just entered vehicle
+        fadeDirection = 1
+    elseif not nowInVehicle and inVehicle then
+        -- Just exited vehicle
+        fadeDirection = -1
+    elseif nowInVehicle and fadeAlpha < 1.0 and fadeDirection ~= 1 then
+        -- Still in vehicle but not fully visible (recovery)
+        fadeDirection = 1
+    elseif not nowInVehicle and fadeAlpha > 0 and fadeDirection ~= -1 then
+        -- Not in vehicle but still showing (recovery)
+        fadeDirection = -1
+    end
+    inVehicle = nowInVehicle
 end
 
 -- ============================================================================
@@ -185,90 +229,42 @@ local function updateVehicleData()
 end
 
 -- ============================================================================
--- STATE MACHINE UPDATE (called from main loop, NOT inside render)
+-- STYLE 1: Classic SA Gauge (semicircle, SA reference styling)
+-- Dark semicircle background shape, red needle, white ticks, speed numbers
 -- ============================================================================
-local function updateStateMachine()
-    local nowInVehicle = isPlayerInVehicle()
-
-    if nowInVehicle then
-        -- Player in vehicle: should be visible
-        if currentState == "HIDDEN" or currentState == "FADE_OUT" then
-            currentState = "FADE_IN"
-        end
-    else
-        -- Player not in vehicle: should be hidden
-        if currentState == "VISIBLE" or currentState == "FADE_IN" then
-            currentState = "FADE_OUT"
-        end
-    end
-
-    inVehicle = nowInVehicle
-end
-
--- Fade-only update (safe to call from render, no pcall)
-local function updateFade()
-    if currentState == "FADE_IN" then
-        fadeAlpha = fadeAlpha + fadeSpeed
-        if fadeAlpha >= 1.0 then
-            fadeAlpha = 1.0
-            currentState = "VISIBLE"
-        end
-    elseif currentState == "FADE_OUT" then
-        fadeAlpha = fadeAlpha - fadeSpeed
-        if fadeAlpha <= 0.0 then
-            fadeAlpha = 0.0
-            currentState = "HIDDEN"
-            displaySpeed = 0
-        end
-    end
-end
-
--- ============================================================================
--- STYLE 1: Classic SA Gauge (180-degree semicircle, transparent background)
--- ============================================================================
-local function renderStyleClassic(dl, posX, posY, alpha)
+local function renderStyleClassic(dl, posX, posY, colors)
     local s = config.scale * DPI
-    local w = 240 * s
-    local h = 230 * s
+    local w = 260 * s
+    local h = 240 * s
 
-    -- NO background panel - transparent, gauge floats directly on game
-
-    -- Arc gauge center (positioned within the allocated area)
+    -- Arc gauge center
     local cx = posX + w * 0.5
-    local cy = posY + 110 * s
-    local radius = 85 * s
+    local cy = posY + h * 0.48
+    local radius = 90 * s
 
-    -- 180-degree semicircle: from left to right
+    -- 180-degree semicircle: from left (-180 deg) to right (0 deg)
+    -- Using standard math angles: -pi = left, 0 = right, top half
     local minAngle = math.rad(-180)
     local maxAngle = math.rad(0)
 
-    -- Draw subtle arc background (thin, faint)
-    vhud_lib.drawArcGauge(dl, cx, cy, radius, minAngle, maxAngle, 0, cachedMaxSpeed, {
-        thickness = 2.5 * s,
-        bgColor = applyAlpha(0x44FFFFFF, alpha),
-        fgColor = 0x00000000,
-        segments = 60,
-    })
+    -- Draw dark semicircle background shape (pie/fan)
+    vhud_lib.drawSemicircleBackground(dl, cx, cy, radius + 18 * s, colors.bgDark, 40)
 
-    -- Draw tick marks - classic SA style: white with subtle red at end
+    -- Draw tick marks - white with subtle red at end (last 18%)
     local tickCount = 27
-    local redStartTick = math.floor(tickCount * 0.82)
     vhud_lib.drawTickMarks(dl, cx, cy, radius, tickCount, {
         minAngle = minAngle,
         maxAngle = maxAngle,
         innerRadius = radius - 14 * s,
         outerRadius = radius - 2 * s,
-        color = applyAlpha(COLORS.tickWhite, alpha),
+        color = colors.tickWhite,
         majorEvery = 3,
         thickness = 1.5 * s,
-        colorZones = {
-            { startTick = 0, endTick = redStartTick, color = applyAlpha(COLORS.tickWhite, alpha) },
-            { startTick = redStartTick, endTick = tickCount, color = applyAlpha(COLORS.tickRed, alpha) },
-        },
+        redZoneColor = colors.tickRed,
+        redZoneStart = 0.82,
     })
 
-    -- Draw speed numbers along arc (outside, classic positioning)
-    -- Auto-adjust interval based on max speed
+    -- Draw speed numbers along arc (outside)
     local interval = 20
     if cachedMaxSpeed >= 300 then interval = 50
     elseif cachedMaxSpeed >= 200 then interval = 40
@@ -276,83 +272,91 @@ local function renderStyleClassic(dl, posX, posY, alpha)
     elseif cachedMaxSpeed >= 80 then interval = 20
     else interval = 10 end
 
-    vhud_lib.drawSpeedNumbers(dl, cx, cy, radius, cachedMaxSpeed, interval, nil, {
+    vhud_lib.drawSpeedNumbers(dl, cx, cy, radius, cachedMaxSpeed, interval, {
         minAngle = minAngle,
         maxAngle = maxAngle,
-        color = applyAlpha(COLORS.text, alpha),
+        color = colors.text,
         offset = 12 * s,
     })
 
-    -- Draw needle - thicker, bold red, prominent
+    -- Draw needle - bright red, thick, prominent
     local needleAngle = vhud_lib.angleForValue(displaySpeed, cachedMaxSpeed, minAngle, maxAngle)
     vhud_lib.drawNeedle(dl, cx, cy, radius - 18 * s, needleAngle, {
-        color = applyAlpha(COLORS.needle, alpha),
-        thickness = 3.2 * s,
-        length = radius - 20 * s,
+        color = colors.needle,
+        thickness = 3.0 * s,
     })
 
-    -- Center pivot hub circle - larger and prominent
-    dl:AddCircleFilled(imgui.ImVec2(cx, cy), 7.5 * s, applyAlpha(COLORS.pivotCenter, alpha))
-    dl:AddCircleFilled(imgui.ImVec2(cx, cy), 4 * s, applyAlpha(COLORS.needle, alpha))
+    -- Center pivot hub
+    dl:AddCircleFilled(imgui.ImVec2(cx, cy), 7 * s, colors.pivotCenter)
+    dl:AddCircleFilled(imgui.ImVec2(cx, cy), 3.5 * s, colors.needle)
 
-    -- Digital speed display below gauge center
+    -- Digital speed display below center
     local speedStr = tostring(math.floor(displaySpeed))
     local unitStr = config.unit == "kmh" and "km/h" or "mph"
-    dl:AddText(imgui.ImVec2(cx - 14 * s, cy + 18 * s), applyAlpha(COLORS.speedText, alpha), speedStr)
-    dl:AddText(imgui.ImVec2(cx - 10 * s, cy + 36 * s), applyAlpha(COLORS.textDim, alpha), unitStr)
+    local speedTextW = #speedStr * 7 * s
+    dl:AddText(imgui.ImVec2(cx - speedTextW * 0.5, cy + 14 * s), colors.speedText, speedStr)
+    dl:AddText(imgui.ImVec2(cx - 10 * s, cy + 30 * s), colors.textDim, unitStr)
 
-    -- Vehicle info below gauge (subtle text)
-    local infoY = posY + 155 * s
+    -- Vehicle info below gauge
+    local infoY = cy + 48 * s
 
-    -- Vehicle name
-    dl:AddText(imgui.ImVec2(posX + 10 * s, infoY), applyAlpha(COLORS.text, alpha), cachedVehicleName)
+    -- Vehicle name centered
+    local nameW = #cachedVehicleName * 5.5 * s
+    dl:AddText(imgui.ImVec2(cx - nameW * 0.5, infoY), colors.text, cachedVehicleName)
 
-    -- Gear
-    local gearStr = "Gear: " .. tostring(cachedGear)
-    dl:AddText(imgui.ImVec2(posX + 10 * s, infoY + 20 * s), applyAlpha(COLORS.textDim, alpha), gearStr)
+    -- Gear and direction line
+    local gearStr = "G" .. tostring(cachedGear)
+    local dirStr = cachedDirection .. " " .. tostring(math.floor(cachedHeading))
 
-    -- Engine status
-    local engineStr = "ENG: " .. (cachedEngineOn and "ON" or "OFF")
-    local engineColor = cachedEngineOn and COLORS.engineOn or COLORS.engineOff
-    dl:AddText(imgui.ImVec2(posX + 10 * s, infoY + 40 * s), applyAlpha(engineColor, alpha), engineStr)
+    -- Engine indicator
+    local engineStr = cachedEngineOn and "ENG" or "OFF"
+    local engineColor = cachedEngineOn and colors.engineOn or colors.engineOff
 
-    -- Direction/heading
-    local dirStr = cachedDirection .. " (" .. tostring(math.floor(cachedHeading)) .. ")"
-    dl:AddText(imgui.ImVec2(posX + w - 90 * s, infoY + 20 * s), applyAlpha(COLORS.textDim, alpha), dirStr)
+    dl:AddText(imgui.ImVec2(posX + 20 * s, infoY + 16 * s), colors.textDim, gearStr)
+    dl:AddText(imgui.ImVec2(cx - 15 * s, infoY + 16 * s), engineColor, engineStr)
+    dl:AddText(imgui.ImVec2(posX + w - 70 * s, infoY + 16 * s), colors.textDim, dirStr)
 
-    -- Health bar at bottom of gauge area
-    vhud_lib.drawHealthBar(dl, posX + 10 * s, posY + h - 10 * s, w - 20 * s, 10 * s, cachedHealth, {
-        bgColor = applyAlpha(0x44000000, alpha),
+    -- Health bar at bottom
+    local healthColor = colors.healthGreen
+    if cachedHealth < 0.3 then
+        healthColor = colors.healthRed
+    elseif cachedHealth < 0.6 then
+        healthColor = colors.healthYellow
+    end
+
+    vhud_lib.drawHealthBar(dl, posX + 20 * s, infoY + 36 * s, w - 40 * s, 8 * s, cachedHealth, {
+        bgColor = colors.barBg,
+        fillColor = healthColor,
         rounding = 3 * s,
     })
 end
 
 -- ============================================================================
--- STYLE 2: Flat Digital
+-- STYLE 2: Modern Digital (rectangular panel, large speed, horizontal bar)
 -- ============================================================================
-local function renderStyleDigital(dl, posX, posY, alpha)
+local function renderStyleDigital(dl, posX, posY, colors)
     local s = config.scale * DPI
     local w = 200 * s
-    local h = 180 * s
+    local h = 160 * s
 
-    -- Background panel (digital style keeps a subtle dark panel)
-    local bgColor = applyAlpha(0xCC1A1A2E, alpha * (config.opacity or 0.85))
+    -- Dark semi-transparent rectangular panel
     dl:AddRectFilled(
         imgui.ImVec2(posX, posY),
         imgui.ImVec2(posX + w, posY + h),
-        bgColor, 8 * s
+        colors.bgDark, 8 * s
     )
 
-    -- Large digital speed centered
+    -- Large digital speed centered at top
     local speedStr = tostring(math.floor(displaySpeed))
     local unitStr = config.unit == "kmh" and "km/h" or "mph"
-    dl:AddText(imgui.ImVec2(posX + w * 0.5 - 20 * s, posY + 15 * s), applyAlpha(COLORS.speedText, alpha), speedStr)
-    dl:AddText(imgui.ImVec2(posX + w * 0.5 - 10 * s, posY + 35 * s), applyAlpha(COLORS.textDim, alpha), unitStr)
+    local speedW = #speedStr * 8 * s
+    dl:AddText(imgui.ImVec2(posX + w * 0.5 - speedW * 0.5, posY + 12 * s), colors.speedText, speedStr)
+    dl:AddText(imgui.ImVec2(posX + w * 0.5 - 12 * s, posY + 30 * s), colors.textDim, unitStr)
 
-    -- Horizontal speed bar
-    local barX = posX + 10 * s
-    local barY = posY + 58 * s
-    local barW = w - 20 * s
+    -- Horizontal speed bar below
+    local barX = posX + 12 * s
+    local barY = posY + 50 * s
+    local barW = w - 24 * s
     local barH = 8 * s
     local speedPercent = cachedMaxSpeed > 0 and math.min(displaySpeed / cachedMaxSpeed, 1.0) or 0
 
@@ -360,111 +364,139 @@ local function renderStyleDigital(dl, posX, posY, alpha)
     dl:AddRectFilled(
         imgui.ImVec2(barX, barY),
         imgui.ImVec2(barX + barW, barY + barH),
-        applyAlpha(0xFF222233, alpha), 3 * s
+        colors.barBg, 3 * s
     )
-    -- Bar fill (colors in ABGR format)
-    local barColor = 0xFF33FF66  -- green in ABGR
-    if speedPercent > 0.8 then barColor = 0xFF3333FF       -- red in ABGR
-    elseif speedPercent > 0.6 then barColor = 0xFF33CCFF end  -- yellow/amber in ABGR
+
+    -- Bar fill with color based on speed
+    local barColor = colors.healthGreen
+    if speedPercent > 0.8 then
+        barColor = colors.healthRed
+    elseif speedPercent > 0.6 then
+        barColor = colors.healthYellow
+    end
 
     if speedPercent > 0 then
         dl:AddRectFilled(
             imgui.ImVec2(barX, barY),
             imgui.ImVec2(barX + barW * speedPercent, barY + barH),
-            applyAlpha(barColor, alpha), 3 * s
+            barColor, 3 * s
         )
     end
 
-    -- Vehicle name and info
-    local infoY = posY + 78 * s
-    dl:AddText(imgui.ImVec2(posX + 10 * s, infoY), applyAlpha(COLORS.text, alpha), cachedVehicleName)
+    -- Vehicle name
+    local infoY = posY + 68 * s
+    dl:AddText(imgui.ImVec2(posX + 12 * s, infoY), colors.text, cachedVehicleName)
 
-    -- Gear and direction on same line
+    -- Gear, direction, engine on same line
     local gearStr = "G" .. tostring(cachedGear)
-    dl:AddText(imgui.ImVec2(posX + 10 * s, infoY + 18 * s), applyAlpha(COLORS.textDim, alpha), gearStr)
+    dl:AddText(imgui.ImVec2(posX + 12 * s, infoY + 18 * s), colors.textDim, gearStr)
 
-    local dirStr = cachedDirection
-    dl:AddText(imgui.ImVec2(posX + 50 * s, infoY + 18 * s), applyAlpha(COLORS.textDim, alpha), dirStr)
+    dl:AddText(imgui.ImVec2(posX + 50 * s, infoY + 18 * s), colors.textDim, cachedDirection)
 
-    -- Engine status
-    local engineStr = cachedEngineOn and "ENG ON" or "ENG OFF"
-    local engineColor = cachedEngineOn and COLORS.engineOn or COLORS.engineOff
-    dl:AddText(imgui.ImVec2(posX + w - 70 * s, infoY + 18 * s), applyAlpha(engineColor, alpha), engineStr)
+    local engineStr = cachedEngineOn and "ENG" or "OFF"
+    local engineColor = cachedEngineOn and colors.engineOn or colors.engineOff
+    dl:AddText(imgui.ImVec2(posX + w - 50 * s, infoY + 18 * s), engineColor, engineStr)
 
-    -- Health bar
-    vhud_lib.drawHealthBar(dl, posX + 10 * s, posY + h - 22 * s, w - 20 * s, 10 * s, cachedHealth, {
-        bgColor = applyAlpha(0xFF222233, alpha),
+    -- Health bar at bottom
+    local healthColor = colors.healthGreen
+    if cachedHealth < 0.3 then
+        healthColor = colors.healthRed
+    elseif cachedHealth < 0.6 then
+        healthColor = colors.healthYellow
+    end
+
+    vhud_lib.drawHealthBar(dl, posX + 12 * s, posY + h - 18 * s, w - 24 * s, 8 * s, cachedHealth, {
+        bgColor = colors.barBg,
+        fillColor = healthColor,
         rounding = 3 * s,
     })
 end
 
 -- ============================================================================
--- STYLE 3: Minimal Bar
+-- STYLE 3: Minimal Strip (thin horizontal bar, speed + unit + gear in one line)
 -- ============================================================================
-local function renderStyleMinimal(dl, posX, posY, alpha)
+local function renderStyleMinimal(dl, posX, posY, colors)
     local s = config.scale * DPI
-    local w = 180 * s
-    local h = 50 * s
+    local w = 220 * s
+    local h = 48 * s
 
-    -- Subtle background
-    local bgColor = applyAlpha(0xCC1A1A2E, alpha * (config.opacity or 0.85))
+    -- Thin dark background strip
     dl:AddRectFilled(
         imgui.ImVec2(posX, posY),
         imgui.ImVec2(posX + w, posY + h),
-        bgColor, 6 * s
+        colors.bgDark, 5 * s
     )
 
-    -- Speed number left
-    local speedStr = tostring(math.floor(displaySpeed)) .. " " .. (config.unit == "kmh" and "km/h" or "mph")
-    dl:AddText(imgui.ImVec2(posX + 8 * s, posY + 6 * s), applyAlpha(COLORS.speedText, alpha), speedStr)
-
-    -- Vehicle name small
-    local nameStr = cachedVehicleName
-    if #nameStr > 12 then nameStr = nameStr:sub(1, 11) .. "." end
-    dl:AddText(imgui.ImVec2(posX + 8 * s, posY + 22 * s), applyAlpha(COLORS.textDim, alpha), nameStr)
-
-    -- Gear indicator right
+    -- Speed + unit + gear in one line
+    local speedStr = tostring(math.floor(displaySpeed))
+    local unitStr = config.unit == "kmh" and "km/h" or "mph"
     local gearStr = "G" .. tostring(cachedGear)
-    dl:AddText(imgui.ImVec2(posX + w - 30 * s, posY + 6 * s), applyAlpha(COLORS.textDim, alpha), gearStr)
 
-    -- Minimal health bar at bottom
-    local barX = posX + 8 * s
+    -- Speed number (left)
+    dl:AddText(imgui.ImVec2(posX + 10 * s, posY + 6 * s), colors.speedText, speedStr)
+
+    -- Unit (after speed)
+    local speedTextW = #speedStr * 7 * s
+    dl:AddText(imgui.ImVec2(posX + 10 * s + speedTextW + 4 * s, posY + 6 * s), colors.textDim, unitStr)
+
+    -- Gear (right side)
+    dl:AddText(imgui.ImVec2(posX + w - 55 * s, posY + 6 * s), colors.textDim, gearStr)
+
+    -- Direction (far right)
+    dl:AddText(imgui.ImVec2(posX + w - 30 * s, posY + 6 * s), colors.textDim, cachedDirection)
+
+    -- Vehicle name (second line, small)
+    local nameStr = cachedVehicleName
+    if #nameStr > 16 then nameStr = nameStr:sub(1, 15) .. "." end
+    dl:AddText(imgui.ImVec2(posX + 10 * s, posY + 22 * s), colors.textDim, nameStr)
+
+    -- Engine indicator on second line right
+    local engineStr = cachedEngineOn and "ENG" or "OFF"
+    local engineColor = cachedEngineOn and colors.engineOn or colors.engineOff
+    dl:AddText(imgui.ImVec2(posX + w - 40 * s, posY + 22 * s), engineColor, engineStr)
+
+    -- Mini health bar at bottom
+    local barX = posX + 10 * s
     local barY = posY + h - 10 * s
-    local barW = w - 16 * s
+    local barW = w - 20 * s
     local barH = 4 * s
 
-    dl:AddRectFilled(
-        imgui.ImVec2(barX, barY),
-        imgui.ImVec2(barX + barW, barY + barH),
-        applyAlpha(0xFF222233, alpha), 2 * s
-    )
-
-    local healthColor = 0xFF33CC33  -- green in ABGR
-    if cachedHealth < 0.3 then healthColor = 0xFF3333CC       -- red in ABGR
-    elseif cachedHealth < 0.6 then healthColor = 0xFF33CCCC end  -- yellow in ABGR
-
-    if cachedHealth > 0 then
-        dl:AddRectFilled(
-            imgui.ImVec2(barX, barY),
-            imgui.ImVec2(barX + barW * cachedHealth, barY + barH),
-            applyAlpha(healthColor, alpha), 2 * s
-        )
+    local healthColor = colors.healthGreen
+    if cachedHealth < 0.3 then
+        healthColor = colors.healthRed
+    elseif cachedHealth < 0.6 then
+        healthColor = colors.healthYellow
     end
+
+    vhud_lib.drawHealthBar(dl, barX, barY, barW, barH, cachedHealth, {
+        bgColor = colors.barBg,
+        fillColor = healthColor,
+        rounding = 2 * s,
+    })
 end
 
 -- ============================================================================
 -- IMGUI RENDERING - Direct BackgroundDrawList (no window, non-interactive)
+-- CRITICAL FIX: condition is ONLY config.enabled - NO state check!
+-- This ensures the render callback always runs and can respond to state changes
 -- ============================================================================
 imgui.OnFrame(
-    function() return config.enabled and currentState ~= "HIDDEN" end,
+    function() return config.enabled end,
     function(self)
         self.HideCursor = true
+
+        -- Update fade (safe, no pcall)
+        updateFade()
+
+        -- Skip rendering if fully hidden
+        if fadeAlpha <= 0 and not inVehicle then return end
 
         -- Smooth needle interpolation every render frame
         displaySpeed = displaySpeed + (cachedSpeed - displaySpeed) * 0.12
 
-        -- Update fade alpha (safe, no pcall)
-        updateFade()
+        -- Generate colors inside render callback (platform-correct conversion)
+        -- Caller controls overall visibility: fadeAlpha * config.opacity
+        local colors = getColors(fadeAlpha * (config.opacity or 0.85))
 
         -- Determine position
         local screenW = imgui.GetIO().DisplaySize.x
@@ -476,15 +508,15 @@ imgui.OnFrame(
             posX, posY = getDefaultPos(screenW, screenH)
         end
 
-        -- Draw HUD directly on background draw list (no window needed)
+        -- Draw HUD directly on background draw list
         local dl = imgui.GetBackgroundDrawList()
 
         if config.style == 1 then
-            renderStyleClassic(dl, posX, posY, fadeAlpha)
+            renderStyleClassic(dl, posX, posY, colors)
         elseif config.style == 2 then
-            renderStyleDigital(dl, posX, posY, fadeAlpha)
+            renderStyleDigital(dl, posX, posY, colors)
         else
-            renderStyleMinimal(dl, posX, posY, fadeAlpha)
+            renderStyleMinimal(dl, posX, posY, colors)
         end
     end
 )
@@ -528,7 +560,7 @@ imgui.OnFrame(
             -- Title
             imgui.TextColored(imgui.ImVec4(0.0, 1.0, 0.67, 1.0), "VEHICLE HUD")
             imgui.SameLine()
-            imgui.TextDisabled("v1.1 SA-Style")
+            imgui.TextDisabled("v2.0 SA-Style")
             imgui.Spacing()
             imgui.Separator()
             imgui.Spacing()
@@ -750,7 +782,6 @@ local function handleCommand(args)
     cmd = cmd:lower()
 
     if cmd == "toggle" then
-        -- Quick enable/disable without opening window
         config.enabled = not config.enabled
         saveConfig()
         local state = config.enabled and "ON" or "OFF"
@@ -797,7 +828,6 @@ local function handleCommand(args)
         end
 
     elseif cmd == "pos" then
-        -- Set position via command: /vhud pos <x> <y>
         local x, y = val:match("^(%S+)%s+(%S+)$")
         x = tonumber(x)
         y = tonumber(y)
@@ -848,18 +878,18 @@ function main()
     sampRegisterChatCommand("vhud", handleCommand)
 
     -- Load message
-    sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Loaded! Use /vhud to open config", 0xFFFFFF)
+    sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} v2.0 Loaded! Use /vhud to open config", 0xFFFFFF)
 
     -- Main loop: update data outside render
     while true do
         wait(0)
         frameCounter = frameCounter + 1
 
-        -- Update state machine every frame
+        -- Update state machine every frame (sets fadeDirection)
         updateStateMachine()
 
-        -- Update vehicle data every 3 frames (performance)
-        if currentState ~= "HIDDEN" and frameCounter % 3 == 0 then
+        -- Update vehicle data every 3 frames when visible or fading
+        if (fadeAlpha > 0 or inVehicle) and frameCounter % 3 == 0 then
             updateVehicleData()
         end
     end

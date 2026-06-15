@@ -1,13 +1,12 @@
 -- ============================================================================
 -- vehiclehud_lib.lua
 -- Reusable gauge rendering library for VehicleHUD
--- Drawing functions, vehicle database, color utilities, vehicle type detection
+-- Drawing functions, vehicle database, vehicle type detection
 -- Author: OnlyDexterZ
 -- Usage: local vhud = require 'vehiclehud_lib'
 -- ============================================================================
 
 local imgui = require 'mimgui'
-local bit = require 'bit'
 
 local M = {}
 
@@ -271,45 +270,8 @@ function M.getMaxSpeed(modelId)
 end
 
 -- ============================================================================
--- COLOR UTILITIES
+-- SMOOTH VALUE INTERPOLATION
 -- ============================================================================
-
---- Linearly interpolate between two ARGB uint32 colors channel by channel
--- Colors are in 0xAARRGGBB format
--- @param color1 number - first color (uint32 ARGB)
--- @param color2 number - second color (uint32 ARGB)
--- @param t number - interpolation factor (0.0 to 1.0)
--- @return number - interpolated color (uint32 ARGB)
-function M.lerpColor(color1, color2, t)
-    if t <= 0 then return color1 end
-    if t >= 1 then return color2 end
-
-    local c1 = bit.tobit(color1)
-    local c2 = bit.tobit(color2)
-
-    local a1 = bit.band(bit.rshift(c1, 24), 0xFF)
-    local r1 = bit.band(bit.rshift(c1, 16), 0xFF)
-    local g1 = bit.band(bit.rshift(c1, 8), 0xFF)
-    local b1 = bit.band(c1, 0xFF)
-
-    local a2 = bit.band(bit.rshift(c2, 24), 0xFF)
-    local r2 = bit.band(bit.rshift(c2, 16), 0xFF)
-    local g2 = bit.band(bit.rshift(c2, 8), 0xFF)
-    local b2 = bit.band(c2, 0xFF)
-
-    local a = math.floor(a1 + (a2 - a1) * t + 0.5)
-    local r = math.floor(r1 + (r2 - r1) * t + 0.5)
-    local g = math.floor(g1 + (g2 - g1) * t + 0.5)
-    local b = math.floor(b1 + (b2 - b1) * t + 0.5)
-
-    -- Reconstruct as uint32 ARGB
-    return bit.bor(
-        bit.lshift(bit.band(a, 0xFF), 24),
-        bit.lshift(bit.band(r, 0xFF), 16),
-        bit.lshift(bit.band(g, 0xFF), 8),
-        bit.band(b, 0xFF)
-    )
-end
 
 --- Smooth value interpolation (lerp helper for needle animation)
 -- @param current number - current value
@@ -343,93 +305,52 @@ end
 -- All drawing functions use dl:AddLine and dl:AddText (ImGui DrawList methods)
 -- NO pcall inside any drawing function (MonetLoader constraint)
 -- All angles are in radians for math.sin/math.cos
+-- Colors are passed as uint32 values (already converted by caller)
 -- ============================================================================
 
 -- Default arc angles: 180-degree semicircle sweep (classic SA-style)
--- From left (-90 deg) to right (90 deg) forming a half-circle
--- 0-degree reference is at the top (12 o'clock position)
 local DEFAULT_MIN_ANGLE = math.rad(-180)
 local DEFAULT_MAX_ANGLE = math.rad(0)
 
---- Draw a semicircle arc gauge background using dl:AddLine segments
+--- Draw a filled semicircle background (pie/fan shape) using triangles
+-- Creates a dark backdrop matching the gauge arc shape
 -- @param dl - ImGui DrawList
 -- @param cx number - center X position
 -- @param cy number - center Y position
--- @param radius number - radius of the arc
--- @param minAngle number - start angle in radians
--- @param maxAngle number - end angle in radians
--- @param value number - current value (for foreground arc)
--- @param maxValue number - maximum value for the gauge
--- @param options table - {thickness, bgColor, fgColor, segments}
-function M.drawArcGauge(dl, cx, cy, radius, minAngle, maxAngle, value, maxValue, options)
-    options = options or {}
-    local thickness = options.thickness or 3.0
-    local bgColor = options.bgColor or 0x66FFFFFF
-    local fgColor = options.fgColor or 0xFF4D99E6
-    local segments = options.segments or 60
+-- @param radius number - radius of the semicircle
+-- @param color number - fill color (uint32)
+-- @param segments number - number of triangle segments (higher = smoother)
+function M.drawSemicircleBackground(dl, cx, cy, radius, color, segments)
+    segments = segments or 32
+    local minAngle = math.rad(-180)
+    local maxAngle = math.rad(0)
+    local angleStep = (maxAngle - minAngle) / segments
 
-    local angleRange = maxAngle - minAngle
-    local angleStep = angleRange / segments
-
-    -- Draw background arc
     for i = 0, segments - 1 do
         local a1 = minAngle + angleStep * i
         local a2 = minAngle + angleStep * (i + 1)
-        local x1 = cx + radius * math.sin(a1)
-        local y1 = cy - radius * math.cos(a1)
-        local x2 = cx + radius * math.sin(a2)
-        local y2 = cy - radius * math.cos(a2)
-        dl:AddLine(imgui.ImVec2(x1, y1), imgui.ImVec2(x2, y2), bgColor, thickness)
-    end
 
-    -- Draw foreground arc (filled portion based on value)
-    if maxValue > 0 and value > 0 then
-        local t = value / maxValue
-        if t > 1 then t = 1 end
-        local filledAngle = minAngle + angleRange * t
-        local filledSegments = math.floor(segments * t)
+        local x1 = cx + radius * math.cos(a1)
+        local y1 = cy + radius * math.sin(a1)
+        local x2 = cx + radius * math.cos(a2)
+        local y2 = cy + radius * math.sin(a2)
 
-        for i = 0, filledSegments - 1 do
-            local a1 = minAngle + angleStep * i
-            local a2 = minAngle + angleStep * (i + 1)
-            if a2 > filledAngle then a2 = filledAngle end
-            local x1 = cx + radius * math.sin(a1)
-            local y1 = cy - radius * math.cos(a1)
-            local x2 = cx + radius * math.sin(a2)
-            local y2 = cy - radius * math.cos(a2)
-            dl:AddLine(imgui.ImVec2(x1, y1), imgui.ImVec2(x2, y2), fgColor, thickness + 1)
-        end
+        dl:AddTriangleFilled(
+            imgui.ImVec2(cx, cy),
+            imgui.ImVec2(x1, y1),
+            imgui.ImVec2(x2, y2),
+            color
+        )
     end
 end
 
---- Draw a needle line from center to arc edge at given angle
--- @param dl - ImGui DrawList
--- @param cx number - center X position
--- @param cy number - center Y position
--- @param radius number - radius (length of needle)
--- @param angle number - angle in radians
--- @param options table - {color, thickness, length}
-function M.drawNeedle(dl, cx, cy, radius, angle, options)
-    options = options or {}
-    local color = options.color or 0xFFFF3333
-    local thickness = options.thickness or 2.0
-    local length = options.length or radius
-
-    -- Needle goes from center to the point on the arc
-    local endX = cx + length * math.sin(angle)
-    local endY = cy - length * math.cos(angle)
-
-    dl:AddLine(imgui.ImVec2(cx, cy), imgui.ImVec2(endX, endY), color, thickness)
-end
-
---- Draw tick marks along the arc with color zones
--- Classic SA style: mostly white/light ticks with subtle red zone at the top end only
+--- Draw tick marks along the arc
 -- @param dl - ImGui DrawList
 -- @param cx number - center X position
 -- @param cy number - center Y position
 -- @param radius number - radius of the arc
 -- @param count number - number of tick marks
--- @param options table - {minAngle, maxAngle, innerRadius, outerRadius, color, majorEvery, thickness, colorZones, redZoneStart}
+-- @param options table - {minAngle, maxAngle, innerRadius, outerRadius, color, majorEvery, thickness, redZoneColor, redZoneStart}
 function M.drawTickMarks(dl, cx, cy, radius, count, options)
     options = options or {}
     local minAngle = options.minAngle or DEFAULT_MIN_ANGLE
@@ -439,8 +360,8 @@ function M.drawTickMarks(dl, cx, cy, radius, count, options)
     local defaultColor = options.color or 0xFFDDDDDD
     local majorEvery = options.majorEvery or 5
     local thickness = options.thickness or 1.5
-    local colorZones = options.colorZones
-    local redZoneStart = options.redZoneStart or 0.82  -- last ~18% is subtle red
+    local redZoneColor = options.redZoneColor or defaultColor
+    local redZoneStart = options.redZoneStart or 0.82
 
     local angleRange = maxAngle - minAngle
 
@@ -449,32 +370,20 @@ function M.drawTickMarks(dl, cx, cy, radius, count, options)
         local angle = minAngle + angleRange * t
         local isMajor = (i % majorEvery == 0)
 
-        -- Determine tick color: classic SA = white/light, subtle red at end
+        -- Determine tick color
         local tickColor = defaultColor
-        if colorZones then
-            for _, zone in ipairs(colorZones) do
-                if i >= zone.startTick and i < zone.endTick then
-                    tickColor = zone.color
-                    break
-                end
-            end
-        else
-            -- Classic SA style: white ticks, subtle red only at the very end
-            if t >= redZoneStart then
-                tickColor = 0xFF4444CC  -- subtle red in ABGR for danger zone
-            else
-                tickColor = defaultColor  -- white/light gray
-            end
+        if t >= redZoneStart then
+            tickColor = redZoneColor
         end
 
         -- Major ticks are longer
         local inner = isMajor and (innerRadius * 0.9) or innerRadius
         local thick = isMajor and (thickness * 1.5) or thickness
 
-        local x1 = cx + inner * math.sin(angle)
-        local y1 = cy - inner * math.cos(angle)
-        local x2 = cx + outerRadius * math.sin(angle)
-        local y2 = cy - outerRadius * math.cos(angle)
+        local x1 = cx + inner * math.cos(angle)
+        local y1 = cy + inner * math.sin(angle)
+        local x2 = cx + outerRadius * math.cos(angle)
+        local y2 = cy + outerRadius * math.sin(angle)
 
         dl:AddLine(imgui.ImVec2(x1, y1), imgui.ImVec2(x2, y2), tickColor, thick)
     end
@@ -486,10 +395,9 @@ end
 -- @param cy number - center Y position
 -- @param radius number - radius for text placement
 -- @param maxSpeed number - maximum speed value
--- @param interval number - speed interval between labels (e.g. 20)
--- @param currentAngle number - current needle angle (unused, reserved for highlighting)
+-- @param interval number - speed interval between labels
 -- @param options table - {minAngle, maxAngle, color, offset}
-function M.drawSpeedNumbers(dl, cx, cy, radius, maxSpeed, interval, currentAngle, options)
+function M.drawSpeedNumbers(dl, cx, cy, radius, maxSpeed, interval, options)
     options = options or {}
     local minAngle = options.minAngle or DEFAULT_MIN_ANGLE
     local maxAngle = options.maxAngle or DEFAULT_MAX_ANGLE
@@ -506,10 +414,10 @@ function M.drawSpeedNumbers(dl, cx, cy, radius, maxSpeed, interval, currentAngle
         local t = speed / maxSpeed
         local angle = minAngle + angleRange * t
 
-        local x = cx + textRadius * math.sin(angle)
-        local y = cy - textRadius * math.cos(angle)
+        local x = cx + textRadius * math.cos(angle)
+        local y = cy + textRadius * math.sin(angle)
 
-        -- Center-approximate the text by offsetting based on string length
+        -- Center-approximate the text
         local text = tostring(speed)
         local textOffsetX = #text * 3.0
         local textOffsetY = 6.0
@@ -522,7 +430,25 @@ function M.drawSpeedNumbers(dl, cx, cy, radius, maxSpeed, interval, currentAngle
     end
 end
 
---- Draw a horizontal health bar with color gradient based on percent
+--- Draw a needle line from center to arc edge at given angle
+-- @param dl - ImGui DrawList
+-- @param cx number - center X position
+-- @param cy number - center Y position
+-- @param length number - length of needle
+-- @param angle number - angle in radians
+-- @param options table - {color, thickness}
+function M.drawNeedle(dl, cx, cy, length, angle, options)
+    options = options or {}
+    local color = options.color or 0xFFFF3333
+    local thickness = options.thickness or 2.0
+
+    local endX = cx + length * math.cos(angle)
+    local endY = cy + length * math.sin(angle)
+
+    dl:AddLine(imgui.ImVec2(cx, cy), imgui.ImVec2(endX, endY), color, thickness)
+end
+
+--- Draw a horizontal health bar
 -- @param dl - ImGui DrawList
 -- @param x number - top-left X position
 -- @param y number - top-left Y position
@@ -533,29 +459,13 @@ end
 function M.drawHealthBar(dl, x, y, width, height, percent, options)
     options = options or {}
     local bgColor = options.bgColor or 0x66000000
-    local borderColor = options.borderColor or 0xFF444444
+    local fillColor = options.fillColor or 0xFF44CC44
+    local borderColor = options.borderColor
     local rounding = options.rounding or 2.0
 
     -- Clamp percent
     if percent < 0 then percent = 0 end
     if percent > 1 then percent = 1 end
-
-    -- Determine fill color based on health percent (green -> yellow -> red)
-    -- NOTE: Colors in ABGR format (0xAABBGGRR) for MonetLoader DrawList
-    local fillColor = options.fillColor
-    if not fillColor then
-        if percent > 0.6 then
-            fillColor = 0xFF44CC44  -- green (symmetric in ABGR, G is middle byte)
-        elseif percent > 0.3 then
-            -- Interpolate green to yellow
-            local t = (0.6 - percent) / 0.3
-            fillColor = M.lerpColor(0xFF44CC44, 0xFF44CCCC, t)
-        else
-            -- Interpolate yellow to red
-            local t = (0.3 - percent) / 0.3
-            fillColor = M.lerpColor(0xFF44CCCC, 0xFF4444CC, t)
-        end
-    end
 
     -- Draw background
     dl:AddRectFilled(
@@ -574,27 +484,13 @@ function M.drawHealthBar(dl, x, y, width, height, percent, options)
         )
     end
 
-    -- Draw border
-    dl:AddLine(
-        imgui.ImVec2(x, y),
-        imgui.ImVec2(x + width, y),
-        borderColor, 1.0
-    )
-    dl:AddLine(
-        imgui.ImVec2(x, y + height),
-        imgui.ImVec2(x + width, y + height),
-        borderColor, 1.0
-    )
-    dl:AddLine(
-        imgui.ImVec2(x, y),
-        imgui.ImVec2(x, y + height),
-        borderColor, 1.0
-    )
-    dl:AddLine(
-        imgui.ImVec2(x + width, y),
-        imgui.ImVec2(x + width, y + height),
-        borderColor, 1.0
-    )
+    -- Draw border if provided
+    if borderColor then
+        dl:AddLine(imgui.ImVec2(x, y), imgui.ImVec2(x + width, y), borderColor, 1.0)
+        dl:AddLine(imgui.ImVec2(x, y + height), imgui.ImVec2(x + width, y + height), borderColor, 1.0)
+        dl:AddLine(imgui.ImVec2(x, y), imgui.ImVec2(x, y + height), borderColor, 1.0)
+        dl:AddLine(imgui.ImVec2(x + width, y), imgui.ImVec2(x + width, y + height), borderColor, 1.0)
+    end
 end
 
 -- ============================================================================
@@ -602,7 +498,6 @@ end
 -- ============================================================================
 
 --- Estimate gear (1-6) from speed and vehicle type
--- Uses speed thresholds to determine approximate gear
 -- @param speedKmh number - current speed in km/h
 -- @param vehicleType string - vehicle type (Car, Bike, Bicycle, etc.)
 -- @return number - estimated gear (1-6)
@@ -622,7 +517,7 @@ function M.getGearFromSpeed(speedKmh, vehicleType)
         return 4
     end
 
-    -- Cars and Bikes use 6-gear estimation
+    -- Bikes use 6-gear estimation
     if vehicleType == "Bike" then
         if speedKmh < 30 then return 1 end
         if speedKmh < 60 then return 2 end
@@ -650,7 +545,6 @@ function M.getHeadingDirection(heading)
     if heading < 0 then heading = heading + 360 end
 
     -- 8 directions, each covers 45 degrees
-    -- N: 337.5 - 22.5, NE: 22.5 - 67.5, etc.
     if heading >= 337.5 or heading < 22.5 then
         return "N"
     elseif heading >= 22.5 and heading < 67.5 then

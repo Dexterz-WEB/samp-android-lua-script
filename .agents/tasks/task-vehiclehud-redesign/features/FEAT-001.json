@@ -1,0 +1,34 @@
+{
+  "id": "FEAT-001",
+  "type": "refactor",
+  "description": "Full rewrite of VehicleHUD.lua and update of lib/vehiclehud_lib.lua to fix state machine bug, fix color format issues, and redesign all 3 styles to match SA reference.",
+  "status": "in_progress",
+  "steps": [
+    "REWRITE /projects/sandbox/samp-android-lua-script/lib/vehiclehud_lib.lua: Keep VEHICLE_DATABASE (all 212 vehicles model 400-611) exactly as-is. Keep helper functions (getVehicleName, getVehicleType, getMaxSpeed, getGearFromSpeed, getHeadingDirection, smoothValue, angleForValue). REMOVE lerpColor (bitwise color manipulation). UPDATE drawing functions (drawArcGauge, drawNeedle, drawTickMarks, drawSpeedNumbers, drawHealthBar) to accept color parameters as uint32 values (no format assumption - colors passed in are already converted via imgui.ColorConvertFloat4ToU32). Remove ABGR hex hardcoded defaults from drawing functions - instead use simple neutral defaults that will be overridden by caller. Add a new function M.drawSemicircleBackground(dl, cx, cy, radius, color, segments) that draws a filled semicircle/pie shape using triangles (AddTriangleFilled from center to arc segments) for Style 1 background.",
+    "REWRITE /projects/sandbox/samp-android-lua-script/VehicleHUD.lua completely with these critical fixes: (A) STATE MACHINE FIX: imgui.OnFrame condition must be ONLY 'function() return config.enabled end' - NO state check. Inside render callback: call updateFade(), then if fadeAlpha <= 0 and not inVehicle then return end. Replace complex state machine with simple fadeDirection approach: fadeDirection = 0 (idle), 1 (fading in), -1 (fading out). updateStateMachine in main loop sets fadeDirection based on vehicle state. updateFade increments/decrements fadeAlpha based on fadeDirection. (B) COLOR FIX: Define a getColors(alpha) function INSIDE the render callback that uses imgui.ColorConvertFloat4ToU32(imgui.ImVec4(r,g,b,a)) for ALL colors. Colors include: needle (bright red 0.93,0.07,0.07), text (0.93,0.93,0.93), textDim (0.67,0.67,0.67), tickWhite (0.87,0.87,0.87), tickRed (0.8,0.27,0.27), speedText (1.0,1.0,1.0), engineOn (0.2,1.0,0.4), engineOff (1.0,0.2,0.2), pivotCenter (0.8,0.8,0.8), healthGreen (0.27,0.8,0.27), healthYellow (0.8,0.8,0.27), healthRed (0.8,0.27,0.27), bgDark (0.1,0.1,0.12 at 0.8*alpha). NO hex color constants anywhere.",
+    "Implement Style 1 (Classic SA Gauge): Dark semicircle background SHAPE (pie/fan shape matching the arc, not a rectangle). Arc from -180deg to 0deg (half circle). Tick marks white, major ticks longer, subtle red zone at last ~18%. Speed numbers (0,20,40,60..max) placed outside arc in white. Needle: BRIGHT RED, thick, from center to near edge. Center hub: gray circle. Digital speed: large white number below center point. Unit (km/h or mph): small, below digital speed. Vehicle name, gear, direction: below gauge in small subtle text. Health bar: horizontal at bottom.",
+    "Implement Style 2 (Modern Digital): Rectangular dark semi-transparent panel (use bgDark color). Large digital speed number centered (bold white). Horizontal speed bar below number (green->yellow->red gradient based on speed%). Vehicle info compact below bar. Health bar at bottom. Clean flat design.",
+    "Implement Style 3 (Minimal Strip): Thin horizontal strip with dark background. Speed number + unit + gear in one line. Mini health bar below. Very compact, minimal vertical space.",
+    "Keep ALL existing features: config window (with Button-based toggles, not Checkbox), /vhud commands (toggle, style, unit, scale, opacity, pos, reset), auto-DPI scaling, vehicle database lookups, gear estimation, heading direction. Config window uses same dark theme styling pattern from current code.",
+    "After rewriting both files, commit with message: refactor: full redesign VehicleHUD with proper colors, fixed state machine, and SA reference styling"
+  ],
+  "acceptance_criteria": [
+    "VehicleHUD.lua imgui.OnFrame condition is ONLY 'function() return config.enabled end' with no state/HIDDEN check",
+    "fadeAlpha/fadeDirection system replaces complex state machine (HIDDEN/FADE_IN/VISIBLE/FADE_OUT states removed)",
+    "ALL colors use imgui.ColorConvertFloat4ToU32(imgui.ImVec4(r,g,b,a)) - no hex color constants for rendering",
+    "getColors(alpha) function defined and called inside render callback",
+    "Style 1 has semicircle background shape (not rectangle), red needle, white ticks, speed numbers around arc",
+    "Style 2 has rectangular dark panel with large digital speed and horizontal bar",
+    "Style 3 is a minimal thin strip with speed+unit+gear in one line",
+    "VEHICLE_DATABASE in vehiclehud_lib.lua preserved with all 212 entries (model IDs 400-611)",
+    "Helper functions (getVehicleName, getVehicleType, getMaxSpeed, getGearFromSpeed, getHeadingDirection) preserved",
+    "Config window with /vhud command works with all subcommands (toggle, style, unit, scale, opacity, pos, reset)",
+    "Both files have valid Lua syntax (no parse errors)",
+    "Commit made with specified message"
+  ],
+  "verification": [
+    "Run lua syntax check on both files to confirm no parse errors"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
