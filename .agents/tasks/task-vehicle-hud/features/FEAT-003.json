@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Add imgui config window to VehicleHUD.lua with dark theme, button-based toggles, style/unit selectors, sliders, and /vhud command update",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Add showConfigWindow state variable for controlling config window visibility",
     "Add a second imgui.OnFrame for config window rendering with dark theme styling matching PlayerStatsWidget.lua",
@@ -35,5 +35,5 @@
     "Verify no imgui.Checkbox usage in the file"
   ],
   "blocked_reason": null,
-  "findings": null
+  "findings": "All syntax checks pass (luajit -bl returns 0). Config window uses separate imgui.OnFrame. No imgui.Checkbox used - all toggles are Button-based with PushStyleColor for active state highlighting. Pre-allocated imgui.new.float buffers for slider values to avoid per-frame allocation. Window flags combined with + operator. All MonetLoader constraints respected."
 }
