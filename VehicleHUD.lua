@@ -25,7 +25,6 @@ local DPI = MONET_DPI_SCALE or 1.0
 -- ============================================================================
 local defaultConfig = {
     enabled = true,
-    style = 1,
     unit = "kmh",
     scale = 1.0,
     opacity = 0.85,
@@ -105,13 +104,7 @@ end
 
 local function getHudSize()
     local s = config.scale * DPI
-    if config.style == 1 then
-        return 360 * s, 200 * s
-    elseif config.style == 2 then
-        return 200 * s, 160 * s
-    else
-        return 220 * s, 48 * s
-    end
+    return 360 * s, 200 * s
 end
 
 local function getDefaultPos(screenW, screenH)
@@ -319,6 +312,16 @@ local function renderStyleClassic(dl, posX, posY, colors)
     local infoX = cx + radius + 25 * s
     local infoStartY = cy - 70 * s
 
+    -- Background for right-side info text (readable)
+    local infoBgPadding = 6 * s
+    local infoBgW = 90 * s
+    local infoBgH = 68 * s
+    dl:AddRectFilled(
+        imgui.ImVec2(infoX - infoBgPadding, infoStartY - infoBgPadding),
+        imgui.ImVec2(infoX + infoBgW, infoStartY + infoBgH),
+        colors.bgDark, 6 * s
+    )
+
     -- Direction/heading (at top)
     local dirStr = cachedDirection .. " " .. tostring(math.floor(cachedHeading))
     dl:AddText(imgui.ImVec2(infoX, infoStartY), colors.textDim, dirStr)
@@ -334,150 +337,6 @@ local function renderStyleClassic(dl, posX, posY, colors)
     -- Gear
     local gearStr = "G" .. tostring(cachedGear)
     dl:AddText(imgui.ImVec2(infoX, infoStartY + 48 * s), colors.textDim, gearStr)
-end
-
--- ============================================================================
--- STYLE 2: Modern Digital (rectangular panel, large speed, horizontal bar)
--- ============================================================================
-local function renderStyleDigital(dl, posX, posY, colors)
-    local s = config.scale * DPI
-    local w = 200 * s
-    local h = 160 * s
-
-    -- Dark semi-transparent rectangular panel
-    dl:AddRectFilled(
-        imgui.ImVec2(posX, posY),
-        imgui.ImVec2(posX + w, posY + h),
-        colors.bgDark, 8 * s
-    )
-
-    -- Large digital speed centered at top
-    local speedStr = tostring(math.floor(displaySpeed))
-    local unitStr = config.unit == "kmh" and "km/h" or "mph"
-    local speedW = #speedStr * 8 * s
-    dl:AddText(imgui.ImVec2(posX + w * 0.5 - speedW * 0.5, posY + 12 * s), colors.speedText, speedStr)
-    dl:AddText(imgui.ImVec2(posX + w * 0.5 - 12 * s, posY + 30 * s), colors.textDim, unitStr)
-
-    -- Horizontal speed bar below
-    local barX = posX + 12 * s
-    local barY = posY + 50 * s
-    local barW = w - 24 * s
-    local barH = 8 * s
-    local speedPercent = cachedMaxSpeed > 0 and math.min(displaySpeed / cachedMaxSpeed, 1.0) or 0
-
-    -- Bar background
-    dl:AddRectFilled(
-        imgui.ImVec2(barX, barY),
-        imgui.ImVec2(barX + barW, barY + barH),
-        colors.barBg, 3 * s
-    )
-
-    -- Bar fill with color based on speed
-    local barColor = colors.healthGreen
-    if speedPercent > 0.8 then
-        barColor = colors.healthRed
-    elseif speedPercent > 0.6 then
-        barColor = colors.healthYellow
-    end
-
-    if speedPercent > 0 then
-        dl:AddRectFilled(
-            imgui.ImVec2(barX, barY),
-            imgui.ImVec2(barX + barW * speedPercent, barY + barH),
-            barColor, 3 * s
-        )
-    end
-
-    -- Vehicle name
-    local infoY = posY + 68 * s
-    dl:AddText(imgui.ImVec2(posX + 12 * s, infoY), colors.text, cachedVehicleName)
-
-    -- Gear, direction, engine on same line
-    local gearStr = "G" .. tostring(cachedGear)
-    dl:AddText(imgui.ImVec2(posX + 12 * s, infoY + 18 * s), colors.textDim, gearStr)
-
-    dl:AddText(imgui.ImVec2(posX + 50 * s, infoY + 18 * s), colors.textDim, cachedDirection)
-
-    local engineStr = cachedEngineOn and "ENG" or "OFF"
-    local engineColor = cachedEngineOn and colors.engineOn or colors.engineOff
-    dl:AddText(imgui.ImVec2(posX + w - 50 * s, infoY + 18 * s), engineColor, engineStr)
-
-    -- Health bar at bottom
-    local healthColor = colors.healthGreen
-    if cachedHealth < 0.3 then
-        healthColor = colors.healthRed
-    elseif cachedHealth < 0.6 then
-        healthColor = colors.healthYellow
-    end
-
-    vhud_lib.drawHealthBar(dl, posX + 12 * s, posY + h - 18 * s, w - 24 * s, 8 * s, cachedHealth, {
-        bgColor = colors.barBg,
-        fillColor = healthColor,
-        rounding = 3 * s,
-    })
-end
-
--- ============================================================================
--- STYLE 3: Minimal Strip (thin horizontal bar, speed + unit + gear in one line)
--- ============================================================================
-local function renderStyleMinimal(dl, posX, posY, colors)
-    local s = config.scale * DPI
-    local w = 220 * s
-    local h = 48 * s
-
-    -- Thin dark background strip
-    dl:AddRectFilled(
-        imgui.ImVec2(posX, posY),
-        imgui.ImVec2(posX + w, posY + h),
-        colors.bgDark, 5 * s
-    )
-
-    -- Speed + unit + gear in one line
-    local speedStr = tostring(math.floor(displaySpeed))
-    local unitStr = config.unit == "kmh" and "km/h" or "mph"
-    local gearStr = "G" .. tostring(cachedGear)
-
-    -- Speed number (left)
-    dl:AddText(imgui.ImVec2(posX + 10 * s, posY + 6 * s), colors.speedText, speedStr)
-
-    -- Unit (after speed)
-    local speedTextW = #speedStr * 7 * s
-    dl:AddText(imgui.ImVec2(posX + 10 * s + speedTextW + 4 * s, posY + 6 * s), colors.textDim, unitStr)
-
-    -- Gear (right side)
-    dl:AddText(imgui.ImVec2(posX + w - 55 * s, posY + 6 * s), colors.textDim, gearStr)
-
-    -- Direction (far right)
-    dl:AddText(imgui.ImVec2(posX + w - 30 * s, posY + 6 * s), colors.textDim, cachedDirection)
-
-    -- Vehicle name (second line, small)
-    local nameStr = cachedVehicleName
-    if #nameStr > 16 then nameStr = nameStr:sub(1, 15) .. "." end
-    dl:AddText(imgui.ImVec2(posX + 10 * s, posY + 22 * s), colors.textDim, nameStr)
-
-    -- Engine indicator on second line right
-    local engineStr = cachedEngineOn and "ENG" or "OFF"
-    local engineColor = cachedEngineOn and colors.engineOn or colors.engineOff
-    dl:AddText(imgui.ImVec2(posX + w - 40 * s, posY + 22 * s), engineColor, engineStr)
-
-    -- Mini health bar at bottom
-    local barX = posX + 10 * s
-    local barY = posY + h - 10 * s
-    local barW = w - 20 * s
-    local barH = 4 * s
-
-    local healthColor = colors.healthGreen
-    if cachedHealth < 0.3 then
-        healthColor = colors.healthRed
-    elseif cachedHealth < 0.6 then
-        healthColor = colors.healthYellow
-    end
-
-    vhud_lib.drawHealthBar(dl, barX, barY, barW, barH, cachedHealth, {
-        bgColor = colors.barBg,
-        fillColor = healthColor,
-        rounding = 2 * s,
-    })
 end
 
 -- ============================================================================
@@ -516,13 +375,7 @@ imgui.OnFrame(
         -- Draw HUD directly on background draw list
         local dl = imgui.GetBackgroundDrawList()
 
-        if config.style == 1 then
-            renderStyleClassic(dl, posX, posY, colors)
-        elseif config.style == 2 then
-            renderStyleDigital(dl, posX, posY, colors)
-        else
-            renderStyleMinimal(dl, posX, posY, colors)
-        end
+        renderStyleClassic(dl, posX, posY, colors)
     end
 )
 
@@ -592,33 +445,6 @@ imgui.OnFrame(
                     saveConfig()
                 end
                 imgui.PopStyleColor(3)
-            end
-
-            imgui.Spacing()
-            imgui.Separator()
-            imgui.Spacing()
-
-            -- Style Selector
-            imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "STYLE")
-            imgui.Spacing()
-
-            local styleNames = { "Classic", "Digital", "Minimal" }
-            local btnWidth = (imgui.GetContentRegionAvail().x - 16) / 3
-
-            for i = 1, 3 do
-                if i > 1 then imgui.SameLine() end
-                if config.style == i then
-                    imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.15, 0.4, 0.8, 1.0))
-                    imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.2, 0.5, 0.9, 1.0))
-                    imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.1, 0.35, 0.7, 1.0))
-                    if imgui.Button(styleNames[i], imgui.ImVec2(btnWidth, 28)) then end
-                    imgui.PopStyleColor(3)
-                else
-                    if imgui.Button(styleNames[i], imgui.ImVec2(btnWidth, 28)) then
-                        config.style = i
-                        saveConfig()
-                    end
-                end
             end
 
             imgui.Spacing()
@@ -740,7 +566,6 @@ imgui.OnFrame(
             imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.5, 0.1, 0.1, 1.0))
             if imgui.Button("Reset All", imgui.ImVec2(resetBtnWidth, 28)) then
                 config.enabled = defaultConfig.enabled
-                config.style = defaultConfig.style
                 config.unit = defaultConfig.unit
                 config.scale = defaultConfig.scale
                 config.opacity = defaultConfig.opacity
@@ -792,16 +617,6 @@ local function handleCommand(args)
         local state = config.enabled and "ON" or "OFF"
         sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} HUD " .. state, 0xFFFFFF)
 
-    elseif cmd == "style" then
-        local n = tonumber(val)
-        if n and n >= 1 and n <= 3 then
-            config.style = math.floor(n)
-            saveConfig()
-            sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Style set to " .. tostring(config.style), 0xFFFFFF)
-        else
-            sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Usage: /vhud style 1|2|3", 0xFFFFFF)
-        end
-
     elseif cmd == "unit" then
         val = val:lower()
         if val == "kmh" or val == "mph" then
@@ -847,7 +662,6 @@ local function handleCommand(args)
 
     elseif cmd == "reset" then
         config.enabled = defaultConfig.enabled
-        config.style = defaultConfig.style
         config.unit = defaultConfig.unit
         config.scale = defaultConfig.scale
         config.opacity = defaultConfig.opacity
@@ -857,7 +671,7 @@ local function handleCommand(args)
         sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Settings reset to defaults", 0xFFFFFF)
 
     else
-        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Commands: /vhud [toggle|style|unit|scale|opacity|pos|reset]", 0xFFFFFF)
+        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Commands: /vhud [toggle|unit|scale|opacity|pos|reset]", 0xFFFFFF)
     end
 end
 
