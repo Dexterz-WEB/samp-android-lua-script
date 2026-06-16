@@ -1,0 +1,34 @@
+{
+  "project_type": "SA-MP Android Lua scripts for MonetLoader (game modification framework)",
+  "language": "Lua (LuaJIT with FFI)",
+  "build_system": "No build system - Lua scripts loaded directly by MonetLoader on Android device",
+  "test_framework": "No automated tests - tested on device. Scripts use pcall for error handling.",
+  "build_command": "N/A - Lua scripts are interpreted at runtime on Android",
+  "test_command": "N/A - manual device testing only",
+  "verification_instructions": "Verify files have valid Lua syntax using luac or luajit -bl. Check that require paths match actual file locations.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "Copy .lua files to MonetLoader scripts folder on Android device",
+  "environment_constraints": "Cannot run on host - targets Android with GTA SA + MonetLoader. Verification limited to syntax checks and structural correctness.",
+  "contribution_requirements": "Commit messages use format: type: description. Types: feat, fix, docs, refactor, test, chore. Code should be readable with clear variable names (camelCase), proper error handling, and comments for complex logic.",
+  "key_patterns": {
+    "script_structure": "script_name() + script_author() at top, require imports, config via jsoncfg, imgui.OnFrame for UI, main() function with while true loop",
+    "imgui_usage": "imgui.OnFrame(condition_fn, render_fn), imgui.ColorConvertFloat4ToU32(imgui.ImVec4(r,g,b,a)) for colors, PushStyleVarFloat/PushStyleVarVec2 for styling, Button not Checkbox for toggles, window flags combined with +",
+    "config": "jsoncfg.load(defaultConfig, 'ScriptName') and jsoncfg.save(config, 'ScriptName')",
+    "commands": "sampRegisterChatCommand('cmd', function(args) ... end)",
+    "jni_bridge": "require('android') returns JNI table with findClass, callVoidMethod, callObjectMethod, callStaticObjectMethod, to_javastring, to_luastring, looperPrepare, showToast, context2, activityClassloader, checkForJNIException",
+    "jni_internals": "getActivity() via gta._Z27NVEventGetPlatformAppHandlev(), getJNIEnv() via gta._Z24NVThreadGetCurrentJNIEnvv(), env[0] contains all JNI function pointers including NewObject, NewGlobalRef, DeleteGlobalRef, GetMethodID, FindClass etc.",
+    "lib_require_pattern": "Libraries in lib/ folder required as require('lib.modulename') e.g. require('lib.vehiclehud_lib'). Subdirs use dot notation: require('lib.webviews.init')",
+    "dpi_scaling": "MONET_DPI_SCALE global available for scaling UI elements",
+    "no_pcall_in_render": "Never use pcall inside imgui.OnFrame render callback"
+  },
+  "relevant_files": [
+    "MonetLoader-lib-full/android.lua",
+    "VehicleHUD.lua",
+    "CompassNav.lua",
+    "MonetLoader-lib-full/jsoncfg.lua",
+    "MonetLoader-lib-full/monetloader.lua",
+    "lib/vehiclehud_lib.lua",
+    "lib/chatengine_lib.lua"
+  ],
+  "directory_structure": "Root contains .lua scripts (main scripts), lib/ contains library modules, MonetLoader-lib-full/ contains the MonetLoader framework libraries (android.lua, jsoncfg.lua, mimgui, etc.), testing/ contains test scripts"
+}
