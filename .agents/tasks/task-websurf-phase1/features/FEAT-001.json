@@ -1,0 +1,46 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Create the WebView library (lib/webviews/init.lua) and the WebSurf main browser script (WebSurf.lua) for SA-MP Android MonetLoader. This is a single cohesive feature since both files are interdependent.",
+  "status": "in_progress",
+  "steps": [
+    "Create directory lib/webviews/ and file lib/webviews/init.lua implementing WebView management via JNI bridge",
+    "In lib/webviews/init.lua: require('android') for JNI access, require('ffi') for FFI. Implement helper getActivity() using ffi.load('GTASA')._Z27NVEventGetPlatformAppHandlev()",
+    "Implement newObject helper that uses env[0].GetMethodID with '<init>' and env[0].NewObject to construct Java objects",
+    "Implement M.create(id, url): call JNI:looperPrepare(), create WebView via newObject('android/webkit/WebView', ..., activity), enable JavaScript via getSettings().setJavaScriptEnabled(true), add to window using WindowManager.addView() with LayoutParams as overlay, store as global ref in browsers table, load URL",
+    "Implement M.destroy(id): remove view from WindowManager, delete global ref, remove from browsers table",
+    "Implement M.setUrl(id, url): call loadUrl on stored WebView reference",
+    "Implement M.setVisible(id, visible): call setVisibility (View.VISIBLE=0, View.GONE=8)",
+    "Implement M.setPosition(id, x, y) and M.setSize(id, w, h): update LayoutParams and call WindowManager.updateViewLayout()",
+    "Implement M.setClickable(id, bool): call setClickable and setFocusable on WebView",
+    "Implement M.goBack(id), M.goForward(id), M.reload(id): call corresponding WebView methods",
+    "Implement M.getList(): return list of active browser IDs from browsers table",
+    "Create WebSurf.lua with script_name('WebSurf'), script_author('OnlyDexterZ'), imports (mimgui, jsoncfg, lib.webviews.init)",
+    "In WebSurf.lua: define defaultConfig with homepage, webWidth, webHeight, clickable, bookmarks (Google, YouTube, Spotify, TikTok, Reddit, Wikipedia). Load via jsoncfg.load(defaultConfig, 'WebSurf')",
+    "Create imgui.OnFrame for the control panel UI: address bar (imgui.InputText), GO button, navigation buttons (Back, Forward, Refresh, Home), quick links grid, resize sliders (width/height), clickable toggle button",
+    "Style the panel with dark theme matching VehicleHUD.lua pattern: PushStyleVarFloat/PushStyleVarVec2, PushStyleColor for dark backgrounds, use window flags with + operator",
+    "Register /web command: no args toggles panel visibility, with URL arg opens that URL directly in the webview",
+    "In main() function: wait for isSampAvailable(), register command, show loaded message, enter main loop",
+    "Handle webview lifecycle: create webview on first URL navigation, auto-hide webview when panel is closed, auto-show when panel opens",
+    "Commit all changes with message: feat: add WebSurf browser with custom webviews library via JNI"
+  ],
+  "acceptance_criteria": [
+    "File lib/webviews/init.lua exists and exports a table with functions: create, destroy, setUrl, setVisible, setPosition, setSize, setClickable, goBack, goForward, reload, getList",
+    "File WebSurf.lua exists with proper script_name/script_author, uses imgui.OnFrame for UI, jsoncfg for config, sampRegisterChatCommand for /web command",
+    "WebSurf.lua has address bar with InputText, GO button, Back/Forward/Refresh/Home navigation buttons, quick links grid with 6 bookmarks, width/height sliders, clickable toggle",
+    "lib/webviews/init.lua correctly uses the JNI bridge pattern from android.lua (findClass, callVoidMethod, callObjectMethod, to_javastring, looperPrepare, NewGlobalRef, etc.)",
+    "No pcall inside imgui.OnFrame render callbacks",
+    "Colors use imgui.ColorConvertFloat4ToU32(imgui.ImVec4(r,g,b,a)) pattern",
+    "Window flags combined with + not bitwise OR",
+    "Both files pass Lua syntax validation",
+    "Git commit exists with the specified message"
+  ],
+  "verification": [
+    "Run luac or lua syntax check on both lib/webviews/init.lua and WebSurf.lua to confirm valid Lua syntax",
+    "Verify lib/webviews/init.lua exports all required API functions",
+    "Verify WebSurf.lua contains /web command registration and imgui.OnFrame UI",
+    "Run git log --oneline -1 to confirm commit message matches"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
