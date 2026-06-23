@@ -41,6 +41,7 @@ local defaultConfig = {
     opacity = 0.85,
     posX = nil,
     posY = nil,
+    devMode = false,
 }
 
 local config = jsoncfg.load(defaultConfig, "VehicleHUD")
@@ -82,6 +83,7 @@ local cachedMaxSpeed = 240
 local cachedGear = 1
 local cachedRpmRatio = 0.0
 local cachedDirection = "N"
+local cachedVehHandle = 0
 local frameCounter = 0
 
 -- Smooth display values (interpolated every render frame)
@@ -100,12 +102,14 @@ local displayBrake = 0.0
 
 -- Config window state
 local showConfigWindow = false
+local showDebugWindow = imgui.new.bool(config.devMode or false)
 
--- Config window imgui float buffers
+-- Config window imgui buffers
 local cfgScaleFloat = imgui.new.float(config.scale)
 local cfgOpacityFloat = imgui.new.float(config.opacity)
 local cfgPosXFloat = imgui.new.float(config.posX or 0)
 local cfgPosYFloat = imgui.new.float(config.posY or 0)
+local cfgDevModeBool = imgui.new.bool(config.devMode or false)
 
 -- ============================================================================
 -- COLOR HELPER - must be called INSIDE imgui.OnFrame callback only
@@ -338,6 +342,7 @@ local function updateVehicleData()
     end
 
     cachedDirection = vhud_lib.getHeadingDirection(cachedHeading)
+    cachedVehHandle = veh or 0
 end
 
 -- ============================================================================
@@ -833,6 +838,48 @@ imgui.OnFrame(
 )
 
 -- ============================================================================
+-- DEBUG WINDOW (Developer Mode)
+-- ============================================================================
+imgui.OnFrame(
+    function() return showDebugWindow[0] end,
+    function(self)
+        self.HideCursor = false
+        imgui.SetNextWindowSize(imgui.ImVec2(300, 400), imgui.Cond.FirstUseEver)
+        imgui.Begin("VehicleHUD Developer Mode", showDebugWindow)
+        
+        if imgui.CollapsingHeader("Vehicle Data") then
+            imgui.Text("Handle: " .. tostring(cachedVehHandle))
+            imgui.Text("Model ID: " .. tostring(cachedModel))
+            imgui.Text("Name: " .. cachedVehicleName)
+            imgui.Text("Type: " .. cachedVehicleType)
+            imgui.Separator()
+            imgui.Text("Speed (Cached): %.2f", cachedSpeed)
+            imgui.Text("Speed (Display): %.2f", displaySpeed)
+            imgui.Text("Max Speed: %d", cachedMaxSpeed)
+            imgui.Text("Health: %.2f (%.1f%%)", cachedHealth, cachedHealth * 100)
+            imgui.Text("Heading: %.2f (%s)", cachedHeading, cachedDirection)
+            imgui.Text("Engine: " .. (cachedEngineOn and "ON" or "OFF"))
+            imgui.Text("Gear: " .. tostring(cachedGear))
+        end
+
+        if imgui.CollapsingHeader("HUD State") then
+            imgui.Text("In Vehicle: " .. tostring(inVehicle))
+            imgui.Text("Fade Alpha: %.2f", fadeAlpha)
+            imgui.Text("Fade Direction: " .. tostring(fadeDirection))
+            imgui.Text("DPI Scale: %.2f", DPI)
+            imgui.Text("Config Scale: %.2f", config.scale)
+        end
+
+        if imgui.CollapsingHeader("Performance") then
+            imgui.Text("Frame Counter: " .. tostring(frameCounter))
+            imgui.Text("FPS: %.1f", imgui.GetIO().Framerate)
+        end
+
+        imgui.End()
+    end
+)
+
+-- ============================================================================
 -- CONFIG WINDOW (separate imgui.OnFrame)
 -- ============================================================================
 imgui.OnFrame(
@@ -962,6 +1009,19 @@ imgui.OnFrame(
             imgui.Spacing()
             imgui.Separator()
             imgui.Spacing()
+            imgui.TextColored(imgui.ImVec4(0.8, 0.4, 0.0, 1.0), "DEVELOPER TOOLS")
+            imgui.Separator()
+            imgui.Spacing()
+
+            if imgui.Checkbox("Developer Mode", cfgDevModeBool) then
+                config.devMode = cfgDevModeBool[0]
+                showDebugWindow[0] = cfgDevModeBool[0]
+                saveConfig()
+            end
+
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
 
             imgui.TextColored(imgui.ImVec4(0.6, 0.8, 1.0, 1.0), "POSITION")
             imgui.Spacing()
@@ -1019,6 +1079,9 @@ imgui.OnFrame(
                 config.opacity = defaultConfig.opacity
                 config.posX = nil
                 config.posY = nil
+                config.devMode = false
+                cfgDevModeBool[0] = false
+                showDebugWindow[0] = false
                 saveConfig()
                 sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} All settings reset to defaults", 0xFFFFFF)
             end
@@ -1061,6 +1124,14 @@ local function handleCommand(args)
         saveConfig()
         local state = config.enabled and "ON" or "OFF"
         sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} HUD " .. state, 0xFFFFFF)
+
+    elseif cmd == "debug" or cmd == "dev" then
+        config.devMode = not config.devMode
+        showDebugWindow[0] = config.devMode
+        cfgDevModeBool[0] = config.devMode
+        saveConfig()
+        local state = config.devMode and "ENABLED" or "DISABLED"
+        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Developer Mode " .. state, 0xFFFFFF)
 
     elseif cmd == "unit" then
         val = val:lower()
@@ -1116,7 +1187,7 @@ local function handleCommand(args)
         sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Settings reset to defaults", 0xFFFFFF)
 
     else
-        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Commands: /vhud [toggle|unit|scale|opacity|pos|reset]", 0xFFFFFF)
+        sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} Commands: /vhud [toggle|dev|unit|scale|opacity|pos|reset]", 0xFFFFFF)
     end
 end
 
@@ -1127,7 +1198,7 @@ function main()
     while not isSampAvailable() do wait(100) end
 
     sampRegisterChatCommand("vhud", handleCommand)
-    sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} v2.0 Loaded! Use /vhud to open config", 0xFFFFFF)
+    sampAddChatMessage("{00FFAA}[VehicleHUD]{FFFFFF} v2.1 Loaded with Developer Mode! Use /vhud to open config", 0xFFFFFF)
 
     while true do
         wait(0)
