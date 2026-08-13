@@ -84,6 +84,7 @@ local cachedGear = 1
 local cachedRpmRatio = 0.0
 local cachedDirection = "N"
 local cachedVehHandle = 0
+local nativeRpm = 0.0
 local frameCounter = 0
 
 -- Smooth display values (interpolated every render frame)
@@ -343,6 +344,16 @@ local function updateVehicleData()
 
     cachedDirection = vhud_lib.getHeadingDirection(cachedHeading)
     cachedVehHandle = veh or 0
+
+    -- Native RPM via SAMemory (offset 0x420)
+    pcall(function()
+        if carPtr and carPtr ~= 0 then
+            -- fCurrentEngineRpm is a float at offset 0x420 in CVehicle
+            nativeRpm = memory.getfloat(carPtr + 0x420, true)
+        else
+            nativeRpm = 0.0
+        end
+    end)
 end
 
 -- ============================================================================
@@ -860,6 +871,8 @@ imgui.OnFrame(
             imgui.Text("Heading: %.2f (%s)", cachedHeading, cachedDirection)
             imgui.Text("Engine: " .. (cachedEngineOn and "ON" or "OFF"))
             imgui.Text("Gear: " .. tostring(cachedGear))
+            imgui.Separator()
+            imgui.Text("Native RPM: %.4f", nativeRpm)
         end
 
         if imgui.CollapsingHeader("HUD State") then
