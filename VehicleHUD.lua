@@ -13,6 +13,7 @@ script_author("OnlyDexterZ")
 local imgui = require 'mimgui'
 local jsoncfg = require 'jsoncfg'
 local vhud_lib = require 'lib.vehiclehud_lib'
+local memory = require 'memory'
 -- SAMemory di-handle di dalam vehiclehud_lib (getVehicleData)
 
 -- ============================================================================
