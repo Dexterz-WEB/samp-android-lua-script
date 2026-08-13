@@ -76,30 +76,30 @@ local function drawSegmentedArc(drawList, cx, cy, radius, startAngle, endAngle, 
     end
 end
 
-local function drawCenteredText(drawList, text, centerX, y, textColor, fontScale)
-    local io = imgui.GetIO()
-    local oldScale = io.FontGlobalScale
-    io.FontGlobalScale = oldScale * fontScale
-    local size = imgui.CalcTextSize(text)
-    drawList:AddText(imgui.ImVec2(centerX - size.x * 0.5, y), textColor, text)
-    io.FontGlobalScale = oldScale
+-- Draw-list AddText does not apply io.FontGlobalScale reliably on MonetLoader.
+-- Use ImDrawList:AddTextFontPtr so every label receives an explicit pixel size.
+local function drawTextAt(drawList, text, x, y, textColor, fontSize)
+    local font = imgui.GetFont()
+    drawList:AddTextFontPtr(font, fontSize, imgui.ImVec2(x, y), textColor, text, nil, 0, nil)
 end
 
-local function drawOutlinedCenteredText(drawList, text, centerX, y, textColor, fontScale, outlineColor)
-    local io = imgui.GetIO()
-    local oldScale = io.FontGlobalScale
-    io.FontGlobalScale = oldScale * fontScale
-    local size = imgui.CalcTextSize(text)
+local function drawCenteredText(drawList, text, centerX, y, textColor, fontSize)
+    local font = imgui.GetFont()
+    local size = font:CalcTextSizeA(fontSize, 10000, 0, text)
+    drawTextAt(drawList, text, centerX - size.x * 0.5, y, textColor, fontSize)
+end
+
+local function drawOutlinedCenteredText(drawList, text, centerX, y, textColor, fontSize, outlineColor)
+    local font = imgui.GetFont()
+    local size = font:CalcTextSizeA(fontSize, 10000, 0, text)
     local x = centerX - size.x * 0.5
-    local offset = math.max(1.0, fontScale)
+    local offset = math.max(1.0, fontSize * 0.055)
 
-    drawList:AddText(imgui.ImVec2(x - offset, y), outlineColor, text)
-    drawList:AddText(imgui.ImVec2(x + offset, y), outlineColor, text)
-    drawList:AddText(imgui.ImVec2(x, y - offset), outlineColor, text)
-    drawList:AddText(imgui.ImVec2(x, y + offset), outlineColor, text)
-    drawList:AddText(imgui.ImVec2(x, y), textColor, text)
-
-    io.FontGlobalScale = oldScale
+    drawTextAt(drawList, text, x - offset, y, outlineColor, fontSize)
+    drawTextAt(drawList, text, x + offset, y, outlineColor, fontSize)
+    drawTextAt(drawList, text, x, y - offset, outlineColor, fontSize)
+    drawTextAt(drawList, text, x, y + offset, outlineColor, fontSize)
+    drawTextAt(drawList, text, x, y, textColor, fontSize)
 end
 
 local function drawNeedle(drawList, cx, cy, angle, length, needleColor, hubColor, thickness)
@@ -155,7 +155,7 @@ local function drawSpeedometer(drawList, cx, cy, scale, value)
         local labelRadius = 69 * scale
         local labelX = cx + math.cos(angle) * labelRadius
         local labelY = cy + math.sin(angle) * labelRadius - 4 * scale
-        drawCenteredText(drawList, tostring(speed), labelX, labelY, white, 0.58 * scale)
+        drawCenteredText(drawList, tostring(speed), labelX, labelY, white, 17 * scale)
     end
 
     local needleAngle = startAngle + (endAngle - startAngle) * valueRatio
@@ -167,9 +167,9 @@ local function drawSpeedometer(drawList, cx, cy, scale, value)
     local fuelCy = cy + 23 * scale
     drawArc(drawList, cx, fuelCy, 25 * scale, fuelStart, fuelEnd, muted, 2.5 * scale, 24)
     drawArc(drawList, cx, fuelCy, 25 * scale, fuelStart, fuelStart + (fuelEnd - fuelStart) * DEMO_FUEL, cyan, 3.5 * scale, 20)
-    drawCenteredText(drawList, "FUEL", cx, cy + 12 * scale, white, 0.50 * scale)
-    drawCenteredText(drawList, "E", cx - 31 * scale, cy + 29 * scale, muted, 0.48 * scale)
-    drawCenteredText(drawList, "F", cx + 31 * scale, cy + 29 * scale, white, 0.48 * scale)
+    drawCenteredText(drawList, "FUEL", cx, cy + 12 * scale, white, 14 * scale)
+    drawCenteredText(drawList, "E", cx - 31 * scale, cy + 29 * scale, muted, 13 * scale)
+    drawCenteredText(drawList, "F", cx + 31 * scale, cy + 29 * scale, white, 13 * scale)
 end
 
 local function drawTachometer(drawList, cx, cy, scale, rpmX1000)
@@ -198,12 +198,12 @@ local function drawTachometer(drawList, cx, cy, scale, rpmX1000)
         local labelX = cx + math.cos(angle) * labelRadius
         local labelY = cy + math.sin(angle) * labelRadius - 4 * scale
         local labelColor = rpm >= 7 and red or white
-        drawCenteredText(drawList, tostring(rpm), labelX, labelY, labelColor, 0.58 * scale)
+        drawCenteredText(drawList, tostring(rpm), labelX, labelY, labelColor, 17 * scale)
     end
 
     local needleAngle = startAngle + (endAngle - startAngle) * valueRatio
     drawNeedle(drawList, cx, cy, needleAngle, 70 * scale, orange, red, 2.5 * scale)
-    drawCenteredText(drawList, "x1000 rpm", cx, cy + 34 * scale, white, 0.45 * scale)
+    drawCenteredText(drawList, "x1000 rpm", cx, cy + 34 * scale, white, 14 * scale)
 end
 
 local function drawTelemetryBar(drawList, x, y, width, height, label, ratio, backgroundColor, fillColor, textColor, scale)
@@ -211,7 +211,7 @@ local function drawTelemetryBar(drawList, x, y, width, height, label, ratio, bac
     local ratioClamped = clamp(ratio, 0.0, 1.0)
 
     local barStartX = x + 96 * scale
-    drawOutlinedCenteredText(drawList, label, x + 44 * scale, y - 3 * scale, textColor, 0.48 * scale, border)
+    drawOutlinedCenteredText(drawList, label, x + 44 * scale, y - 3 * scale, textColor, 14 * scale, border)
     drawList:AddRectFilled(imgui.ImVec2(barStartX, y), imgui.ImVec2(x + width, y + height), backgroundColor, 2.0 * scale)
     drawList:AddRect(imgui.ImVec2(barStartX, y), imgui.ImVec2(x + width, y + height), border, 2.0 * scale, 0, 1.0 * scale)
 
@@ -264,9 +264,9 @@ local function renderDashboard()
     drawTachometer(drawList, tachCx, gaugeCy, scale, DEMO_RPM_X1000)
 
     -- Center display
-    drawCenteredText(drawList, "RACING DASHBOARD", centerX + centerW * 0.5, centerY + 15 * scale, muted, 0.52 * scale)
-    drawOutlinedCenteredText(drawList, tostring(DEMO_SPEED_KMH), centerX + 110 * scale, centerY + 45 * scale, white, 2.45 * scale, black)
-    drawCenteredText(drawList, "km/h", centerX + 110 * scale, centerY + 99 * scale, muted, 0.62 * scale)
+    drawCenteredText(drawList, "RACING DASHBOARD", centerX + centerW * 0.5, centerY + 15 * scale, muted, 16 * scale)
+    drawOutlinedCenteredText(drawList, tostring(DEMO_SPEED_KMH), centerX + 110 * scale, centerY + 45 * scale, white, 52 * scale, black)
+    drawCenteredText(drawList, "km/h", centerX + 110 * scale, centerY + 104 * scale, muted, 16 * scale)
 
     local gearBoxX = centerX + 212 * scale
     local gearBoxY = centerY + 42 * scale
@@ -274,8 +274,8 @@ local function renderDashboard()
     local gearBoxH = 86 * scale
     drawList:AddRectFilled(imgui.ImVec2(gearBoxX, gearBoxY), imgui.ImVec2(gearBoxX + gearBoxW, gearBoxY + gearBoxH), color(0.025, 0.03, 0.04, 1.0), 7 * scale)
     drawList:AddRect(imgui.ImVec2(gearBoxX, gearBoxY), imgui.ImVec2(gearBoxX + gearBoxW, gearBoxY + gearBoxH), blue, 7 * scale, 0, 1.5 * scale)
-    drawOutlinedCenteredText(drawList, DEMO_GEAR, gearBoxX + gearBoxW * 0.5, gearBoxY + 7 * scale, white, 2.35 * scale, black)
-    drawCenteredText(drawList, "GEAR", gearBoxX + gearBoxW * 0.5, gearBoxY + 62 * scale, muted, 0.48 * scale)
+    drawOutlinedCenteredText(drawList, DEMO_GEAR, gearBoxX + gearBoxW * 0.5, gearBoxY + 7 * scale, white, 48 * scale, black)
+    drawCenteredText(drawList, "GEAR", gearBoxX + gearBoxW * 0.5, gearBoxY + 65 * scale, muted, 14 * scale)
 
     drawTelemetryBar(drawList, centerX + 18 * scale, centerY + 150 * scale, centerW - 36 * scale, 10 * scale, "THROTTLE", DEMO_THROTTLE, color(0.04, 0.12, 0.22, 1.0), green, white, scale)
     drawTelemetryBar(drawList, centerX + 18 * scale, centerY + 178 * scale, centerW - 36 * scale, 10 * scale, "BRAKE", DEMO_BRAKE, color(0.22, 0.04, 0.04, 1.0), red, white, scale)
