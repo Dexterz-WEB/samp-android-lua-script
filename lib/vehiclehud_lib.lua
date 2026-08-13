@@ -519,20 +519,39 @@ function M.getVehicleData(veh, carPtr, engineOn, speedKmh)
     end)
 
     -- Read native Gear from memory (offset 0x48B)
+    -- m_nCurrentGear: 0 = Reverse, 1 = 1st, etc. (Neutral isn't a dedicated state here)
     pcall(function()
         local mGear = memory.getuint8(carPtr + 0x48B, true)
         if mGear then
             gear = mGear
-            if gear == 0 then gear = 1 end -- 0 is usually neutral/reverse in some contexts, we show 1
         end
     end)
 
     -- Fallback for gear if memory read is unusual (optional)
-    if gear > 6 or gear < 1 then
+    if gear > 6 then
         gear = M.getGearFromSpeed(speedKmh, M.getVehicleType(getCarModel(veh)))
     end
 
     return rpmInt, gear
+end
+
+--- Get a display-friendly label for the current gear
+-- @param gear number - current gear (0=Reverse, 1=1st, etc.)
+-- @param engineOn boolean - engine status
+-- @param speedKmh number - current speed in km/h
+-- @return string - gear label (e.g. "R", "N", "1", "2")
+function M.getGearLabel(gear, engineOn, speedKmh)
+    if not engineOn then return "N" end
+    
+    -- Gear 0 is Reverse in GTA memory
+    if gear == 0 then return "R" end
+    
+    -- If speed is near zero and gear is 1, show Neutral
+    if speedKmh < 1.0 and gear == 1 then
+        return "N"
+    end
+    
+    return tostring(gear)
 end
 
 --- Estimate gear (1-6) from speed and vehicle type
