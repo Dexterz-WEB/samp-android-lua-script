@@ -7,6 +7,7 @@
 -- ============================================================================
 
 local imgui = require 'mimgui'
+local memory = require 'memory'
 
 local M = {}
 
@@ -492,6 +493,47 @@ end
 -- ============================================================================
 -- GEAR AND HEADING UTILITIES
 -- ============================================================================
+
+--- Get vehicle RPM and Gear data directly from memory
+-- @param veh number - vehicle handle
+-- @param carPtr number - vehicle memory pointer
+-- @param engineOn boolean - engine status
+-- @param speedKmh number - current speed in km/h
+-- @return number, number - rpmInt (0-7000), gear (1-6)
+function M.getVehicleData(veh, carPtr, engineOn, speedKmh)
+    local rpmInt = 0
+    local gear = 1
+
+    if not engineOn or not carPtr or carPtr == 0 then
+        return 0, 1
+    end
+
+    -- Read native RPM from memory (offset 0x420)
+    pcall(function()
+        local fRpm = memory.getfloat(carPtr + 0x420, true)
+        if fRpm then
+            -- GTA RPM is 0.0 to 1.0+, we scale it to 0-7000 for the gauge
+            rpmInt = math.floor(fRpm * 7000)
+            if rpmInt < 0 then rpmInt = 0 end
+        end
+    end)
+
+    -- Read native Gear from memory (offset 0x48B)
+    pcall(function()
+        local mGear = memory.getuint8(carPtr + 0x48B, true)
+        if mGear then
+            gear = mGear
+            if gear == 0 then gear = 1 end -- 0 is usually neutral/reverse in some contexts, we show 1
+        end
+    end)
+
+    -- Fallback for gear if memory read is unusual (optional)
+    if gear > 6 or gear < 1 then
+        gear = M.getGearFromSpeed(speedKmh, M.getVehicleType(getCarModel(veh)))
+    end
+
+    return rpmInt, gear
+end
 
 --- Estimate gear (1-6) from speed and vehicle type
 -- @param speedKmh number - current speed in km/h
