@@ -66,7 +66,10 @@ local probe = {
     gasPedal = nil,
     brakePedal = nil,
     currentGear = nil,
+    wheelSpinForAudio = nil,
     engineRevs = nil,
+    gasPedalAudioRevs = nil,
+    engineForce = nil,
     state = {},
     error = {},
 }
@@ -82,7 +85,10 @@ local function resetProbe(context)
     probe.gasPedal = nil
     probe.brakePedal = nil
     probe.currentGear = nil
+    probe.wheelSpinForAudio = nil
     probe.engineRevs = nil
+    probe.gasPedalAudioRevs = nil
+    probe.engineForce = nil
     probe.state = {}
     probe.error = {}
 end
@@ -197,9 +203,12 @@ local function runProbe()
     probe.currentGear = readField("currentGear", function()
         return tonumber(vehicleData.nCurrentGear)
     end)
+    probe.wheelSpinForAudio = readField("wheelSpinForAudio", function()
+        return tonumber(vehicleData.fWheelSpinForAudio)
+    end)
 
-    -- Candidate only: this is a named SAMemory CAutomobile field, but its
-    -- runtime behavior/range must be confirmed on the target device.
+    -- These CAutomobile fields are shown only as competing raw candidates.
+    -- Their semantic behavior must be tested before any one drives the tachometer.
     if cAutomobileReady then
         local automobileData = readField("cAutomobileCast", function()
             return ffi.cast('struct CAutomobile*', carPtr)
@@ -209,10 +218,18 @@ local function runProbe()
             probe.engineRevs = readField("engineRevs", function()
                 return tonumber(automobileData.field_804)
             end)
+            probe.gasPedalAudioRevs = readField("gasPedalAudioRevs", function()
+                return tonumber(automobileData.field_964)
+            end)
+            probe.engineForce = readField("engineForce", function()
+                return tonumber(automobileData.field_80C)
+            end)
         end
     else
         probe.state.engineRevs = "UNAVAILABLE"
         probe.error.engineRevs = "CAutomobile structure could not be loaded"
+        probe.state.gasPedalAudioRevs = "UNAVAILABLE"
+        probe.state.engineForce = "UNAVAILABLE"
     end
 end
 
@@ -258,7 +275,7 @@ imgui.OnFrame(
     function(self)
         self.HideCursor = false
 
-        imgui.SetNextWindowSize(imgui.ImVec2(520, 520), imgui.Cond.FirstUseEver)
+        imgui.SetNextWindowSize(imgui.ImVec2(560, 590), imgui.Cond.FirstUseEver)
         imgui.Begin("Dashboard Telemetry Probe", showWindow)
 
         imgui.TextColored(imgui.ImVec4(0.25, 0.80, 1.0, 1.0), "STATIC DATA-SOURCE TEST")
@@ -284,11 +301,14 @@ imgui.OnFrame(
             drawRow("fGasPedal", "gasPedal", probe.gasPedal, 6)
             drawRow("fBreakPedal", "brakePedal", probe.brakePedal, 6)
             drawRow("nCurrentGear", "currentGear", probe.currentGear, 0)
+            drawRow("fWheelSpinForAudio", "wheelSpinForAudio", probe.wheelSpinForAudio, 6)
         end
 
-        if imgui.CollapsingHeader("CAutomobile Candidate", imgui.TreeNodeFlags.DefaultOpen) then
+        if imgui.CollapsingHeader("RPM Candidate Comparison", imgui.TreeNodeFlags.DefaultOpen) then
             drawRow("field_804 (m_fEngineRevs)", "engineRevs", probe.engineRevs, 6)
-            imgui.TextWrapped("Expected test: compare this raw value while idle, accelerating, braking, reversing, and shifting. Do not treat it as dashboard RPM until its behavior is confirmed.")
+            drawRow("field_964 (gas audio revs)", "gasPedalAudioRevs", probe.gasPedalAudioRevs, 6)
+            drawRow("field_80C (engine force)", "engineForce", probe.engineForce, 6)
+            imgui.TextWrapped("Test at the same road speed: change throttle, then shift up. A useful tachometer candidate should rise with throttle and fall after an upshift; a speed-like candidate will mainly follow road speed.")
         end
 
         if imgui.CollapsingHeader("Excluded / Not Available") then

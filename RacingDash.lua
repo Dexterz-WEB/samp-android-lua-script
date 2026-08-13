@@ -54,7 +54,6 @@ local live = {
     health = 0.0,
     engineOn = false,
     engineRevsRaw = 0.0,
-    rpmRatio = 0.0,
     error = "",
 }
 
@@ -146,8 +145,8 @@ local function updateLiveTelemetry()
         end
     end
 
-    -- Alpha calibration: fEngineRevs is clamped as a 0.0-1.0 tachometer ratio.
-    live.rpmRatio = clamp(live.engineRevsRaw, 0.0, 1.0)
+    -- Do not map a raw candidate to the tachometer until its runtime behavior
+    -- and range are confirmed by DashboardTelemetryProbe.
     live.visible = true
 end
 
@@ -296,7 +295,11 @@ end
 local function drawTachometer(drawList, cx, cy, scale, rpmX1000)
     local startAngle = math.rad(135)
     local endAngle = math.rad(405)
-    local valueRatio = clamp(rpmX1000 / 8.0, 0.0, 1.0)
+    local hasVerifiedRpm = type(rpmX1000) == "number"
+    local valueRatio = 0.0
+    if hasVerifiedRpm then
+        valueRatio = clamp(rpmX1000 / 8.0, 0.0, 1.0)
+    end
     local outerRadius = 110 * scale
     local white = color(0.94, 0.94, 0.94, 1.0)
     local muted = color(0.48, 0.50, 0.54, 1.0)
@@ -322,9 +325,14 @@ local function drawTachometer(drawList, cx, cy, scale, rpmX1000)
         drawCenteredText(drawList, tostring(rpm), labelX, labelY, labelColor, 17 * scale)
     end
 
-    local needleAngle = startAngle + (endAngle - startAngle) * valueRatio
-    drawNeedle(drawList, cx, cy, needleAngle, 70 * scale, orange, red, 2.5 * scale)
-    drawCenteredText(drawList, "x1000 rpm", cx, cy + 34 * scale, white, 14 * scale)
+    -- The needle stays hidden until a raw source is verified as actual RPM.
+    if hasVerifiedRpm then
+        local needleAngle = startAngle + (endAngle - startAngle) * valueRatio
+        drawNeedle(drawList, cx, cy, needleAngle, 70 * scale, orange, red, 2.5 * scale)
+    else
+        drawList:AddCircleFilled(imgui.ImVec2(cx, cy), 6 * scale, muted, 18)
+    end
+    drawCenteredText(drawList, hasVerifiedRpm and "x1000 rpm" or "RPM VERIFY", cx, cy + 34 * scale, white, 14 * scale)
 end
 
 local function drawTelemetryBar(drawList, x, y, width, height, label, ratio, backgroundColor, fillColor, textColor, scale)
@@ -382,7 +390,8 @@ local function renderDashboard()
     drawList:AddRect(imgui.ImVec2(centerX, centerY), imgui.ImVec2(centerX + centerW, centerY + centerH), panelEdge, 12 * scale, 0, 1.5 * scale)
 
     drawSpeedometer(drawList, speedCx, gaugeCy, scale, live.speedKmh)
-    drawTachometer(drawList, tachCx, gaugeCy, scale, live.rpmRatio * 8.0)
+    -- RPM remains intentionally disabled until DashboardTelemetryProbe confirms a source and range.
+    drawTachometer(drawList, tachCx, gaugeCy, scale, nil)
 
     -- Center display
     drawCenteredText(drawList, "RACING DASH • ALPHA", centerX + centerW * 0.5, centerY + 15 * scale, muted, 16 * scale)
@@ -432,8 +441,8 @@ imgui.OnFrame(
         imgui.Text(string.format("Brake: %.6f", live.brake))
         imgui.Text(string.format("Health: %.3f", live.health))
         imgui.Text("Engine: " .. (live.engineOn and "ON" or "OFF"))
-        imgui.Text(string.format("field_804 raw: %.6f", live.engineRevsRaw))
-        imgui.Text(string.format("RPM gauge ratio: %.6f", live.rpmRatio))
+        imgui.Text(string.format("field_804 raw (diagnostic only): %.6f", live.engineRevsRaw))
+        imgui.Text("RPM gauge: DISABLED — awaiting probe confirmation")
         imgui.Separator()
         imgui.TextDisabled("/rddebug toggles this window")
         imgui.End()
